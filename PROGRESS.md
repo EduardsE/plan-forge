@@ -23,7 +23,7 @@ Shared chrome on every screen: dark navy left nav rail (Dashboard / Draw / Furni
 
 - [x] Design tokens in `src/styles.css`: color palette, fonts (Space Grotesk, IBM Plex Mono via fontsource or Google Fonts link in `__root.tsx`), radii, shadows
 - [x] Planner route (decide: `/` or `/planner`) rendering an empty full-viewport workspace with the grid background
-- [ ] Client-side view state stub (which panel/mode is active) — plain React state, just enough to switch chrome between the 4 screen states
+- [x] Client-side view state stub (which panel/mode is active) — plain React state, just enough to switch chrome between the 4 screen states
 
 ## Phase 1 — App shell & shared chrome
 
@@ -56,3 +56,4 @@ Not planned in detail yet — break down when we get here. Candidates: view-mode
 - Mockup canvases are 1920×1080 fixed; the real app should be responsive-ish (min desktop) — fixed sizes only inside the canvas scene.
 - 2026-07-09: Design tokens landed in `src/styles.css`, values pulled from `design/planforge-mockups.html` (hex frequency scan, not guessed). Two token families: `--navy-*`/`--accent-*` (cool chrome) and `--room-*` (warm room base — Phase 2 3D rendering will likely need more one-off shading values beyond these). Fonts loaded via Google Fonts `<link>` in `__root.tsx` (no fontsource dep added). shadcn's `--background`/`--primary`/etc. vars are mapped onto the PlanForge palette so default shadcn components pick up the branding automatically. `styles.css` is Biome-excluded per CLAUDE.md, so it isn't tab/double-quote formatted.
 - 2026-07-09: Planner route landed at `/` (not `/planner`) — PlanForge is single-purpose, no dashboard competing for the root path yet. The mockup workspace background (base `--canvas` color + radial highlight + 160px/32px major/minor grid layers) is a `.workspace-canvas` class in `src/styles.css` rather than Tailwind utilities, since the 5-layer `background-image`/`background-size` combo isn't expressible cleanly as utility classes. Design spec: `docs/superpowers/specs/2026-07-09-planner-route-design.md`; plan: `docs/superpowers/plans/2026-07-09-planner-route.md`.
+- 2026-07-09: View state stub added in `src/routes/index.tsx`: a `ViewMode` union (`"3d" | "2d" | "draw" | "objects"`, named after the mockup screens 1a–1d) held in local `useState`, defaulting to `"3d"` (the mockup labels 1a as "Main planner"). No setter wired up yet — Phase 1 chrome (nav rail, 2D/3D pill) will consume and mutate it when it lands. Deliberately plain `useState`, not context/store, since it's a single-component stub for now.
