@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
 	createCameraReadoutStore,
+	easeInOutCubic,
 	formatOrbitReadout,
 	formatPlanReadout,
+	frustumDistance,
+	frustumHeight,
 	perspectiveFitDistance,
 	planFitZoom,
 	scaleDenominator,
+	wrapAngle,
 } from "./camera";
 
 describe("scaleDenominator", () => {
@@ -85,6 +89,41 @@ describe("perspectiveFitDistance", () => {
 			perspectiveFitDistance(2, 45, 1.6, 1) * 1.3,
 			10,
 		);
+	});
+});
+
+describe("frustumHeight / frustumDistance", () => {
+	it("spans 2× the distance at 90° fov", () => {
+		expect(frustumHeight(1, 90)).toBeCloseTo(2, 10);
+	});
+
+	it("round-trips", () => {
+		expect(frustumDistance(frustumHeight(7.3, 42), 42)).toBeCloseTo(7.3, 10);
+	});
+});
+
+describe("wrapAngle", () => {
+	it("keeps angles already in range", () => {
+		expect(wrapAngle(0.3)).toBeCloseTo(0.3, 12);
+		expect(wrapAngle(-3)).toBeCloseTo(-3, 12);
+	});
+
+	it("wraps full turns away", () => {
+		expect(wrapAngle(2.5 * Math.PI)).toBeCloseTo(0.5 * Math.PI, 12);
+		expect(wrapAngle(-2.5 * Math.PI)).toBeCloseTo(-0.5 * Math.PI, 12);
+	});
+});
+
+describe("easeInOutCubic", () => {
+	it("pins the endpoints and midpoint", () => {
+		expect(easeInOutCubic(0)).toBe(0);
+		expect(easeInOutCubic(0.5)).toBeCloseTo(0.5, 12);
+		expect(easeInOutCubic(1)).toBe(1);
+	});
+
+	it("starts slower than linear and ends faster", () => {
+		expect(easeInOutCubic(0.25)).toBeLessThan(0.25);
+		expect(easeInOutCubic(0.75)).toBeGreaterThan(0.75);
 	});
 });
 

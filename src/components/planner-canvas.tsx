@@ -4,7 +4,7 @@ import {
 	OrthographicCamera,
 	PerspectiveCamera,
 } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
 	type ComponentRef,
 	type RefObject,
@@ -12,6 +12,7 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 } from "react";
 import {
 	MathUtils,
@@ -24,8 +25,12 @@ import {
 import {
 	type CameraApi,
 	type CameraReadoutStore,
+	easeInOutCubic,
+	frustumDistance,
+	frustumHeight,
 	perspectiveFitDistance,
 	planFitZoom,
+	wrapAngle,
 } from "#/lib/camera";
 import { outlineBounds, type Point, type Room } from "#/lib/model";
 import type { ViewMode } from "#/lib/view-mode";
@@ -35,6 +40,11 @@ import type { ViewMode } from "#/lib/view-mode";
  * 3D (and objects) mode orbits a perspective camera; 2D and draw mode look
  * straight down through an orthographic one. The floating toolbar drives the
  * rig through `CameraApi` and the readout chip listens on the readout store.
+ *
+ * Lens switches animate: the perspective camera flies between its orbit pose
+ * and a top-down, narrow-fov pose whose framing matches the orthographic
+ * view (a dolly-zoom), and the projection swap happens only at the matched
+ * endpoint, where it is imperceptible.
  *
  * Scene content is still skeletal — an in-scene ground grid plus a flat
  * floor slab from the model. The 3D/2D lens tasks build the real room here.
@@ -53,6 +63,19 @@ const ZOOM_STEP = 1.25;
 /** Height of the top-down camera above the floor plane. */
 const PLAN_CAMERA_HEIGHT = 30;
 
+const TRANSITION_MS = 600;
+/**
+ * Fov the perspective camera narrows to at the top-down end of a lens
+ * transition; tight enough that swapping to the true orthographic
+ * projection there doesn't visibly shift the image.
+ */
+const TRANSITION_FOV_DEG = 10;
+/**
+ * Polar angle standing in for "straight down" during transitions — exactly
+ * 0 would make lookAt degenerate against the camera's (0,1,0) up.
+ */
+const TOP_DOWN_PHI = 0.01;
+
 /** --room-floor. */
 const FLOOR_COLOR = "#e6dbc6";
 /**
@@ -64,6 +87,67 @@ const GRID_MINOR_COLOR = "#e9eff7";
 const GRID_MAJOR_COLOR = "#dfe8f4";
 
 type OrbitControlsRef = ComponentRef<typeof OrbitControls>;
+
+/**
+ * A perspective camera pose during a lens transition. Framing is tracked as
+ * the frustum height at the target plane rather than distance, so fov and
+ * distance can change together without the room appearing to resize.
+ */
+interface CameraPose {
+	/** Polar angle from straight-above, radians. */
+	phi: number;
+	/** Azimuth, radians, wrapped to [-π, π]. */
+	theta: number;
+	fovDeg: number;
+	/** Frustum height at the target plane, meters. */
+	viewHeight: number;
+}
+
+interface CameraTransition {
+	toPlan: boolean;
+	from: CameraPose;
+	to: CameraPose;
+	target: Vector3;
+	/** Normalized progress 0→1. */
+	t: number;
+}
+
+function poseOf(camera: ThreePerspectiveCamera, target: Vector3): CameraPose {
+	const spherical = new Spherical().setFromVector3(
+		camera.position.clone().sub(target),
+	);
+	return {
+		phi: spherical.phi,
+		theta: wrapAngle(spherical.theta),
+		fovDeg: camera.fov,
+		viewHeight: frustumHeight(spherical.radius, camera.fov),
+	};
+}
+
+function applyPose(
+	camera: ThreePerspectiveCamera,
+	pose: CameraPose,
+	target: Vector3,
+) {
+	const distance = frustumDistance(pose.viewHeight, pose.fovDeg);
+	camera.position
+		.setFromSpherical(
+			new Spherical(distance, Math.max(pose.phi, TOP_DOWN_PHI), pose.theta),
+		)
+		.add(target);
+	camera.fov = pose.fovDeg;
+	camera.updateProjectionMatrix();
+	camera.lookAt(target);
+}
+
+function lerpPose(from: CameraPose, to: CameraPose, k: number): CameraPose {
+	return {
+		phi: MathUtils.lerp(from.phi, to.phi, k),
+		theta: MathUtils.lerp(from.theta, to.theta, k),
+		fovDeg: MathUtils.lerp(from.fovDeg, to.fovDeg, k),
+		viewHeight: MathUtils.lerp(from.viewHeight, to.viewHeight, k),
+	};
+}
 
 interface CameraRigProps {
 	room: Room;
@@ -80,6 +164,15 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 	/** Perspective fit distance; "zoom 1.0×" in the readout means this far. */
 	const fitDistanceRef = useRef(1);
 
+	// Which camera actually renders. Lags planView while a transition flies:
+	// the perspective camera animates in both directions, so the ortho camera
+	// only takes over once a to-plan flight has landed on its matched pose.
+	const [renderPlan, setRenderPlan] = useState(planView);
+	const [transitioning, setTransitioning] = useState(false);
+	const transitionRef = useRef<CameraTransition | null>(null);
+	/** Orbit pose saved when leaving 3D, restored on the way back. */
+	const savedOrbitRef = useRef<CameraPose | null>(null);
+
 	const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
 	const center = useMemo(
 		() =>
@@ -94,8 +187,16 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 	);
 	const fitRadius = bounds ? Math.hypot(bounds.width, bounds.height) / 2 : 5;
 
+	// Persistent controls target: survives the controls remount on every lens
+	// swap (the OrbitControls key), so panning isn't lost across transitions.
+	const targetRef = useRef<Vector3 | null>(null);
+	if (targetRef.current === null) {
+		targetRef.current = new Vector3(center.x, 0, center.z);
+	}
+	const target = targetRef.current;
+
 	const publish = useCallback(() => {
-		if (planView) {
+		if (renderPlan) {
 			const camera = orthoRef.current;
 			if (camera) {
 				readoutStore.publish({ kind: "plan", pxPerMeter: camera.zoom });
@@ -104,16 +205,22 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 		}
 		const camera = perspectiveRef.current;
 		if (!camera) return;
-		const target = controlsRef.current?.target ?? center;
-		const offset = camera.position.clone().sub(target);
-		const spherical = new Spherical().setFromVector3(offset);
+		const spherical = new Spherical().setFromVector3(
+			camera.position.clone().sub(controlsRef.current?.target ?? target),
+		);
 		readoutStore.publish({
 			kind: "orbit",
 			azimuthDeg: MathUtils.radToDeg(spherical.theta),
 			polarDeg: MathUtils.radToDeg(spherical.phi),
 			zoom: fitDistanceRef.current / spherical.radius,
 		});
-	}, [planView, center, readoutStore]);
+	}, [renderPlan, target, readoutStore]);
+
+	const handleControlsChange = useCallback(() => {
+		const controls = controlsRef.current;
+		if (controls) target.copy(controls.target);
+		publish();
+	}, [target, publish]);
 
 	const fitPerspective = useCallback(() => {
 		const camera = perspectiveRef.current;
@@ -124,14 +231,14 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 			size.width / size.height,
 		);
 		fitDistanceRef.current = distance;
-		const target = controlsRef.current?.target ?? center;
+		const anchor = controlsRef.current?.target ?? target;
 		const spherical = new Spherical().setFromVector3(
-			camera.position.clone().sub(target),
+			camera.position.clone().sub(anchor),
 		);
 		spherical.radius = distance;
-		camera.position.setFromSpherical(spherical).add(target);
-		camera.lookAt(target);
-	}, [fitRadius, size, center]);
+		camera.position.setFromSpherical(spherical).add(anchor);
+		camera.lookAt(anchor);
+	}, [fitRadius, size, target]);
 
 	const fitOrtho = useCallback(() => {
 		const camera = orthoRef.current;
@@ -146,19 +253,22 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 	}, [bounds, size, center]);
 
 	const zoomToFit = useCallback(() => {
-		controlsRef.current?.target.copy(center);
-		if (planView) {
+		if (transitionRef.current) return;
+		target.set(center.x, 0, center.z);
+		controlsRef.current?.target.copy(target);
+		if (renderPlan) {
 			fitOrtho();
 		} else {
 			fitPerspective();
 		}
 		controlsRef.current?.update();
 		publish();
-	}, [planView, center, fitOrtho, fitPerspective, publish]);
+	}, [renderPlan, center, target, fitOrtho, fitPerspective, publish]);
 
 	const applyZoom = useCallback(
 		(factor: number) => {
-			if (planView) {
+			if (transitionRef.current) return;
+			if (renderPlan) {
 				const camera = orthoRef.current;
 				if (!camera) return;
 				camera.zoom = MathUtils.clamp(
@@ -170,8 +280,8 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 			} else {
 				const camera = perspectiveRef.current;
 				if (!camera) return;
-				const target = controlsRef.current?.target ?? center;
-				const offset = camera.position.clone().sub(target);
+				const anchor = controlsRef.current?.target ?? target;
+				const offset = camera.position.clone().sub(anchor);
 				offset.setLength(
 					MathUtils.clamp(
 						offset.length() / factor,
@@ -179,12 +289,12 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 						PERSPECTIVE_MAX_DISTANCE,
 					),
 				);
-				camera.position.copy(target).add(offset);
+				camera.position.copy(anchor).add(offset);
 			}
 			controlsRef.current?.update();
 			publish();
 		},
-		[planView, center, publish],
+		[renderPlan, target, publish],
 	);
 
 	useEffect(() => {
@@ -209,7 +319,134 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 		publish();
 	}, [size, fitPerspective, fitOrtho, publish]);
 
-	// Refresh the readout when the lens flips (publish identity tracks planView).
+	// Start a lens transition whenever the requested view flips.
+	const prevPlanViewRef = useRef(planView);
+	useEffect(() => {
+		if (prevPlanViewRef.current === planView) return;
+		prevPlanViewRef.current = planView;
+		const perspective = perspectiveRef.current;
+		const ortho = orthoRef.current;
+		if (!perspective || !ortho || !initializedRef.current) {
+			setRenderPlan(planView);
+			return;
+		}
+		const active = transitionRef.current;
+		const flightTarget = (active ? active.target : target).clone().setY(0);
+		// Land inside the ortho zoom limits so the projection swap never jumps.
+		const minViewHeight = size.height / PLAN_MAX_ZOOM;
+		const maxViewHeight = size.height / PLAN_MIN_ZOOM;
+
+		let from: CameraPose;
+		let to: CameraPose;
+		if (planView) {
+			// 3D → 2D: fly the live perspective camera down to a matched pose.
+			from = poseOf(perspective, flightTarget);
+			if (!active) savedOrbitRef.current = from;
+			to = {
+				phi: TOP_DOWN_PHI,
+				theta: 0,
+				fovDeg: TRANSITION_FOV_DEG,
+				viewHeight: MathUtils.clamp(
+					from.viewHeight,
+					minViewHeight,
+					maxViewHeight,
+				),
+			};
+		} else if (active) {
+			// Reversed mid-flight: continue from wherever the camera is now.
+			from = poseOf(perspective, flightTarget);
+			to = savedOrbitRef.current ?? from;
+		} else {
+			// 2D → 3D: hand off from the ortho camera at a matched perspective
+			// pose, then fly out to the remembered (or initial) orbit.
+			flightTarget.set(ortho.position.x, 0, ortho.position.z);
+			from = {
+				phi: TOP_DOWN_PHI,
+				theta: 0,
+				fovDeg: TRANSITION_FOV_DEG,
+				viewHeight: size.height / ortho.zoom,
+			};
+			applyPose(perspective, from, flightTarget);
+			to = savedOrbitRef.current ?? {
+				phi: MathUtils.degToRad(INITIAL_POLAR_DEG),
+				theta: MathUtils.degToRad(INITIAL_AZIMUTH_DEG),
+				fovDeg: FOV_DEG,
+				viewHeight: frustumHeight(
+					perspectiveFitDistance(
+						fitRadius,
+						FOV_DEG,
+						size.width / Math.max(size.height, 1),
+					),
+					FOV_DEG,
+				),
+			};
+		}
+		transitionRef.current = {
+			toPlan: planView,
+			from,
+			to,
+			target: flightTarget,
+			t: 0,
+		};
+		target.copy(flightTarget);
+		// The perspective camera renders throughout the flight.
+		setRenderPlan(false);
+		setTransitioning(true);
+	}, [planView, size, fitRadius, target]);
+
+	useFrame((_, delta) => {
+		const transition = transitionRef.current;
+		const perspective = perspectiveRef.current;
+		if (!transition || !perspective) return;
+		transition.t = Math.min(transition.t + (delta * 1000) / TRANSITION_MS, 1);
+		const pose = lerpPose(
+			transition.from,
+			transition.to,
+			easeInOutCubic(transition.t),
+		);
+		applyPose(perspective, pose, transition.target);
+		// Keep the chip live mid-flight, in the units of the destination lens.
+		if (transition.toPlan) {
+			readoutStore.publish({
+				kind: "plan",
+				pxPerMeter: size.height / pose.viewHeight,
+			});
+		} else {
+			readoutStore.publish({
+				kind: "orbit",
+				azimuthDeg: MathUtils.radToDeg(pose.theta),
+				polarDeg: MathUtils.radToDeg(pose.phi),
+				zoom:
+					fitDistanceRef.current / frustumDistance(pose.viewHeight, FOV_DEG),
+			});
+		}
+		if (transition.t < 1) return;
+
+		transitionRef.current = null;
+		if (transition.toPlan) {
+			const ortho = orthoRef.current;
+			if (ortho) {
+				ortho.zoom = MathUtils.clamp(
+					size.height / transition.to.viewHeight,
+					PLAN_MIN_ZOOM,
+					PLAN_MAX_ZOOM,
+				);
+				ortho.position.set(
+					transition.target.x,
+					PLAN_CAMERA_HEIGHT,
+					transition.target.z,
+				);
+				ortho.updateProjectionMatrix();
+			}
+			perspective.fov = FOV_DEG;
+			perspective.updateProjectionMatrix();
+		}
+		setRenderPlan(transition.toPlan);
+		setTransitioning(false);
+	});
+
+	// Refresh the readout when the rendering lens settles (publish identity
+	// tracks renderPlan).
 	useEffect(() => {
 		if (initializedRef.current) publish();
 	}, [publish]);
@@ -232,7 +469,7 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 		<>
 			<PerspectiveCamera
 				ref={perspectiveRef}
-				makeDefault={!planView}
+				makeDefault={!renderPlan}
 				fov={FOV_DEG}
 				near={0.1}
 				far={200}
@@ -240,7 +477,7 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 			/>
 			<OrthographicCamera
 				ref={orthoRef}
-				makeDefault={planView}
+				makeDefault={renderPlan}
 				near={0.1}
 				far={100}
 				up={[0, 0, -1]}
@@ -248,10 +485,11 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 				zoom={80}
 			/>
 			<OrbitControls
-				key={planView ? "plan" : "orbit"}
+				key={renderPlan ? "plan" : "orbit"}
 				ref={controlsRef}
-				target={[center.x, 0, center.z]}
-				enableRotate={!planView}
+				target={[target.x, 0, target.z]}
+				enabled={!transitioning}
+				enableRotate={!renderPlan}
 				minDistance={PERSPECTIVE_MIN_DISTANCE}
 				maxDistance={PERSPECTIVE_MAX_DISTANCE}
 				minZoom={PLAN_MIN_ZOOM}
@@ -259,8 +497,8 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 				// Keep the orbit above the floor; the plan camera's straight-down
 				// pose reads as polar 90° in the controls' up-relative frame, so it
 				// must stay unclamped there.
-				maxPolarAngle={planView ? Math.PI : Math.PI / 2 - 0.06}
-				onChange={publish}
+				maxPolarAngle={renderPlan ? Math.PI : Math.PI / 2 - 0.06}
+				onChange={handleControlsChange}
 			/>
 		</>
 	);
@@ -327,7 +565,9 @@ export function PlannerCanvas({
 					sectionSize={2.5}
 					sectionThickness={1.4}
 					sectionColor={GRID_MAJOR_COLOR}
-					fadeDistance={planView ? 400 : 55}
+					// One value for both lenses: a per-lens fade would pop while the
+					// transition camera is still ~40 m out at the top-down end.
+					fadeDistance={130}
 					fadeStrength={1}
 				/>
 				<FloorSlab outline={room.outline} />

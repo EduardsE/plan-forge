@@ -84,6 +84,27 @@ export function perspectiveFitDistance(
 	return (radius * margin) / Math.sin(Math.min(halfV, halfH));
 }
 
+/** Height of a perspective frustum at `distance`, given a vertical fov. */
+export function frustumHeight(distance: number, fovYDeg: number): number {
+	return 2 * distance * Math.tan((fovYDeg * Math.PI) / 360);
+}
+
+/** Inverse of `frustumHeight`: distance at which the frustum is `height` tall. */
+export function frustumDistance(height: number, fovYDeg: number): number {
+	return height / (2 * Math.tan((fovYDeg * Math.PI) / 360));
+}
+
+/** Wrap an angle into [-π, π] so pose interpolation takes the short way. */
+export function wrapAngle(rad: number): number {
+	const tau = 2 * Math.PI;
+	return ((((rad + Math.PI) % tau) + tau) % tau) - Math.PI;
+}
+
+/** Standard ease-in-out cubic on t ∈ [0, 1]. */
+export function easeInOutCubic(t: number): number {
+	return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
 /**
  * Tiny external store connecting the rig (publisher, inside the R3F canvas)
  * to the readout chip (subscriber via useSyncExternalStore) without routing
