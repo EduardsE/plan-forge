@@ -156,22 +156,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/*
+ * The blueprint grid moved in-scene (drei <Grid> in planner-canvas.tsx) so it
+ * pans/zooms with the camera; only the base color + radial highlight remain
+ * here, showing through the transparent WebGL canvas. The --canvas-grid-*
+ * tokens above are the source values for the in-scene grid line colors.
+ */
 .workspace-canvas {
   height: 100%;
   width: 100%;
   background-color: var(--canvas);
-  background-image:
-    radial-gradient(1000px 760px at 55% 46%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 72%),
-    linear-gradient(var(--canvas-grid-major) 1px, transparent 1px),
-    linear-gradient(90deg, var(--canvas-grid-major) 1px, transparent 1px),
-    linear-gradient(var(--canvas-grid-minor) 1px, transparent 1px),
-    linear-gradient(90deg, var(--canvas-grid-minor) 1px, transparent 1px);
-  background-size:
-    100% 100%,
-    160px 160px,
-    160px 160px,
-    32px 32px,
-    32px 32px;
+  background-image: radial-gradient(1000px 760px at 55% 46%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 72%);
 }
 
 @layer base {

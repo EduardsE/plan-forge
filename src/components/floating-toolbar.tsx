@@ -5,27 +5,33 @@ interface ToolbarButtonDef {
 	label: string;
 	icon: typeof Undo2;
 	disabled?: boolean;
+	onClick?: () => void;
 }
 
-const ACTIONS: ToolbarButtonDef[] = [
-	{ label: "Undo", icon: Undo2 },
-	{ label: "Redo", icon: Redo2, disabled: true },
-];
-
-const ZOOM_ACTIONS: ToolbarButtonDef[] = [
-	{ label: "Zoom in", icon: ZoomIn },
-	{ label: "Zoom out", icon: ZoomOut },
-	{ label: "Fit to view", icon: Crosshair },
-];
+interface FloatingToolbarProps {
+	onZoomIn?: () => void;
+	onZoomOut?: () => void;
+	onZoomToFit?: () => void;
+}
 
 /**
  * Floating undo/redo + zoom toolbar, matching the mockup's screens 1a/1b/1c
  * (absent on 1d, where the objects panel occupies this area).
- * Phase 1: static chrome only — buttons are no-ops until Phase 4 wires up
- * real history/viewport state.
+ * The zoom buttons drive the camera rig via the handler props; undo/redo
+ * stay no-ops until Phase 4 wires up real history.
  */
-export function FloatingToolbar() {
-	const buttons = [...ACTIONS, ...ZOOM_ACTIONS];
+export function FloatingToolbar({
+	onZoomIn,
+	onZoomOut,
+	onZoomToFit,
+}: FloatingToolbarProps) {
+	const buttons: ToolbarButtonDef[] = [
+		{ label: "Undo", icon: Undo2 },
+		{ label: "Redo", icon: Redo2, disabled: true },
+		{ label: "Zoom in", icon: ZoomIn, onClick: onZoomIn },
+		{ label: "Zoom out", icon: ZoomOut, onClick: onZoomOut },
+		{ label: "Fit to view", icon: Crosshair, onClick: onZoomToFit },
+	];
 
 	return (
 		<div
@@ -37,7 +43,7 @@ export function FloatingToolbar() {
 				backdropFilter: "blur(16px)",
 			}}
 		>
-			{buttons.map(({ label, icon: Icon, disabled }, index) => (
+			{buttons.map(({ label, icon: Icon, disabled, onClick }, index) => (
 				<div key={label} className="flex items-center">
 					{index === 2 && (
 						<div
@@ -50,7 +56,7 @@ export function FloatingToolbar() {
 						type="button"
 						aria-label={label}
 						disabled={disabled}
-						onClick={() => {}}
+						onClick={onClick ?? (() => {})}
 						className={cn(
 							"flex h-10 w-10 items-center justify-center rounded-[10px] text-[var(--navy-500)]",
 							"disabled:cursor-not-allowed disabled:text-[var(--navy-100)]",
