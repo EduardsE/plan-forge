@@ -31,7 +31,8 @@ const NAV_ITEMS: NavItemDef[] = [
 
 export function NavRail({ activeMode, onSelectMode }: NavRailProps) {
 	return (
-		<div
+		<nav
+			aria-label="Primary"
 			className="flex w-24 flex-col items-center gap-2 bg-sidebar py-[22px]"
 			style={{ boxShadow: "var(--shadow-rail)" }}
 		>
@@ -91,6 +92,6 @@ export function NavRail({ activeMode, onSelectMode }: NavRailProps) {
 					boxShadow: "0 0 0 2px rgba(126, 147, 190, 0.35)",
 				}}
 			/>
-		</div>
+		</nav>
 	);
 }
