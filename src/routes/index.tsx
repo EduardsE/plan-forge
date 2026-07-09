@@ -3,15 +3,18 @@ import { useState } from "react";
 import { FloatingToolbar } from "#/components/floating-toolbar";
 import { NavRail } from "#/components/nav-rail";
 import { ReadoutChip } from "#/components/readout-chip";
+import { RoomPreview } from "#/components/room-preview";
 import { UnitsToggle } from "#/components/units-toggle";
 import { ViewControls } from "#/components/view-controls";
 import { WorkspaceHeader } from "#/components/workspace-header";
+import { createSampleRoom } from "#/lib/model";
 import type { ViewMode } from "#/lib/view-mode";
 
 export const Route = createFileRoute("/")({ component: Planner });
 
 function Planner() {
 	const [viewMode, setViewMode] = useState<ViewMode>("3d");
+	const [room] = useState(createSampleRoom);
 
 	return (
 		<div className="flex h-screen w-screen overflow-hidden">
@@ -20,6 +23,7 @@ function Planner() {
 				className="workspace-canvas relative flex-1"
 				data-view-mode={viewMode}
 			>
+				<RoomPreview room={room} />
 				<WorkspaceHeader mode={viewMode} />
 				{viewMode !== "objects" && <FloatingToolbar />}
 				<ViewControls viewMode={viewMode} onSelectMode={setViewMode} />
