@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { FloatingToolbar } from "#/components/floating-toolbar";
 import { NavRail } from "#/components/nav-rail";
 import { WorkspaceHeader } from "#/components/workspace-header";
 import type { ViewMode } from "#/lib/view-mode";
@@ -17,6 +18,7 @@ function Planner() {
 				data-view-mode={viewMode}
 			>
 				<WorkspaceHeader mode={viewMode} />
+				{viewMode !== "objects" && <FloatingToolbar />}
 			</div>
 		</div>
 	);
