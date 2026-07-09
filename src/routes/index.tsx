@@ -3,6 +3,7 @@ import { useState } from "react";
 import { FloatingToolbar } from "#/components/floating-toolbar";
 import { NavRail } from "#/components/nav-rail";
 import { ReadoutChip } from "#/components/readout-chip";
+import { UnitsToggle } from "#/components/units-toggle";
 import { ViewControls } from "#/components/view-controls";
 import { WorkspaceHeader } from "#/components/workspace-header";
 import type { ViewMode } from "#/lib/view-mode";
@@ -23,6 +24,7 @@ function Planner() {
 				{viewMode !== "objects" && <FloatingToolbar />}
 				<ViewControls viewMode={viewMode} onSelectMode={setViewMode} />
 				<ReadoutChip mode={viewMode} />
+				{viewMode === "draw" && <UnitsToggle />}
 			</div>
 		</div>
 	);
