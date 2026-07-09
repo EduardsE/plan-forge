@@ -157,8 +157,8 @@ body {
 }
 
 .workspace-canvas {
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
   background-color: var(--canvas);
   background-image:
     radial-gradient(1000px 760px at 55% 46%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 72%),
