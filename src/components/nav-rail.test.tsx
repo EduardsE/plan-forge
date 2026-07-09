@@ -6,8 +6,14 @@ describe("NavRail", () => {
 	it("marks the nav item mapped to the active view mode as current", () => {
 		render(<NavRail activeMode="draw" onSelectMode={() => {}} />);
 
-		expect(screen.getByRole("button", { name: "Draw" }).getAttribute("aria-current")).toBe("page");
-		expect(screen.getByRole("button", { name: "Furnish" }).getAttribute("aria-current")).toBeNull();
+		expect(
+			screen.getByRole("button", { name: "Draw" }).getAttribute("aria-current"),
+		).toBe("page");
+		expect(
+			screen
+				.getByRole("button", { name: "Furnish" })
+				.getAttribute("aria-current"),
+		).toBeNull();
 	});
 
 	it("calls onSelectMode with the mapped mode when a mode-mapped item is clicked", () => {
