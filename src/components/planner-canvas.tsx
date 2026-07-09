@@ -16,12 +16,12 @@ import {
 } from "react";
 import {
 	MathUtils,
-	Shape,
 	Spherical,
 	type OrthographicCamera as ThreeOrthographicCamera,
 	type PerspectiveCamera as ThreePerspectiveCamera,
 	Vector3,
 } from "three";
+import { RoomScene } from "#/components/room-scene";
 import {
 	type CameraApi,
 	type CameraReadoutStore,
@@ -32,7 +32,7 @@ import {
 	planFitZoom,
 	wrapAngle,
 } from "#/lib/camera";
-import { outlineBounds, type Point, type Room } from "#/lib/model";
+import { outlineBounds, type Room } from "#/lib/model";
 import type { ViewMode } from "#/lib/view-mode";
 
 /**
@@ -46,8 +46,8 @@ import type { ViewMode } from "#/lib/view-mode";
  * view (a dolly-zoom), and the projection swap happens only at the matched
  * endpoint, where it is imperceptible.
  *
- * Scene content is still skeletal — an in-scene ground grid plus a flat
- * floor slab from the model. The 3D/2D lens tasks build the real room here.
+ * Scene content is the in-scene ground grid plus the warm room built from
+ * the model in `RoomScene` (floor platform, cutaway walls, furniture).
  */
 
 const FOV_DEG = 42;
@@ -76,8 +76,6 @@ const TRANSITION_FOV_DEG = 10;
  */
 const TOP_DOWN_PHI = 0.01;
 
-/** --room-floor. */
-const FLOOR_COLOR = "#e6dbc6";
 /**
  * The CSS grid tokens are alpha layers over the canvas color; WebGL wants
  * opaque line colors, so these are --canvas-grid-minor / -major pre-blended
@@ -504,32 +502,6 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 	);
 }
 
-/**
- * Interim scene content: a flat slab of the room outline so the cameras have
- * something to frame. The 3D lens task replaces this with real floor + walls.
- */
-function FloorSlab({ outline }: { outline: Point[] }) {
-	const shape = useMemo(() => {
-		const s = new Shape();
-		// Plan coordinates are y-down; Shape lives in y-up XY, so mirror y and
-		// lay the mesh flat with rotation so plan (x, y) lands on world (x, 0, y).
-		for (const [i, point] of outline.entries()) {
-			if (i === 0) s.moveTo(point.x, -point.y);
-			else s.lineTo(point.x, -point.y);
-		}
-		s.closePath();
-		return s;
-	}, [outline]);
-
-	if (outline.length < 3) return null;
-	return (
-		<mesh rotation-x={-Math.PI / 2} position-y={0.001}>
-			<shapeGeometry args={[shape]} />
-			<meshBasicMaterial color={FLOOR_COLOR} />
-		</mesh>
-	);
-}
-
 export interface PlannerCanvasProps {
 	room: Room;
 	viewMode: ViewMode;
@@ -570,7 +542,7 @@ export function PlannerCanvas({
 					fadeDistance={130}
 					fadeStrength={1}
 				/>
-				<FloorSlab outline={room.outline} />
+				<RoomScene room={room} />
 			</Canvas>
 		</div>
 	);
