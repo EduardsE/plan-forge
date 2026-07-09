@@ -155,6 +155,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.workspace-canvas {
+  height: 100vh;
+  width: 100vw;
+  background-color: var(--canvas);
+  background-image:
+    radial-gradient(1000px 760px at 55% 46%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 72%),
+    linear-gradient(var(--canvas-grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid-major) 1px, transparent 1px),
+    linear-gradient(var(--canvas-grid-minor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid-minor) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    160px 160px,
+    160px 160px,
+    32px 32px,
+    32px 32px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
