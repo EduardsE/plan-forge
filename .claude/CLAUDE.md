@@ -47,3 +47,7 @@ TanStack Start app (full-stack React with SSR) built on Vite, React 19, TanStack
 ## Code style
 
 Biome enforces formatting: tab indentation, double quotes. Run `pnpm check` before committing. Biome only covers `src/`, `vite.config.ts`, `index.html`, and `.vscode/` — and skips `src/routeTree.gen.ts` and `src/styles.css`.
+
+
+## Instructions
+- Do not invoke superpowers skills automatically. Only use superpowers:* skills when I explicitly ask for them by name.
