@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## What we're building: PlanForge
+
+A web-based room planner with a split personality by design: cool, futuristic chrome around a warm, cozy room. The UI shell is dark navy + near-white with a cyan/teal accent, frosted-glass floating panels, thin line icons, and a faint blueprint grid on the workspace. The room itself is deliberately the opposite — beige plank floor, warm-white walls, wood/terracotta furniture, soft window light — so the user's content always feels inviting against the precise tooling.
+
+It's one room, three lenses, all inside the same shell (navy icon rail, floating undo/zoom toolbar, 2D|3D pill, status chips). Mockup screen numbers in parentheses:
+
+- **Draw (1c)** is where a room is born — you click corners on the grid, walls get live editable length labels, snapping keeps everything at 90°. Output: a dimensioned outline.
+- **2D plan (1b)** is the analytical lens on that outline — architectural wall strokes, labeled furniture footprints, dimension lines, floor area. Best for precise arranging.
+- **3D dollhouse (1a)** is the experiential lens — same room, orbitable, furnished, with in-scene selection (chip with rotate/duplicate/delete + size readout).
+- **Objects (1d)** is the furnishing flow that works over either lens — catalog panel slides out from the rail, cards drag onto the floor, ghost footprint + alignment guides show snap distances to walls before you drop.
+
+The 2D|3D pill is the hinge of the whole product: one model, instant lens switch, identical chrome so nothing about the tooling changes when the view does.
+
+**Before starting any implementation work, read `PROGRESS.md`** — it holds the task breakdown and what's done so far. Work on one task at a time and check it off there. The source mockups live at `design/planforge-mockups.html` (screenshots: `design/screen-*.png`).
+
 ## Commands
 
 Use pnpm (a pnpm-lock.yaml is committed).

@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#E7EBF2;}
+a{color:#0E7490;text-decoration:none} a:hover{color:#155E75}
+</style>
+</helmet>
+
+<section style="padding:100px;display:grid;grid-template-columns:repeat(2,1920px);gap:120px;justify-content:start;font-family:'Space Grotesk',sans-serif">
+
+  <!-- ============ 1a · 3D HERO ============ -->
+  <div id="1a" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:center;gap:14px">
+      <a href="#1a" style="display:inline-flex;padding:7px 16px;background:#0F1B3D;color:#5EEAD4;border-radius:999px;font-family:'IBM Plex Mono',monospace;font-size:14px">1a</a>
+      <span style="font-size:17px;font-weight:600;color:#0F1B3D">Main planner — 3D dollhouse view</span>
+    </div>
+    <div data-screen-label="1a 3D Hero" style="position:relative;width:1920px;height:1080px;background:#F3F6FA;overflow:hidden;border-radius:22px;border:1px solid rgba(15,27,61,.07);box-shadow:0 42px 120px rgba(15,27,61,.16);display:flex">
+
+      <!-- rail -->
+      <div style="position:relative;z-index:5;width:96px;background:linear-gradient(180deg,#0C1430,#101E42);display:flex;flex-direction:column;align-items:center;padding:22px 0 24px;gap:8px;box-shadow:1px 0 0 rgba(78,225,215,.16),10px 0 34px rgba(12,20,48,.12)">
+        <div style="width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#5EEAD4,#0EA5E9);display:flex;align-items:center;justify-content:center;box-shadow:0 0 22px rgba(94,234,212,.45);margin-bottom:16px">
+          <svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="#062B33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2L10 2.5z"></path><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"></path></svg>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="6" height="6" rx="1.5"></rect><rect x="11" y="3" width="6" height="6" rx="1.5"></rect><rect x="3" y="11" width="6" height="6" rx="1.5"></rect><rect x="11" y="11" width="6" height="6" rx="1.5"></rect></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Dashboard</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 16.5l1-4L13 4l3 3-8.5 8.5-4 1z"></path><path d="M11.5 5.5l3 3"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Draw</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#4BE3DC;background:rgba(75,227,220,.10);box-shadow:0 0 0 1px rgba(75,227,220,.28),0 0 20px rgba(75,227,220,.18)">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"></path><path d="M4 10v3.5h12V10"></path><path d="M6 13.5v2.5M14 13.5v2.5"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Furnish</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2L10 2.5z"></path><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Objects</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 10S5.5 5.5 10 5.5 17.5 10 17.5 10 14.5 14.5 10 14.5 2.5 10 2.5 10z"></path><circle cx="10" cy="10" r="2.2"></circle></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Views</span>
+        </div>
+        <div style="margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 6h14M3 10h14M3 14h14"></path><circle cx="7.5" cy="6" r="1.7" fill="#0C1430"></circle><circle cx="13" cy="10" r="1.7" fill="#0C1430"></circle><circle cx="6.5" cy="14" r="1.7" fill="#0C1430"></circle></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Settings</span>
+        </div>
+        <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#E8B48A,#B4633E);margin-top:12px;box-shadow:0 0 0 2px rgba(126,147,190,.35)"></div>
+      </div>
+
+      <!-- workspace -->
+      <div style="position:relative;flex:1;background-color:#F3F6FA;background-image:radial-gradient(1000px 760px at 58% 44%,rgba(255,255,255,.9),rgba(255,255,255,0) 72%),linear-gradient(rgba(48,106,190,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(48,106,190,.10) 1px,transparent 1px),linear-gradient(rgba(48,106,190,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(48,106,190,.05) 1px,transparent 1px);background-size:100% 100%,160px 160px,160px 160px,32px 32px,32px 32px">
+
+        <!-- title -->
+        <div style="position:absolute;left:40px;top:32px">
+          <div style="font-size:28px;font-weight:700;color:#0F1B3D;letter-spacing:-.01em">PlanForge</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:5px;font-size:13px;color:#6B7A99"><span style="width:7px;height:7px;border-radius:50%;background:#34D399;box-shadow:0 0 8px rgba(52,211,153,.7)"></span>Loft apartment — draft · saved just now</div>
+        </div>
+
+        <!-- floating toolbar -->
+        <div style="position:absolute;left:40px;top:116px;display:flex;gap:4px;padding:6px;background:rgba(255,255,255,.78);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:14px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5 4 8l3 3"></path><path d="M4 8h8a4 4 0 1 1 0 8H9"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B6C2D9"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5l3 3-3 3"></path><path d="M16 8H8a4 4 0 1 0 0 8h3"></path></svg></div>
+          <div style="width:1px;background:rgba(15,27,61,.10);margin:6px 4px"></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"></circle><path d="M13.2 13.2 17 17"></path><path d="M9 7v4M7 9h4"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"></circle><path d="M13.2 13.2 17 17"></path><path d="M7 9h4"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="4.5"></circle><path d="M10 2v3M10 15v3M2 10h3M15 10h3"></path></svg></div>
+        </div>
+
+        <!-- ===== 3D scene ===== -->
+        <div style="position:absolute;left:470px;top:100px;width:1040px;height:840px;perspective:2200px">
+          <div style="position:absolute;left:130px;top:440px;width:780px;height:280px;background:radial-gradient(closest-side,rgba(15,27,61,.22),rgba(15,27,61,0));"></div>
+          <div style="position:absolute;left:200px;top:160px;width:640px;height:520px;transform-style:preserve-3d;transform:rotateX(58deg) rotateZ(-45deg)">
+
+            <!-- floor -->
+            <div style="position:absolute;left:0;top:0;width:640px;height:520px;border-radius:3px;background-image:radial-gradient(460px 400px at 42% 32%,rgba(255,216,150,.38),rgba(120,88,56,.14)),repeating-linear-gradient(90deg,#EADDC6 0px,#EADDC6 76px,#DECFB2 76px,#E4D6BC 80px);box-shadow:inset 0 0 70px rgba(120,80,40,.20)"></div>
+
+            <!-- slab edges -->
+            <div style="position:absolute;left:0;top:520px;width:640px;height:18px;transform-origin:0 0;transform:translateZ(-18px) rotateX(90deg);background:#2B3452"></div>
+            <div style="position:absolute;left:640px;top:0;width:520px;height:18px;transform-origin:0 0;transform:translateZ(-18px) rotateZ(90deg) rotateX(90deg);background:#212944"></div>
+
+            <!-- back wall -->
+            <div style="position:absolute;left:0;top:-250px;width:640px;height:250px;transform-origin:bottom;transform:rotateX(-90deg);background:linear-gradient(180deg,#F8F2E7,#EFE5D3);box-shadow:inset 0 -14px 30px rgba(150,120,80,.14)">
+              <div style="position:absolute;left:0;bottom:0;width:100%;height:12px;background:#E9DEC9"></div>
+              <div style="position:absolute;right:80px;top:56px;width:210px;height:158px;background:linear-gradient(180deg,#FFF6DE,#FFE9C2);border:9px solid #E6DBC6;border-radius:4px;box-shadow:0 0 46px rgba(255,220,160,.55)">
+                <div style="position:absolute;left:50%;top:0;width:6px;height:100%;background:#E6DBC6"></div>
+                <div style="position:absolute;left:0;top:50%;width:100%;height:6px;background:#E6DBC6"></div>
+              </div>
+              <div style="position:absolute;left:70px;top:186px;width:150px;height:9px;background:#A9805A;box-shadow:0 8px 14px rgba(120,80,40,.25)"></div>
+              <div style="position:absolute;left:82px;top:158px;width:12px;height:28px;background:#C96A4A"></div>
+              <div style="position:absolute;left:96px;top:162px;width:12px;height:24px;background:#4F7D46"></div>
+              <div style="position:absolute;left:110px;top:156px;width:12px;height:30px;background:#2F5D8A"></div>
+            </div>
+
+            <!-- left wall -->
+            <div style="position:absolute;left:0;top:520px;width:0;height:0;transform-style:preserve-3d;transform-origin:0 0;transform:rotateZ(-90deg)">
+              <div style="position:absolute;left:0;top:-250px;width:520px;height:250px;transform-origin:bottom;transform:rotateX(-90deg);background:linear-gradient(180deg,#F1E9D9,#E5D8C2);box-shadow:inset 0 -14px 30px rgba(140,110,70,.16)">
+                <div style="position:absolute;left:0;bottom:0;width:100%;height:12px;background:#E0D3BB"></div>
+                <div style="position:absolute;left:200px;top:64px;width:130px;height:96px;background:linear-gradient(180deg,#D8845C 55%,#B4633E 55%);border:7px solid #7A5C3E;border-radius:2px;box-shadow:0 10px 22px rgba(100,70,40,.25)"></div>
+                <div style="position:absolute;left:370px;top:78px;width:52px;height:52px;border-radius:50%;background:#F7F0E2;border:5px solid #8C6B48"></div>
+                <div style="position:absolute;left:392px;top:96px;width:2px;height:14px;background:#4A3A28"></div>
+                <div style="position:absolute;left:394px;top:102px;width:10px;height:2px;background:#4A3A28"></div>
+              </div>
+            </div>
+
+            <!-- rug -->
+            <div style="position:absolute;left:200px;top:230px;width:280px;height:200px;transform:translateZ(.6px);background:#C9805F;border-radius:10px;box-shadow:inset 0 0 0 10px rgba(255,244,230,.35),inset 0 0 40px rgba(120,60,30,.28)"></div>
+
+            <!-- desk -->
+            <div style="position:absolute;left:348px;top:22px;width:244px;height:106px;transform:translateZ(.5px);background:radial-gradient(closest-side,rgba(70,45,20,.16),rgba(70,45,20,0));border-radius:50%"></div>
+            <div style="position:absolute;left:360px;top:30px;width:220px;height:85px;transform-style:preserve-3d">
+              <div style="position:absolute;left:0;top:0;width:220px;height:85px;transform:translateZ(112px);background:linear-gradient(135deg,#CC9F72,#BE8C5C);border-radius:6px"></div>
+              <div style="position:absolute;left:0;top:85px;width:220px;height:112px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#B0824F,#A2743F)"></div>
+              <div style="position:absolute;left:220px;top:0;width:85px;height:112px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#96683C"></div>
+              <div style="position:absolute;left:0;top:0;transform:translateZ(112px);transform-style:preserve-3d">
+                <div style="position:absolute;left:58px;top:24px;width:104px;height:10px;transform-style:preserve-3d">
+                  <div style="position:absolute;left:0;top:0;width:104px;height:10px;transform:translateZ(64px);background:#2A3244"></div>
+                  <div style="position:absolute;left:0;top:10px;width:104px;height:64px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#222A3C,#323C52)"></div>
+                  <div style="position:absolute;left:104px;top:0;width:10px;height:64px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#1C2334"></div>
+                </div>
+                <div style="position:absolute;left:186px;top:40px;width:16px;height:16px;transform-style:preserve-3d">
+                  <div style="position:absolute;left:0;top:0;width:16px;height:16px;transform:translateZ(14px);background:#D9714C;border-radius:50%"></div>
+                  <div style="position:absolute;left:0;top:16px;width:16px;height:14px;transform-origin:0 0;transform:rotateX(90deg);background:#C05A38;border-radius:0 0 4px 4px"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- credenza against left wall -->
+            <div style="position:absolute;left:8px;top:110px;width:64px;height:150px;transform-style:preserve-3d">
+              <div style="position:absolute;left:-8px;top:-6px;width:84px;height:168px;transform:translateZ(.4px);background:radial-gradient(closest-side,rgba(70,45,20,.15),rgba(70,45,20,0));border-radius:50%"></div>
+              <div style="position:absolute;left:0;top:0;width:64px;height:150px;transform:translateZ(78px);background:linear-gradient(135deg,#B4824E,#A5713C);border-radius:5px"></div>
+              <div style="position:absolute;left:0;top:150px;width:64px;height:78px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#9A6C3E,#8A5E32)"></div>
+              <div style="position:absolute;left:64px;top:0;width:150px;height:78px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#7E5630;background-image:linear-gradient(90deg,transparent 0 73px,#6A4522 73px 77px,transparent 77px)"></div>
+            </div>
+
+            <!-- chair (selected) -->
+            <div style="position:absolute;left:404px;top:174px;width:96px;height:96px;transform:translateZ(.8px);border:2.5px dashed #22D3EE;border-radius:50%;box-shadow:0 0 26px rgba(34,211,238,.5),inset 0 0 22px rgba(34,211,238,.22)"></div>
+            <div style="position:absolute;left:420px;top:190px;width:64px;height:64px;transform-style:preserve-3d">
+              <div style="position:absolute;left:0;top:0;width:64px;height:64px;transform:translateZ(54px);background:#CE7B52;border-radius:8px;box-shadow:0 0 0 1.5px rgba(45,212,238,.9)"></div>
+              <div style="position:absolute;left:0;top:64px;width:64px;height:54px;transform-origin:0 0;transform:rotateX(90deg);background:#B96741;box-shadow:0 0 0 1.5px rgba(45,212,238,.7)"></div>
+              <div style="position:absolute;left:64px;top:0;width:64px;height:54px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#A55836;box-shadow:0 0 0 1.5px rgba(45,212,238,.7)"></div>
+              <div style="position:absolute;left:0;top:0;width:64px;height:12px;transform-style:preserve-3d">
+                <div style="position:absolute;left:0;top:0;width:64px;height:12px;transform:translateZ(104px);background:#C4744C;border-radius:4px;box-shadow:0 0 0 1.5px rgba(45,212,238,.8)"></div>
+                <div style="position:absolute;left:0;top:12px;width:64px;height:104px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#B96741,#A85C3A);box-shadow:0 0 0 1.5px rgba(45,212,238,.6)"></div>
+                <div style="position:absolute;left:64px;top:0;width:12px;height:104px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#9A5230"></div>
+              </div>
+            </div>
+
+            <!-- shelf against left wall -->
+            <div style="position:absolute;left:8px;top:310px;width:42px;height:140px;transform-style:preserve-3d">
+              <div style="position:absolute;left:-6px;top:-6px;width:60px;height:156px;transform:translateZ(.4px);background:radial-gradient(closest-side,rgba(70,45,20,.16),rgba(70,45,20,0));border-radius:50%"></div>
+              <div style="position:absolute;left:0;top:0;width:42px;height:140px;transform:translateZ(170px);background:#B98A5F;border-radius:4px"></div>
+              <div style="position:absolute;left:0;top:140px;width:42px;height:170px;transform-origin:0 0;transform:rotateX(90deg);background:#A87848"></div>
+              <div style="position:absolute;left:42px;top:0;width:140px;height:170px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:repeating-linear-gradient(180deg,#A5764A 0px,#A5764A 44px,#6E4B28 44px,#6E4B28 52px)"></div>
+            </div>
+
+            <!-- plant -->
+            <div style="position:absolute;left:545px;top:300px;width:44px;height:44px;transform-style:preserve-3d">
+              <div style="position:absolute;left:-8px;top:-6px;width:64px;height:60px;transform:translateZ(.4px);background:radial-gradient(closest-side,rgba(70,45,20,.16),rgba(70,45,20,0));border-radius:50%"></div>
+              <div style="position:absolute;left:0;top:0;width:44px;height:44px;transform:translateZ(46px);background:#B4633E;border-radius:50%"></div>
+              <div style="position:absolute;left:0;top:44px;width:44px;height:46px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#9E5434,#8C4A2E)"></div>
+              <div style="position:absolute;left:44px;top:0;width:44px;height:46px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#84452B"></div>
+              <div style="position:absolute;left:-35px;top:-33px;width:114px;height:110px;transform:translateZ(118px) rotateZ(38deg) rotateX(-62deg);background:radial-gradient(circle at 38% 32%,#7FB069,#4F7D46 62%,#3E6538);border-radius:46% 54% 48% 52%;box-shadow:0 10px 24px rgba(50,80,40,.3)"></div>
+            </div>
+          </div>
+
+          <!-- selection chip (screen space) -->
+          <div style="position:absolute;left:454px;top:186px;display:flex;flex-direction:column;align-items:center;gap:0">
+            <div style="display:flex;align-items:center;gap:6px;padding:9px 12px;background:rgba(13,22,48,.94);border-radius:13px;border:1px solid rgba(94,234,212,.25);box-shadow:0 16px 40px rgba(13,22,48,.35),0 0 22px rgba(45,212,238,.18)">
+              <div style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#9FB2D8;background:rgba(255,255,255,.06)"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 8A6 6 0 1 0 16 12"></path><path d="M16 4v4h-4"></path></svg></div>
+              <div style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#9FB2D8;background:rgba(255,255,255,.06)"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="8" height="8" rx="2"></rect><path d="M12 4H6a2 2 0 0 0-2 2v6"></path></svg></div>
+              <div style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#F2A6A6;background:rgba(255,255,255,.06)"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12"></path><path d="M8 6V4h4v2"></path><path d="M6 6l1 10h6l1-10"></path></svg></div>
+              <div style="width:1px;height:22px;background:rgba(255,255,255,.14);margin:0 3px"></div>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:#7EE9E1;white-space:nowrap">92 × 88 · H 45 cm</span>
+            </div>
+            <div style="width:1.5px;height:26px;background:linear-gradient(180deg,rgba(45,212,238,.8),rgba(45,212,238,0))"></div>
+          </div>
+          <div style="position:absolute;left:540px;top:146px;padding:5px 12px;background:rgba(255,255,255,.92);border:1px solid rgba(34,211,238,.5);border-radius:999px;font-size:12.5px;font-weight:600;color:#0F766E;box-shadow:0 8px 20px rgba(15,27,61,.12)">Desk Chair</div>
+        </div>
+
+        <!-- bottom-left controls -->
+        <div style="position:absolute;left:40px;bottom:40px;display:flex;align-items:center;gap:12px">
+          <div style="display:flex;padding:5px;background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:999px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+            <div style="padding:9px 22px;border-radius:999px;font-size:15px;font-weight:600;color:#33415C">2D</div>
+            <div style="padding:9px 22px;border-radius:999px;font-size:15px;font-weight:600;color:#fff;background:linear-gradient(135deg,#22D3EE,#14B8A6);box-shadow:0 4px 16px rgba(20,184,166,.5)">3D</div>
+          </div>
+          <div style="display:flex;gap:4px;padding:5px;background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:999px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0F766E;background:rgba(45,212,207,.14)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="3" width="14" height="14" rx="2"></rect><path d="M3 9.5h14M9.5 3v14"></path></svg></div>
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0F766E;background:rgba(45,212,207,.14)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 3v6a4 4 0 0 0 8 0V3"></path><path d="M6 3h3v3.5M14 3h-3v3.5"></path></svg></div>
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"></path></svg></div>
+          </div>
+        </div>
+
+        <!-- camera readout -->
+        <div style="position:absolute;right:40px;bottom:48px;padding:8px 14px;background:rgba(255,255,255,.75);backdrop-filter:blur(12px);border:1px solid rgba(15,27,61,.08);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5B6B8C;box-shadow:0 10px 26px rgba(15,27,61,.08)">orbit 38° / 62° · zoom 1.0×</div>
+
+        <!-- command bar -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 1b · 2D FLOOR PLAN ============ -->
+  <div id="1b" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:center;gap:14px">
+      <a href="#1b" style="display:inline-flex;padding:7px 16px;background:#0F1B3D;color:#5EEAD4;border-radius:999px;font-family:'IBM Plex Mono',monospace;font-size:14px">1b</a>
+      <span style="font-size:17px;font-weight:600;color:#0F1B3D">Top-down 2D floor plan</span>
+    </div>
+    <div data-screen-label="1b 2D Floor Plan" style="position:relative;width:1920px;height:1080px;background:#F3F6FA;overflow:hidden;border-radius:22px;border:1px solid rgba(15,27,61,.07);box-shadow:0 42px 120px rgba(15,27,61,.16);display:flex">
+
+      <!-- rail -->
+      <div style="position:relative;z-index:5;width:96px;background:linear-gradient(180deg,#0C1430,#101E42);display:flex;flex-direction:column;align-items:center;padding:22px 0 24px;gap:8px;box-shadow:1px 0 0 rgba(78,225,215,.16),10px 0 34px rgba(12,20,48,.12)">
+        <div style="width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#5EEAD4,#0EA5E9);display:flex;align-items:center;justify-content:center;box-shadow:0 0 22px rgba(94,234,212,.45);margin-bottom:16px">
+          <svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="#062B33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2L10 2.5z"></path><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"></path></svg>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="6" height="6" rx="1.5"></rect><rect x="11" y="3" width="6" height="6" rx="1.5"></rect><rect x="3" y="11" width="6" height="6" rx="1.5"></rect><rect x="11" y="11" width="6" height="6" rx="1.5"></rect></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Dashboard</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 16.5l1-4L13 4l3 3-8.5 8.5-4 1z"></path><path d="M11.5 5.5l3 3"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Draw</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"></path><path d="M4 10v3.5h12V10"></path><path d="M6 13.5v2.5M14 13.5v2.5"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Furnish</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2L10 2.5z"></path><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Objects</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#4BE3DC;background:rgba(75,227,220,.10);box-shadow:0 0 0 1px rgba(75,227,220,.28),0 0 20px rgba(75,227,220,.18)">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 10S5.5 5.5 10 5.5 17.5 10 17.5 10 14.5 14.5 10 14.5 2.5 10 2.5 10z"></path><circle cx="10" cy="10" r="2.2"></circle></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Views</span>
+        </div>
+        <div style="margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 6h14M3 10h14M3 14h14"></path><circle cx="7.5" cy="6" r="1.7" fill="#0C1430"></circle><circle cx="13" cy="10" r="1.7" fill="#0C1430"></circle><circle cx="6.5" cy="14" r="1.7" fill="#0C1430"></circle></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Settings</span>
+        </div>
+        <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#E8B48A,#B4633E);margin-top:12px;box-shadow:0 0 0 2px rgba(126,147,190,.35)"></div>
+      </div>
+
+      <!-- workspace -->
+      <div style="position:relative;flex:1;background-color:#F3F6FA;background-image:radial-gradient(1000px 760px at 55% 46%,rgba(255,255,255,.9),rgba(255,255,255,0) 72%),linear-gradient(rgba(48,106,190,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(48,106,190,.10) 1px,transparent 1px),linear-gradient(rgba(48,106,190,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(48,106,190,.05) 1px,transparent 1px);background-size:100% 100%,160px 160px,160px 160px,32px 32px,32px 32px">
+
+        <div style="position:absolute;left:40px;top:32px">
+          <div style="font-size:28px;font-weight:700;color:#0F1B3D;letter-spacing:-.01em">PlanForge</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:5px;font-size:13px;color:#6B7A99"><span style="width:7px;height:7px;border-radius:50%;background:#34D399;box-shadow:0 0 8px rgba(52,211,153,.7)"></span>Loft apartment — draft · saved just now</div>
+        </div>
+
+        <div style="position:absolute;left:40px;top:116px;display:flex;gap:4px;padding:6px;background:rgba(255,255,255,.78);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:14px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5 4 8l3 3"></path><path d="M4 8h8a4 4 0 1 1 0 8H9"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B6C2D9"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5l3 3-3 3"></path><path d="M16 8H8a4 4 0 1 0 0 8h3"></path></svg></div>
+          <div style="width:1px;background:rgba(15,27,61,.10);margin:6px 4px"></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"></circle><path d="M13.2 13.2 17 17"></path><path d="M9 7v4M7 9h4"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"></circle><path d="M13.2 13.2 17 17"></path><path d="M7 9h4"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="4.5"></circle><path d="M10 2v3M10 15v3M2 10h3M15 10h3"></path></svg></div>
+        </div>
+
+        <!-- dimension top -->
+        <div style="position:absolute;left:604px;top:126px;width:736px;display:flex;align-items:center;gap:10px">
+          <div style="width:1.5px;height:14px;background:#7E93BE"></div>
+          <div style="flex:1;height:1.5px;background:#7E93BE"></div>
+          <div style="padding:3px 11px;border:1px solid rgba(15,27,61,.12);border-radius:8px;background:#fff;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#33415C">6.40 m</div>
+          <div style="flex:1;height:1.5px;background:#7E93BE"></div>
+          <div style="width:1.5px;height:14px;background:#7E93BE"></div>
+        </div>
+        <!-- dimension left -->
+        <div style="position:absolute;left:534px;top:174px;height:604px;display:flex;flex-direction:column;align-items:center;gap:10px">
+          <div style="height:1.5px;width:14px;background:#7E93BE"></div>
+          <div style="flex:1;width:1.5px;background:#7E93BE"></div>
+          <div style="padding:3px 11px;border:1px solid rgba(15,27,61,.12);border-radius:8px;background:#fff;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#33415C">5.20 m</div>
+          <div style="flex:1;width:1.5px;background:#7E93BE"></div>
+          <div style="height:1.5px;width:14px;background:#7E93BE"></div>
+        </div>
+
+        <!-- plan -->
+        <div style="position:absolute;left:604px;top:190px;width:704px;height:572px;border:16px solid #16213E;border-radius:4px;background-color:#FCFDFF;background-image:linear-gradient(rgba(48,106,190,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(48,106,190,.09) 1px,transparent 1px);background-size:55px 55px;box-shadow:0 34px 90px rgba(15,27,61,.14)">
+          <!-- window (top wall) -->
+          <div style="position:absolute;left:385px;top:-16px;width:231px;height:16px;background:#FCFDFF;border-top:3px solid #16213E;border-bottom:3px solid #16213E"><div style="position:absolute;left:0;top:5.5px;width:100%;height:2px;background:#16213E"></div></div>
+          <!-- door (right wall) -->
+          <div style="position:absolute;right:-16px;top:396px;width:16px;height:104px;background:#FCFDFF"></div>
+          <div style="position:absolute;right:0;top:396px;width:104px;height:104px;border-bottom:2.5px dashed #8FA3C8;border-radius:0 0 0 100%"></div>
+          <div style="position:absolute;right:0;top:394px;width:104px;height:3px;background:#33415C"></div>
+
+          <!-- desk + chair -->
+          <div style="position:absolute;left:396px;top:33px;width:242px;height:94px;border:2px solid #33415C;border-radius:6px;background:rgba(185,138,95,.16);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;color:#475569">DESK</div>
+          <div style="position:absolute;left:462px;top:209px;width:70px;height:70px;border:2px solid #33415C;border-radius:14px 14px 6px 6px;background:rgba(206,123,82,.18);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;color:#475569">CHAIR</div>
+          <!-- rug -->
+          <div style="position:absolute;left:220px;top:253px;width:308px;height:220px;border:2px dashed #9AA9C7;border-radius:10px;background:rgba(201,128,95,.08)"><span style="position:absolute;left:12px;bottom:8px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#8A97B1">RUG</span></div>
+          <!-- shelf -->
+          <div style="position:absolute;left:6px;top:341px;width:48px;height:154px;border:2px solid #33415C;border-radius:4px;background:rgba(169,128,90,.18);display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#475569;writing-mode:vertical-rl">SHELF</span></div>
+          <!-- cabinet -->
+          <div style="position:absolute;left:6px;top:121px;width:72px;height:165px;border:2px solid #33415C;border-radius:4px;background:rgba(169,128,90,.18);display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#475569;writing-mode:vertical-rl">CABINET</span></div>
+          <!-- plant -->
+          <div style="position:absolute;left:600px;top:330px;width:50px;height:50px;border:2px solid #33415C;border-radius:50%;background:rgba(79,125,70,.16)"><div style="position:absolute;left:50%;top:50%;width:26px;height:2px;background:#33415C;transform:translate(-50%,-50%) rotate(45deg)"></div><div style="position:absolute;left:50%;top:50%;width:26px;height:2px;background:#33415C;transform:translate(-50%,-50%) rotate(-45deg)"></div></div>
+          <span style="position:absolute;left:588px;top:386px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#8A97B1">PLANT</span>
+          <!-- wall art ticks (left wall) -->
+          <div style="position:absolute;left:-6px;top:180px;width:6px;height:56px;background:#C9805F;border-radius:2px"></div>
+          <div style="position:absolute;left:-6px;top:250px;width:6px;height:30px;background:#C9805F;border-radius:2px"></div>
+
+          <!-- room label -->
+          <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 22px;background:rgba(255,255,255,.85);backdrop-filter:blur(10px);border:1px solid rgba(15,27,61,.08);border-radius:14px;box-shadow:0 12px 30px rgba(15,27,61,.08)">
+            <span style="font-size:15px;font-weight:700;letter-spacing:.14em;color:#33415C">LIVING ROOM</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:#0F766E">33.28 m² floor area</span>
+          </div>
+        </div>
+
+        <!-- bottom-left controls -->
+        <div style="position:absolute;left:40px;bottom:40px;display:flex;align-items:center;gap:12px">
+          <div style="display:flex;padding:5px;background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:999px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+            <div style="padding:9px 22px;border-radius:999px;font-size:15px;font-weight:600;color:#fff;background:linear-gradient(135deg,#22D3EE,#14B8A6);box-shadow:0 4px 16px rgba(20,184,166,.5)">2D</div>
+            <div style="padding:9px 22px;border-radius:999px;font-size:15px;font-weight:600;color:#33415C">3D</div>
+          </div>
+          <div style="display:flex;gap:4px;padding:5px;background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:999px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0F766E;background:rgba(45,212,207,.14)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="3" width="14" height="14" rx="2"></rect><path d="M3 9.5h14M9.5 3v14"></path></svg></div>
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0F766E;background:rgba(45,212,207,.14)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 3v6a4 4 0 0 0 8 0V3"></path><path d="M6 3h3v3.5M14 3h-3v3.5"></path></svg></div>
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"></path></svg></div>
+          </div>
+        </div>
+
+        <div style="position:absolute;right:40px;bottom:48px;padding:8px 14px;background:rgba(255,255,255,.75);backdrop-filter:blur(12px);border:1px solid rgba(15,27,61,.08);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5B6B8C;box-shadow:0 10px 26px rgba(15,27,61,.08)">scale 1 : 50 · grid 0.5 m</div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 1c · DRAW MODE ============ -->
+  <div id="1c" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:center;gap:14px">
+      <a href="#1c" style="display:inline-flex;padding:7px 16px;background:#0F1B3D;color:#5EEAD4;border-radius:999px;font-family:'IBM Plex Mono',monospace;font-size:14px">1c</a>
+      <span style="font-size:17px;font-weight:600;color:#0F1B3D">Draw mode — sketching an L-shaped room</span>
+    </div>
+    <div data-screen-label="1c Draw Mode" style="position:relative;width:1920px;height:1080px;background:#F3F6FA;overflow:hidden;border-radius:22px;border:1px solid rgba(15,27,61,.07);box-shadow:0 42px 120px rgba(15,27,61,.16);display:flex">
+
+      <!-- rail -->
+      <div style="position:relative;z-index:5;width:96px;background:linear-gradient(180deg,#0C1430,#101E42);display:flex;flex-direction:column;align-items:center;padding:22px 0 24px;gap:8px;box-shadow:1px 0 0 rgba(78,225,215,.16),10px 0 34px rgba(12,20,48,.12)">
+        <div style="width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#5EEAD4,#0EA5E9);display:flex;align-items:center;justify-content:center;box-shadow:0 0 22px rgba(94,234,212,.45);margin-bottom:16px">
+          <svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="#062B33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2L10 2.5z"></path><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"></path></svg>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="6" height="6" rx="1.5"></rect><rect x="11" y="3" width="6" height="6" rx="1.5"></rect><rect x="3" y="11" width="6" height="6" rx="1.5"></rect><rect x="11" y="11" width="6" height="6" rx="1.5"></rect></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Dashboard</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#4BE3DC;background:rgba(75,227,220,.10);box-shadow:0 0 0 1px rgba(75,227,220,.28),0 0 20px rgba(75,227,220,.18)">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 16.5l1-4L13 4l3 3-8.5 8.5-4 1z"></path><path d="M11.5 5.5l3 3"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Draw</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"></path><path d="M4 10v3.5h12V10"></path><path d="M6 13.5v2.5M14 13.5v2.5"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Furnish</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2L10 2.5z"></path><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Objects</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 10S5.5 5.5 10 5.5 17.5 10 17.5 10 14.5 14.5 10 14.5 2.5 10 2.5 10z"></path><circle cx="10" cy="10" r="2.2"></circle></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Views</span>
+        </div>
+        <div style="margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 6h14M3 10h14M3 14h14"></path><circle cx="7.5" cy="6" r="1.7" fill="#0C1430"></circle><circle cx="13" cy="10" r="1.7" fill="#0C1430"></circle><circle cx="6.5" cy="14" r="1.7" fill="#0C1430"></circle></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Settings</span>
+        </div>
+        <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#E8B48A,#B4633E);margin-top:12px;box-shadow:0 0 0 2px rgba(126,147,190,.35)"></div>
+      </div>
+
+      <!-- workspace -->
+      <div style="position:relative;flex:1;background-color:#F3F6FA;background-image:radial-gradient(1000px 760px at 55% 46%,rgba(255,255,255,.9),rgba(255,255,255,0) 72%),linear-gradient(rgba(48,106,190,.13) 1px,transparent 1px),linear-gradient(90deg,rgba(48,106,190,.13) 1px,transparent 1px),linear-gradient(rgba(48,106,190,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(48,106,190,.06) 1px,transparent 1px);background-size:100% 100%,110px 110px,110px 110px,27.5px 27.5px,27.5px 27.5px">
+
+        <div style="position:absolute;left:40px;top:32px">
+          <div style="font-size:28px;font-weight:700;color:#0F1B3D;letter-spacing:-.01em">PlanForge</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:5px;font-size:13px;color:#6B7A99"><span style="width:7px;height:7px;border-radius:50%;background:#F59E0B;box-shadow:0 0 8px rgba(245,158,11,.7)"></span>Drawing room outline — 4 corners placed</div>
+        </div>
+
+        <div style="position:absolute;left:40px;top:116px;display:flex;gap:4px;padding:6px;background:rgba(255,255,255,.78);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:14px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5 4 8l3 3"></path><path d="M4 8h8a4 4 0 1 1 0 8H9"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B6C2D9"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5l3 3-3 3"></path><path d="M16 8H8a4 4 0 1 0 0 8h3"></path></svg></div>
+          <div style="width:1px;background:rgba(15,27,61,.10);margin:6px 4px"></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"></circle><path d="M13.2 13.2 17 17"></path><path d="M9 7v4M7 9h4"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"></circle><path d="M13.2 13.2 17 17"></path><path d="M7 9h4"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="4.5"></circle><path d="M10 2v3M10 15v3M2 10h3M15 10h3"></path></svg></div>
+        </div>
+
+        <!-- draw tool stack -->
+        <div style="position:absolute;left:40px;top:196px;display:flex;flex-direction:column;gap:4px;padding:6px;background:rgba(255,255,255,.78);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:14px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 3l4.5 12 1.8-4.7L16 8.5 5 3z"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#0F766E;background:rgba(45,212,207,.16);box-shadow:0 0 0 1px rgba(34,211,238,.4)"><svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 15L15 5"></path><circle cx="5" cy="15" r="1.8"></circle><circle cx="15" cy="5" r="1.8"></circle></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="5" width="13" height="10" rx="1"></rect></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 16V4h8"></path><path d="M14 4a10 10 0 0 1-8 12"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="12" height="12" rx="1"></rect><path d="M10 4v12"></path></svg></div>
+        </div>
+
+        <!-- unit toggle -->
+        <div style="position:absolute;right:40px;top:36px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:13px;color:#6B7A99">Units</span>
+          <div style="display:flex;padding:4px;background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:999px;box-shadow:0 10px 26px rgba(15,27,61,.08)">
+            <div style="padding:6px 16px;border-radius:999px;font-size:13.5px;font-weight:600;color:#33415C">cm</div>
+            <div style="padding:6px 16px;border-radius:999px;font-size:13.5px;font-weight:600;color:#fff;background:linear-gradient(135deg,#22D3EE,#14B8A6);box-shadow:0 4px 14px rgba(20,184,166,.5)">m</div>
+          </div>
+        </div>
+
+        <!-- snap guide (closing edge, aligned with start) -->
+        <div style="position:absolute;left:647px;top:270px;height:528px;border-left:2.5px dashed rgba(34,211,238,.6)"></div>
+        <div style="position:absolute;left:668px;top:512px;padding:4px 11px;background:rgba(34,211,238,.10);border:1.5px dashed rgba(34,211,238,.7);border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#0F766E">snap · aligned with start</div>
+
+        <!-- wall segments -->
+        <div style="position:absolute;left:650px;top:266px;width:704px;height:8px;background:#16213E;border-radius:4px"></div>
+        <div style="position:absolute;left:1350px;top:270px;width:8px;height:352px;background:#16213E;border-radius:4px"></div>
+        <div style="position:absolute;left:1046px;top:618px;width:308px;height:8px;background:#16213E;border-radius:4px"></div>
+        <div style="position:absolute;left:1042px;top:622px;width:8px;height:176px;background:#16213E;border-radius:4px"></div>
+        <!-- preview segment to cursor -->
+        <div style="position:absolute;left:650px;top:795px;width:396px;border-top:4px dashed #22D3EE;filter:drop-shadow(0 0 6px rgba(34,211,238,.5))"></div>
+
+        <!-- length labels -->
+        <div style="position:absolute;left:962px;top:226px;padding:4px 12px;background:#fff;border:1px solid rgba(15,27,61,.12);border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:13.5px;color:#33415C;box-shadow:0 6px 16px rgba(15,27,61,.08)">6.40 m</div>
+        <div style="position:absolute;left:1376px;top:430px;padding:4px 12px;background:#fff;border:1px solid rgba(15,27,61,.12);border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:13.5px;color:#33415C;box-shadow:0 6px 16px rgba(15,27,61,.08)">3.20 m</div>
+        <div style="position:absolute;left:1140px;top:644px;display:flex;align-items:center;gap:2px;padding:4px 12px;background:#fff;border:2px solid #22D3EE;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:13.5px;color:#0F1B3D;box-shadow:0 0 0 4px rgba(34,211,238,.15),0 6px 16px rgba(15,27,61,.10)">2.80<span style="display:inline-block;width:1.5px;height:16px;background:#0F766E;margin:0 1px"></span><span style="color:#9AA9C7">m</span></div>
+        <div style="position:absolute;left:1066px;top:700px;padding:4px 12px;background:#fff;border:1px solid rgba(15,27,61,.12);border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:13.5px;color:#33415C;box-shadow:0 6px 16px rgba(15,27,61,.08)">1.60 m</div>
+        <div style="position:absolute;left:800px;top:812px;padding:4px 12px;background:rgba(34,211,238,.10);border:1.5px solid #22D3EE;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:13.5px;color:#0F766E">3.60 m</div>
+
+        <!-- right-angle marker + badge at last corner -->
+        <div style="position:absolute;left:1052px;top:776px;width:14px;height:14px;border-left:2px solid #22D3EE;border-top:2px solid #22D3EE"></div>
+        <div style="position:absolute;left:1076px;top:752px;padding:2px 8px;background:#fff;border:1px solid rgba(34,211,238,.6);border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#0F766E">90°</div>
+
+        <!-- corner points -->
+        <div style="position:absolute;left:642px;top:262px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #16213E;box-shadow:0 0 0 6px rgba(34,211,238,.25),0 0 16px rgba(34,211,238,.5)"></div>
+        <div style="position:absolute;left:1346px;top:262px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #16213E;box-shadow:0 2px 6px rgba(15,27,61,.25)"></div>
+        <div style="position:absolute;left:1346px;top:614px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #16213E;box-shadow:0 2px 6px rgba(15,27,61,.25)"></div>
+        <div style="position:absolute;left:1038px;top:614px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #16213E;box-shadow:0 2px 6px rgba(15,27,61,.25)"></div>
+        <div style="position:absolute;left:1038px;top:790px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #16213E;box-shadow:0 2px 6px rgba(15,27,61,.25)"></div>
+
+        <!-- cursor -->
+        <div style="position:absolute;left:650px;top:768px;width:1.5px;height:60px;background:rgba(34,211,238,.7);transform:translateX(-50%)"></div>
+        <div style="position:absolute;left:620px;top:798px;width:60px;height:1.5px;background:rgba(34,211,238,.7);transform:translateY(-50%)"></div>
+        <div style="position:absolute;left:643px;top:791px;width:14px;height:14px;border-radius:50%;background:#22D3EE;box-shadow:0 0 0 5px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.7)"></div>
+
+        <!-- helper hint -->
+        <div style="position:absolute;left:50%;bottom:44px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:9px 18px;background:rgba(13,22,48,.88);border-radius:999px;box-shadow:0 14px 34px rgba(13,22,48,.3)">
+          <span style="font-size:13.5px;color:#C7D4EE">Click to place corner</span>
+          <span style="color:rgba(255,255,255,.25)">·</span>
+          <span style="font-size:13.5px;color:#C7D4EE"><span style="font-family:'IBM Plex Mono',monospace;padding:1px 7px;background:rgba(255,255,255,.10);border-radius:5px;font-size:12px">⏎</span> close room</span>
+          <span style="color:rgba(255,255,255,.25)">·</span>
+          <span style="font-size:13.5px;color:#C7D4EE"><span style="font-family:'IBM Plex Mono',monospace;padding:1px 7px;background:rgba(255,255,255,.10);border-radius:5px;font-size:12px">esc</span> cancel</span>
+        </div>
+
+        <!-- bottom-left controls -->
+        <div style="position:absolute;left:40px;bottom:40px;display:flex;align-items:center;gap:12px">
+          <div style="display:flex;padding:5px;background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:999px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+            <div style="padding:9px 22px;border-radius:999px;font-size:15px;font-weight:600;color:#fff;background:linear-gradient(135deg,#22D3EE,#14B8A6);box-shadow:0 4px 16px rgba(20,184,166,.5)">2D</div>
+            <div style="padding:9px 22px;border-radius:999px;font-size:15px;font-weight:600;color:#33415C">3D</div>
+          </div>
+          <div style="display:flex;gap:4px;padding:5px;background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:999px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0F766E;background:rgba(45,212,207,.14)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="3" width="14" height="14" rx="2"></rect><path d="M3 9.5h14M9.5 3v14"></path></svg></div>
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0F766E;background:rgba(45,212,207,.14)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 3v6a4 4 0 0 0 8 0V3"></path><path d="M6 3h3v3.5M14 3h-3v3.5"></path></svg></div>
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"></path></svg></div>
+          </div>
+        </div>
+
+        <div style="position:absolute;right:40px;bottom:48px;padding:8px 14px;background:rgba(255,255,255,.75);backdrop-filter:blur(12px);border:1px solid rgba(15,27,61,.08);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5B6B8C;box-shadow:0 10px 26px rgba(15,27,61,.08)">snap 90° · grid 0.5 m</div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 1d · FURNITURE PANEL ============ -->
+  <div id="1d" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:center;gap:14px">
+      <a href="#1d" style="display:inline-flex;padding:7px 16px;background:#0F1B3D;color:#5EEAD4;border-radius:999px;font-family:'IBM Plex Mono',monospace;font-size:14px">1d</a>
+      <span style="font-size:17px;font-weight:600;color:#0F1B3D">Object panel open — sofa mid-placement</span>
+    </div>
+    <div data-screen-label="1d Furniture Panel" style="position:relative;width:1920px;height:1080px;background:#F3F6FA;overflow:hidden;border-radius:22px;border:1px solid rgba(15,27,61,.07);box-shadow:0 42px 120px rgba(15,27,61,.16);display:flex">
+
+      <!-- rail -->
+      <div style="position:relative;z-index:5;width:96px;background:linear-gradient(180deg,#0C1430,#101E42);display:flex;flex-direction:column;align-items:center;padding:22px 0 24px;gap:8px;box-shadow:1px 0 0 rgba(78,225,215,.16),10px 0 34px rgba(12,20,48,.12)">
+        <div style="width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#5EEAD4,#0EA5E9);display:flex;align-items:center;justify-content:center;box-shadow:0 0 22px rgba(94,234,212,.45);margin-bottom:16px">
+          <svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="#062B33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2L10 2.5z"></path><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"></path></svg>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="6" height="6" rx="1.5"></rect><rect x="11" y="3" width="6" height="6" rx="1.5"></rect><rect x="3" y="11" width="6" height="6" rx="1.5"></rect><rect x="11" y="11" width="6" height="6" rx="1.5"></rect></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Dashboard</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 16.5l1-4L13 4l3 3-8.5 8.5-4 1z"></path><path d="M11.5 5.5l3 3"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Draw</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"></path><path d="M4 10v3.5h12V10"></path><path d="M6 13.5v2.5M14 13.5v2.5"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Furnish</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#4BE3DC;background:rgba(75,227,220,.10);box-shadow:0 0 0 1px rgba(75,227,220,.28),0 0 20px rgba(75,227,220,.18)">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2L10 2.5z"></path><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"></path></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Objects</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 10S5.5 5.5 10 5.5 17.5 10 17.5 10 14.5 14.5 10 14.5 2.5 10 2.5 10z"></path><circle cx="10" cy="10" r="2.2"></circle></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Views</span>
+        </div>
+        <div style="margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:5px;width:78px;padding:11px 0;border-radius:12px;color:#7E93BE">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 6h14M3 10h14M3 14h14"></path><circle cx="7.5" cy="6" r="1.7" fill="#0C1430"></circle><circle cx="13" cy="10" r="1.7" fill="#0C1430"></circle><circle cx="6.5" cy="14" r="1.7" fill="#0C1430"></circle></svg>
+          <span style="font-size:10px;letter-spacing:.06em">Settings</span>
+        </div>
+        <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#E8B48A,#B4633E);margin-top:12px;box-shadow:0 0 0 2px rgba(126,147,190,.35)"></div>
+      </div>
+
+      <!-- workspace -->
+      <div style="position:relative;flex:1;background-color:#F3F6FA;background-image:radial-gradient(1000px 760px at 60% 44%,rgba(255,255,255,.9),rgba(255,255,255,0) 72%),linear-gradient(rgba(48,106,190,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(48,106,190,.10) 1px,transparent 1px),linear-gradient(rgba(48,106,190,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(48,106,190,.05) 1px,transparent 1px);background-size:100% 100%,160px 160px,160px 160px,32px 32px,32px 32px">
+
+        <div style="position:absolute;left:404px;top:32px">
+          <div style="font-size:28px;font-weight:700;color:#0F1B3D;letter-spacing:-.01em">PlanForge</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:5px;font-size:13px;color:#6B7A99"><span style="width:7px;height:7px;border-radius:50%;background:#22D3EE;box-shadow:0 0 8px rgba(34,211,238,.7)"></span>Placing “Sofa · 2-seat” — drop to confirm</div>
+        </div>
+
+        <div style="position:absolute;left:404px;top:116px;display:flex;gap:4px;padding:6px;background:rgba(255,255,255,.78);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:14px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5 4 8l3 3"></path><path d="M4 8h8a4 4 0 1 1 0 8H9"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B6C2D9"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5l3 3-3 3"></path><path d="M16 8H8a4 4 0 1 0 0 8h3"></path></svg></div>
+          <div style="width:1px;background:rgba(15,27,61,.10);margin:6px 4px"></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"></circle><path d="M13.2 13.2 17 17"></path><path d="M9 7v4M7 9h4"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"></circle><path d="M13.2 13.2 17 17"></path><path d="M7 9h4"></path></svg></div>
+          <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="4.5"></circle><path d="M10 2v3M10 15v3M2 10h3M15 10h3"></path></svg></div>
+        </div>
+
+        <!-- 3D scene -->
+        <div style="position:absolute;left:500px;top:100px;width:1040px;height:840px;perspective:2200px">
+          <div style="position:absolute;left:130px;top:440px;width:780px;height:280px;background:radial-gradient(closest-side,rgba(15,27,61,.22),rgba(15,27,61,0));"></div>
+          <div style="position:absolute;left:200px;top:160px;width:640px;height:520px;transform-style:preserve-3d;transform:rotateX(58deg) rotateZ(-45deg)">
+            <div style="position:absolute;left:0;top:0;width:640px;height:520px;border-radius:3px;background-image:radial-gradient(460px 400px at 42% 32%,rgba(255,216,150,.38),rgba(120,88,56,.14)),repeating-linear-gradient(90deg,#EADDC6 0px,#EADDC6 76px,#DECFB2 76px,#E4D6BC 80px);box-shadow:inset 0 0 70px rgba(120,80,40,.20)"></div>
+            <div style="position:absolute;left:0;top:520px;width:640px;height:18px;transform-origin:0 0;transform:translateZ(-18px) rotateX(90deg);background:#2B3452"></div>
+            <div style="position:absolute;left:640px;top:0;width:520px;height:18px;transform-origin:0 0;transform:translateZ(-18px) rotateZ(90deg) rotateX(90deg);background:#212944"></div>
+            <div style="position:absolute;left:0;top:-250px;width:640px;height:250px;transform-origin:bottom;transform:rotateX(-90deg);background:linear-gradient(180deg,#F8F2E7,#EFE5D3);box-shadow:inset 0 -14px 30px rgba(150,120,80,.14)">
+              <div style="position:absolute;left:0;bottom:0;width:100%;height:12px;background:#E9DEC9"></div>
+              <div style="position:absolute;right:80px;top:56px;width:210px;height:158px;background:linear-gradient(180deg,#FFF6DE,#FFE9C2);border:9px solid #E6DBC6;border-radius:4px;box-shadow:0 0 46px rgba(255,220,160,.55)">
+                <div style="position:absolute;left:50%;top:0;width:6px;height:100%;background:#E6DBC6"></div>
+                <div style="position:absolute;left:0;top:50%;width:100%;height:6px;background:#E6DBC6"></div>
+              </div>
+              <div style="position:absolute;left:70px;top:186px;width:150px;height:9px;background:#A9805A;box-shadow:0 8px 14px rgba(120,80,40,.25)"></div>
+              <div style="position:absolute;left:82px;top:158px;width:12px;height:28px;background:#C96A4A"></div>
+              <div style="position:absolute;left:96px;top:162px;width:12px;height:24px;background:#4F7D46"></div>
+              <div style="position:absolute;left:110px;top:156px;width:12px;height:30px;background:#2F5D8A"></div>
+            </div>
+            <div style="position:absolute;left:0;top:520px;width:0;height:0;transform-style:preserve-3d;transform-origin:0 0;transform:rotateZ(-90deg)">
+              <div style="position:absolute;left:0;top:-250px;width:520px;height:250px;transform-origin:bottom;transform:rotateX(-90deg);background:linear-gradient(180deg,#F1E9D9,#E5D8C2);box-shadow:inset 0 -14px 30px rgba(140,110,70,.16)">
+                <div style="position:absolute;left:0;bottom:0;width:100%;height:12px;background:#E0D3BB"></div>
+                <div style="position:absolute;left:200px;top:64px;width:130px;height:96px;background:linear-gradient(180deg,#D8845C 55%,#B4633E 55%);border:7px solid #7A5C3E;border-radius:2px;box-shadow:0 10px 22px rgba(100,70,40,.25)"></div>
+                <div style="position:absolute;left:370px;top:78px;width:52px;height:52px;border-radius:50%;background:#F7F0E2;border:5px solid #8C6B48"></div>
+                <div style="position:absolute;left:392px;top:96px;width:2px;height:14px;background:#4A3A28"></div>
+                <div style="position:absolute;left:394px;top:102px;width:10px;height:2px;background:#4A3A28"></div>
+              </div>
+            </div>
+            <div style="position:absolute;left:200px;top:230px;width:280px;height:200px;transform:translateZ(.6px);background:#C9805F;border-radius:10px;box-shadow:inset 0 0 0 10px rgba(255,244,230,.35),inset 0 0 40px rgba(120,60,30,.28)"></div>
+            <div style="position:absolute;left:348px;top:22px;width:244px;height:106px;transform:translateZ(.5px);background:radial-gradient(closest-side,rgba(70,45,20,.16),rgba(70,45,20,0));border-radius:50%"></div>
+            <div style="position:absolute;left:360px;top:30px;width:220px;height:85px;transform-style:preserve-3d">
+              <div style="position:absolute;left:0;top:0;width:220px;height:85px;transform:translateZ(112px);background:linear-gradient(135deg,#CC9F72,#BE8C5C);border-radius:6px"></div>
+              <div style="position:absolute;left:0;top:85px;width:220px;height:112px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#B0824F,#A2743F)"></div>
+              <div style="position:absolute;left:220px;top:0;width:85px;height:112px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#96683C"></div>
+              <div style="position:absolute;left:0;top:0;transform:translateZ(112px);transform-style:preserve-3d">
+                <div style="position:absolute;left:58px;top:24px;width:104px;height:10px;transform-style:preserve-3d">
+                  <div style="position:absolute;left:0;top:0;width:104px;height:10px;transform:translateZ(64px);background:#2A3244"></div>
+                  <div style="position:absolute;left:0;top:10px;width:104px;height:64px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#222A3C,#323C52)"></div>
+                  <div style="position:absolute;left:104px;top:0;width:10px;height:64px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#1C2334"></div>
+                </div>
+                <div style="position:absolute;left:186px;top:40px;width:16px;height:16px;transform-style:preserve-3d">
+                  <div style="position:absolute;left:0;top:0;width:16px;height:16px;transform:translateZ(14px);background:#D9714C;border-radius:50%"></div>
+                  <div style="position:absolute;left:0;top:16px;width:16px;height:14px;transform-origin:0 0;transform:rotateX(90deg);background:#C05A38;border-radius:0 0 4px 4px"></div>
+                </div>
+              </div>
+            </div>
+            <div style="position:absolute;left:8px;top:110px;width:64px;height:150px;transform-style:preserve-3d">
+              <div style="position:absolute;left:-8px;top:-6px;width:84px;height:168px;transform:translateZ(.4px);background:radial-gradient(closest-side,rgba(70,45,20,.15),rgba(70,45,20,0));border-radius:50%"></div>
+              <div style="position:absolute;left:0;top:0;width:64px;height:150px;transform:translateZ(78px);background:linear-gradient(135deg,#B4824E,#A5713C);border-radius:5px"></div>
+              <div style="position:absolute;left:0;top:150px;width:64px;height:78px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#9A6C3E,#8A5E32)"></div>
+              <div style="position:absolute;left:64px;top:0;width:150px;height:78px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#7E5630;background-image:linear-gradient(90deg,transparent 0 73px,#6A4522 73px 77px,transparent 77px)"></div>
+            </div>
+            <div style="position:absolute;left:420px;top:190px;width:64px;height:64px;transform-style:preserve-3d">
+              <div style="position:absolute;left:0;top:0;width:64px;height:64px;transform:translateZ(54px);background:#CE7B52;border-radius:8px"></div>
+              <div style="position:absolute;left:0;top:64px;width:64px;height:54px;transform-origin:0 0;transform:rotateX(90deg);background:#B96741"></div>
+              <div style="position:absolute;left:64px;top:0;width:64px;height:54px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#A55836"></div>
+              <div style="position:absolute;left:0;top:0;width:64px;height:12px;transform-style:preserve-3d">
+                <div style="position:absolute;left:0;top:0;width:64px;height:12px;transform:translateZ(104px);background:#C4744C;border-radius:4px"></div>
+                <div style="position:absolute;left:0;top:12px;width:64px;height:104px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#B96741,#A85C3A)"></div>
+                <div style="position:absolute;left:64px;top:0;width:12px;height:104px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#9A5230"></div>
+              </div>
+            </div>
+            <div style="position:absolute;left:8px;top:310px;width:42px;height:140px;transform-style:preserve-3d">
+              <div style="position:absolute;left:-6px;top:-6px;width:60px;height:156px;transform:translateZ(.4px);background:radial-gradient(closest-side,rgba(70,45,20,.16),rgba(70,45,20,0));border-radius:50%"></div>
+              <div style="position:absolute;left:0;top:0;width:42px;height:140px;transform:translateZ(170px);background:#B98A5F;border-radius:4px"></div>
+              <div style="position:absolute;left:0;top:140px;width:42px;height:170px;transform-origin:0 0;transform:rotateX(90deg);background:#A87848"></div>
+              <div style="position:absolute;left:42px;top:0;width:140px;height:170px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:repeating-linear-gradient(180deg,#A5764A 0px,#A5764A 44px,#6E4B28 44px,#6E4B28 52px)"></div>
+            </div>
+            <div style="position:absolute;left:545px;top:300px;width:44px;height:44px;transform-style:preserve-3d">
+              <div style="position:absolute;left:-8px;top:-6px;width:64px;height:60px;transform:translateZ(.4px);background:radial-gradient(closest-side,rgba(70,45,20,.16),rgba(70,45,20,0));border-radius:50%"></div>
+              <div style="position:absolute;left:0;top:0;width:44px;height:44px;transform:translateZ(46px);background:#B4633E;border-radius:50%"></div>
+              <div style="position:absolute;left:0;top:44px;width:44px;height:46px;transform-origin:0 0;transform:rotateX(90deg);background:linear-gradient(0deg,#9E5434,#8C4A2E)"></div>
+              <div style="position:absolute;left:44px;top:0;width:44px;height:46px;transform-origin:0 0;transform:rotateZ(90deg) rotateX(90deg);background:#84452B"></div>
+              <div style="position:absolute;left:-35px;top:-33px;width:114px;height:110px;transform:translateZ(118px) rotateZ(38deg) rotateX(-62deg);background:radial-gradient(circle at 38% 32%,#7FB069,#4F7D46 62%,#3E6538);border-radius:46% 54% 48% 52%;box-shadow:0 10px 24px rgba(50,80,40,.3)"></div>
+            </div>
+
+            <!-- ghost sofa placement -->
+            <div style="position:absolute;left:0;top:422px;width:300px;height:2px;transform:translateZ(1px);background:repeating-linear-gradient(90deg,#22D3EE 0 10px,transparent 10px 18px)"></div>
+            <div style="position:absolute;left:383px;top:0;width:2px;height:380px;transform:translateZ(1px);background:repeating-linear-gradient(180deg,#22D3EE 0 10px,transparent 10px 18px)"></div>
+            <div style="position:absolute;left:300px;top:380px;width:168px;height:88px;transform:translateZ(1px);border:3px dashed #22D3EE;border-radius:12px;background:rgba(34,211,238,.10);box-shadow:0 0 30px rgba(34,211,238,.35)"></div>
+            <div style="position:absolute;left:300px;top:380px;width:168px;height:88px;transform:translateZ(60px);border:1.5px dashed rgba(34,211,238,.5);border-radius:12px;background:rgba(34,211,238,.08)"></div>
+            <div style="position:absolute;left:150px;top:422px;width:0;height:0;transform-style:preserve-3d"><div style="position:absolute;left:-38px;top:-15px;transform:translateZ(8px) rotateZ(45deg) rotateX(-58deg);padding:3px 10px;background:#0F766E;color:#fff;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;white-space:nowrap">3.00 m</div></div>
+            <div style="position:absolute;left:383px;top:190px;width:0;height:0;transform-style:preserve-3d"><div style="position:absolute;left:-38px;top:-15px;transform:translateZ(8px) rotateZ(45deg) rotateX(-58deg);padding:3px 10px;background:#0F766E;color:#fff;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;white-space:nowrap">3.80 m</div></div>
+          </div>
+        </div>
+
+        <!-- object panel -->
+        <div style="position:absolute;left:24px;top:24px;bottom:24px;width:340px;background:rgba(255,255,255,.84);backdrop-filter:blur(20px);border:1px solid rgba(15,27,61,.08);border-radius:20px;box-shadow:0 30px 80px rgba(15,27,61,.16);padding:24px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:21px;font-weight:700;color:#0F1B3D">Objects</span>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#6B7A99" stroke-width="1.7" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"></path></svg>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;background:#EEF2F7;border-radius:12px">
+            <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="#8A97B1" stroke-width="1.7" stroke-linecap="round"><circle cx="9" cy="9" r="5.5"></circle><path d="M13.2 13.2 17 17"></path></svg>
+            <span style="font-size:13.5px;color:#8A97B1">Search 2,400+ items</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">
+            <span style="padding:6px 13px;border-radius:999px;font-size:12.5px;font-weight:600;color:#fff;background:linear-gradient(135deg,#22D3EE,#14B8A6);box-shadow:0 3px 12px rgba(20,184,166,.4)">Seating</span>
+            <span style="padding:6px 13px;border-radius:999px;font-size:12.5px;color:#33415C;background:#fff;border:1px solid rgba(15,27,61,.10)">Tables</span>
+            <span style="padding:6px 13px;border-radius:999px;font-size:12.5px;color:#33415C;background:#fff;border:1px solid rgba(15,27,61,.10)">Storage</span>
+            <span style="padding:6px 13px;border-radius:999px;font-size:12.5px;color:#33415C;background:#fff;border:1px solid rgba(15,27,61,.10)">Beds</span>
+            <span style="padding:6px 13px;border-radius:999px;font-size:12.5px;color:#33415C;background:#fff;border:1px solid rgba(15,27,61,.10)">Lighting</span>
+            <span style="padding:6px 13px;border-radius:999px;font-size:12.5px;color:#33415C;background:#fff;border:1px solid rgba(15,27,61,.10)">Decor</span>
+            <span style="padding:6px 13px;border-radius:999px;font-size:12.5px;color:#33415C;background:#fff;border:1px solid rgba(15,27,61,.10)">Wall items</span>
+            <span style="padding:6px 13px;border-radius:999px;font-size:12.5px;color:#33415C;background:#fff;border:1px solid rgba(15,27,61,.10)">Plants</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;overflow:hidden">
+            <div style="background:#fff;border:1px solid rgba(15,27,61,.06);border-radius:14px;padding:10px;box-shadow:0 6px 18px rgba(15,27,61,.06)">
+              <div style="height:92px;border-radius:10px;background:#F1F5F9;position:relative;overflow:hidden">
+                <div style="position:absolute;left:50%;bottom:36px;width:44px;height:36px;transform:translateX(-50%);background:#CE7B52;border-radius:9px 9px 0 0"></div>
+                <div style="position:absolute;left:50%;bottom:26px;width:56px;height:13px;transform:translateX(-50%);background:#B96741;border-radius:5px"></div>
+                <div style="position:absolute;left:50%;bottom:12px;width:3px;height:14px;transform:translateX(-16px);background:#7A5230"></div>
+                <div style="position:absolute;left:50%;bottom:12px;width:3px;height:14px;transform:translateX(13px);background:#7A5230"></div>
+              </div>
+              <div style="margin-top:9px;font-size:13.5px;font-weight:600;color:#22304F">Lounge Chair</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A97B1">74 × 80 cm</div>
+            </div>
+            <div style="background:rgba(34,211,238,.05);border:2px dashed rgba(34,211,238,.55);border-radius:14px;padding:10px;display:flex;flex-direction:column">
+              <div style="height:92px;border-radius:10px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#0F766E">placing…</span></div>
+              <div style="margin-top:9px;font-size:13.5px;font-weight:600;color:#8A97B1">Sofa · 2-seat</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B6C2D9">168 × 88 cm</div>
+            </div>
+            <div style="background:#fff;border:1px solid rgba(15,27,61,.06);border-radius:14px;padding:10px;box-shadow:0 6px 18px rgba(15,27,61,.06)">
+              <div style="height:92px;border-radius:10px;background:#F1F5F9;position:relative;overflow:hidden">
+                <div style="position:absolute;left:50%;bottom:34px;width:46px;height:34px;transform:translateX(-50%);background:#B98A5F;border-radius:9px 9px 0 0"></div>
+                <div style="position:absolute;left:50%;bottom:24px;width:66px;height:22px;transform:translateX(-50%);background:#A87848;border-radius:7px"></div>
+                <div style="position:absolute;left:50%;bottom:24px;width:11px;height:30px;transform:translateX(-33px);background:#96683C;border-radius:5px"></div>
+                <div style="position:absolute;left:50%;bottom:24px;width:11px;height:30px;transform:translateX(22px);background:#96683C;border-radius:5px"></div>
+              </div>
+              <div style="margin-top:9px;font-size:13.5px;font-weight:600;color:#22304F">Armchair</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A97B1">84 × 86 cm</div>
+            </div>
+            <div style="background:#fff;border:1px solid rgba(15,27,61,.06);border-radius:14px;padding:10px;box-shadow:0 6px 18px rgba(15,27,61,.06)">
+              <div style="height:92px;border-radius:10px;background:#F1F5F9;position:relative;overflow:hidden">
+                <div style="position:absolute;left:50%;bottom:44px;width:42px;height:11px;transform:translateX(-50%);background:#B98A5F;border-radius:5px"></div>
+                <div style="position:absolute;left:50%;bottom:16px;width:3px;height:30px;transform:translateX(-17px) rotate(9deg);background:#7A5230"></div>
+                <div style="position:absolute;left:50%;bottom:16px;width:3px;height:30px;transform:translateX(14px) rotate(-9deg);background:#7A5230"></div>
+              </div>
+              <div style="margin-top:9px;font-size:13.5px;font-weight:600;color:#22304F">Stool</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A97B1">42 × 42 cm</div>
+            </div>
+            <div style="background:#fff;border:1px solid rgba(15,27,61,.06);border-radius:14px;padding:10px;box-shadow:0 6px 18px rgba(15,27,61,.06)">
+              <div style="height:92px;border-radius:10px;background:#F1F5F9;position:relative;overflow:hidden">
+                <div style="position:absolute;left:50%;bottom:40px;width:66px;height:10px;transform:translateX(-50%);background:#B98A5F;border-radius:4px"></div>
+                <div style="position:absolute;left:50%;bottom:20px;width:4px;height:21px;transform:translateX(-27px);background:#7A5230"></div>
+                <div style="position:absolute;left:50%;bottom:20px;width:4px;height:21px;transform:translateX(23px);background:#7A5230"></div>
+              </div>
+              <div style="margin-top:9px;font-size:13.5px;font-weight:600;color:#22304F">Bench</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A97B1">120 × 44 cm</div>
+            </div>
+            <div style="background:#fff;border:1px solid rgba(15,27,61,.06);border-radius:14px;padding:10px;box-shadow:0 6px 18px rgba(15,27,61,.06)">
+              <div style="height:92px;border-radius:10px;background:#F1F5F9;position:relative;overflow:hidden">
+                <div style="position:absolute;left:50%;bottom:26px;width:52px;height:30px;transform:translateX(-50%);background:#C9805F;border-radius:14px 14px 10px 10px"></div>
+              </div>
+              <div style="margin-top:9px;font-size:13.5px;font-weight:600;color:#22304F">Pouf</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A97B1">55 × 55 cm</div>
+            </div>
+          </div>
+          <div style="margin-top:auto;padding:11px 14px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.3);border-radius:12px;font-size:12.5px;color:#0F766E;line-height:1.45">Drag an item onto the floor — it snaps to walls and other objects.</div>
+        </div>
+
+        <!-- floating dragged card -->
+        <div style="position:absolute;left:480px;top:520px;width:158px;background:#fff;border:1.5px solid rgba(34,211,238,.7);border-radius:14px;padding:10px;box-shadow:0 34px 70px rgba(15,27,61,.30),0 0 26px rgba(34,211,238,.25);transform:rotate(-4deg)">
+          <div style="height:92px;border-radius:10px;background:#F1F5F9;position:relative;overflow:hidden">
+            <div style="position:absolute;left:50%;bottom:36px;width:84px;height:26px;transform:translateX(-50%);background:#CE7B52;border-radius:8px 8px 0 0"></div>
+            <div style="position:absolute;left:50%;bottom:24px;width:96px;height:16px;transform:translateX(-50%);background:#B96741;border-radius:6px"></div>
+            <div style="position:absolute;left:50%;bottom:24px;width:13px;height:34px;transform:translateX(-48px);background:#A55836;border-radius:6px"></div>
+            <div style="position:absolute;left:50%;bottom:24px;width:13px;height:34px;transform:translateX(35px);background:#A55836;border-radius:6px"></div>
+            <div style="position:absolute;left:50%;bottom:38px;width:1.5px;height:22px;background:rgba(255,255,255,.5)"></div>
+          </div>
+          <div style="margin-top:9px;font-size:13.5px;font-weight:600;color:#22304F">Sofa · 2-seat</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A97B1">168 × 88 cm</div>
+        </div>
+        <svg style="position:absolute;left:640px;top:640px" width="26" height="26" viewBox="0 0 20 20" fill="#0F1B3D" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"><path d="M5 3l4.5 12 1.8-4.7L16 8.5 5 3z"></path></svg>
+
+        <!-- bottom-left controls -->
+        <div style="position:absolute;left:404px;bottom:40px;display:flex;align-items:center;gap:12px">
+          <div style="display:flex;padding:5px;background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:999px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+            <div style="padding:9px 22px;border-radius:999px;font-size:15px;font-weight:600;color:#33415C">2D</div>
+            <div style="padding:9px 22px;border-radius:999px;font-size:15px;font-weight:600;color:#fff;background:linear-gradient(135deg,#22D3EE,#14B8A6);box-shadow:0 4px 16px rgba(20,184,166,.5)">3D</div>
+          </div>
+          <div style="display:flex;gap:4px;padding:5px;background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(15,27,61,.08);border-radius:999px;box-shadow:0 14px 34px rgba(15,27,61,.10)">
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0F766E;background:rgba(45,212,207,.14)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="3" width="14" height="14" rx="2"></rect><path d="M3 9.5h14M9.5 3v14"></path></svg></div>
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0F766E;background:rgba(45,212,207,.14)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 3v6a4 4 0 0 0 8 0V3"></path><path d="M6 3h3v3.5M14 3h-3v3.5"></path></svg></div>
+            <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#33415C"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"></path></svg></div>
+          </div>
+        </div>
+
+        <div style="position:absolute;right:40px;bottom:48px;padding:8px 14px;background:rgba(255,255,255,.75);backdrop-filter:blur(12px);border:1px solid rgba(15,27,61,.08);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5B6B8C;box-shadow:0 10px 26px rgba(15,27,61,.08)">snap · walls + objects</div>
+
+      </div>
+    </div>
+  </div>
+
+</section>
+</x-dc>
+</body>
+</html>
