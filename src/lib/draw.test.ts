@@ -79,6 +79,20 @@ describe("snapDraftPoint", () => {
 		expect(snap.point.y).toBe(0.08);
 		expect(snap.alignment).toBeNull();
 	});
+
+	it("passes the raw cursor through when snapping is off", () => {
+		// Would otherwise axis-lock to the last corner and quantize to 5 cm.
+		const snap = snapDraftPoint(
+			[{ x: 0, y: 0 }],
+			{ x: 2.03, y: 0.06 },
+			TOL,
+			false,
+		);
+		expect(snap.point).toEqual({ x: 2.03, y: 0.06 });
+		expect(snap.axisSnapped).toBe(false);
+		expect(snap.alignment).toBeNull();
+		expect(snap.turnAngleDeg).toBeNull();
+	});
 });
 
 describe("setSegmentLength", () => {

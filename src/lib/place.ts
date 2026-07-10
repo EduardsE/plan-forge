@@ -405,6 +405,11 @@ function angledWallGuides(
  * carry the per-axis clearance to whichever line is nearest, left to render.
  * A final pass contains and flush-snaps against any non-axis-aligned walls,
  * which the x/y decomposition above can't represent.
+ *
+ * With `snap` off (the snap toggle), the raw cursor passes through unquantized
+ * and no flush snapping fires (no guides) — but the footprint still clamps and
+ * contains inside the outline, so free placement can't push furniture through
+ * a wall.
  */
 export function snapPlacement(
 	outline: Point[],
@@ -413,6 +418,7 @@ export function snapPlacement(
 	obstacles: Obstacle[] = [],
 	tolerance: number = SNAP_TOLERANCE,
 	grid: number = PLACEMENT_GRID,
+	snap = true,
 ): PlacementSnap {
 	const halfW = size.width / 2;
 	const halfD = size.depth / 2;
@@ -420,10 +426,15 @@ export function snapPlacement(
 	const vertical = axisWalls(outline, "x");
 	const horizontal = axisWalls(outline, "y");
 
-	const quantized = {
-		x: quantize(cursor.x, grid),
-		y: quantize(cursor.y, grid),
-	};
+	// Snap off: skip quantize and drop the flush tolerance to zero so only the
+	// clamp/containment survives (a zero gap never triggers a flush pull).
+	const flushTolerance = snap ? tolerance : 0;
+	const quantized = snap
+		? {
+				x: quantize(cursor.x, grid),
+				y: quantize(cursor.y, grid),
+			}
+		: { x: cursor.x, y: cursor.y };
 	// halfD is the mover's cross extent when measuring along x; halfW along y.
 	const center: Point = {
 		x: snapAxis(
@@ -436,7 +447,7 @@ export function snapPlacement(
 			halfD,
 			bounds ? bounds.min.x + halfW : null,
 			bounds ? bounds.max.x - halfW : null,
-			tolerance,
+			flushTolerance,
 		),
 		y: 0,
 	};
@@ -450,7 +461,7 @@ export function snapPlacement(
 		halfW,
 		bounds ? bounds.min.y + halfD : null,
 		bounds ? bounds.max.y - halfD : null,
-		tolerance,
+		flushTolerance,
 	);
 
 	// Non-axis walls, handled after the x/y pass: contain + flush-snap along
@@ -459,8 +470,11 @@ export function snapPlacement(
 	const angled = angledWalls(outline);
 	const placed =
 		angled.length > 0
-			? applyAngledWalls(angled, center, halfW, halfD, tolerance)
+			? applyAngledWalls(angled, center, halfW, halfD, flushTolerance)
 			: center;
+
+	// Snap off: contained, but no flush snap and so no clearance guides.
+	if (!snap) return { center: placed, guides: [] };
 
 	const guides: PlacementGuide[] = [];
 	const guideX = guideFor(vertical, obstacles, "x", placed, halfW, halfD);

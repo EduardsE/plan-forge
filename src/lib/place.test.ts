@@ -92,6 +92,52 @@ describe("snapPlacement", () => {
 	});
 });
 
+describe("snapPlacement — snap off", () => {
+	it("passes the raw cursor through unquantized with no guides", () => {
+		const snap = snapPlacement(
+			RECT,
+			SOFA,
+			{ x: 3.013, y: 2.538 },
+			[],
+			undefined,
+			undefined,
+			false,
+		);
+		expect(snap.center.x).toBeCloseTo(3.013, 10);
+		expect(snap.center.y).toBeCloseTo(2.538, 10);
+		expect(snap.guides).toEqual([]);
+	});
+
+	it("does not flush-snap to a wall within tolerance", () => {
+		// Snap on, this pulls flush to x=0.84 (see the flush test above).
+		const snap = snapPlacement(
+			RECT,
+			SOFA,
+			{ x: 1.0, y: 2.6 },
+			[],
+			undefined,
+			undefined,
+			false,
+		);
+		expect(snap.center.x).toBeCloseTo(1.0, 10);
+		expect(snap.guides).toEqual([]);
+	});
+
+	it("still clamps the footprint inside the room bounds", () => {
+		const snap = snapPlacement(
+			RECT,
+			SOFA,
+			{ x: 20, y: -5 },
+			[],
+			undefined,
+			undefined,
+			false,
+		);
+		expect(snap.center.x).toBeCloseTo(6.4 - 0.84, 10);
+		expect(snap.center.y).toBeCloseTo(0.44, 10);
+	});
+});
+
 /** A table footprint sitting mid-room, away from every wall. */
 const TABLE: Obstacle = {
 	min: { x: 2.5, y: 2.2 },

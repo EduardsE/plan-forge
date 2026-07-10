@@ -56,6 +56,20 @@ function Planner() {
 	const [viewMode, setViewMode] = useState<ViewMode>("3d");
 	const [room, setRoom] = useState(createSampleRoom);
 	const [unit, setUnit] = useState<Unit>("m");
+	// Bottom-left view toggles. Grid shows the in-scene reference grid; snap
+	// gates draw/placement quantize + flush snapping. Both default on, matching
+	// the lit state the mockups show.
+	const [gridVisible, setGridVisible] = useState(true);
+	const [snapEnabled, setSnapEnabled] = useState(true);
+	// Fullscreen targets the workspace pane (canvas + its chrome), so the nav
+	// rail drops away but the toolbars ride along.
+	const workspaceRef = useRef<HTMLDivElement>(null);
+	const toggleFullscreen = useCallback(() => {
+		const el = workspaceRef.current;
+		if (!el) return;
+		if (document.fullscreenElement) document.exitFullscreen();
+		else el.requestFullscreen?.();
+	}, []);
 	const cameraApiRef = useRef<CameraApi | null>(null);
 	const [readoutStore] = useState(createCameraReadoutStore);
 	const [canvasReady, setCanvasReady] = useState(false);
@@ -286,6 +300,7 @@ function Planner() {
 		<div className="flex h-screen w-screen overflow-hidden">
 			<NavRail activeMode={viewMode} onSelectMode={setViewMode} />
 			<div
+				ref={workspaceRef}
 				className="workspace-canvas relative flex-1"
 				data-view-mode={viewMode}
 			>
@@ -298,6 +313,8 @@ function Planner() {
 							cameraApiRef={cameraApiRef}
 							readoutStore={readoutStore}
 							unit={unit}
+							gridVisible={gridVisible}
+							snapEnabled={snapEnabled}
 							drawTool={drawTool}
 							draftCorners={draft.corners}
 							draftClosed={draft.closed}
@@ -350,6 +367,11 @@ function Planner() {
 					viewMode={viewMode}
 					onSelectMode={setViewMode}
 					shifted={objectsOpen}
+					gridVisible={gridVisible}
+					onToggleGrid={() => setGridVisible((on) => !on)}
+					snapEnabled={snapEnabled}
+					onToggleSnap={() => setSnapEnabled((on) => !on)}
+					onFullscreen={toggleFullscreen}
 				/>
 				<ReadoutChip mode={viewMode} cameraReadout={readoutStore} unit={unit} />
 				{viewMode === "draw" && (

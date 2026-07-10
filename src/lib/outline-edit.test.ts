@@ -100,6 +100,13 @@ describe("snapCornerDrag", () => {
 		const snap = snapCornerDrag(RECT, 1, { x: 6.04, y: 1.5 }, TOL);
 		expect(snap.guides).toEqual([{ cornerIndex: 2, axis: "x" }]);
 	});
+
+	it("passes the raw cursor through when snapping is off", () => {
+		// Would otherwise lock both axes onto the neighboring corners.
+		const snap = snapCornerDrag(RECT, 1, { x: 6.04, y: 0.06 }, TOL, false);
+		expect(snap.point).toEqual({ x: 6.04, y: 0.06 });
+		expect(snap.guides).toEqual([]);
+	});
 });
 
 describe("splitPointOnWall", () => {

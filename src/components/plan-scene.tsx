@@ -646,6 +646,8 @@ export interface PlanSceneProps {
 	/** Armed door/window insert tool, or null. */
 	openingTool: OpeningKind | null;
 	unit: Unit;
+	/** Snap toggle: off means free furniture moves (no flush/quantize). */
+	snapEnabled: boolean;
 	onSelectItem: (id: string) => void;
 	onRotateItem: (id: string) => void;
 	onDuplicateItem: (id: string) => void;
@@ -673,6 +675,7 @@ export function PlanScene({
 	selectedOpeningId,
 	openingTool,
 	unit,
+	snapEnabled,
 	onSelectItem,
 	onRotateItem,
 	onDuplicateItem,
@@ -803,6 +806,7 @@ export function PlanScene({
 					obstacles={moveObstacles}
 					drag={drag}
 					unit={unit}
+					snapEnabled={snapEnabled}
 					onMove={(position) => onMoveItem(drag.id, position)}
 					onEnd={endDrag}
 				/>

@@ -351,11 +351,13 @@ interface CornerDrag {
  */
 function CornerDragSession({
 	corners,
+	snapEnabled,
 	drag,
 	onMove,
 	onEnd,
 }: {
 	corners: Point[];
+	snapEnabled: boolean;
 	drag: CornerDrag;
 	onMove: (index: number, point: Point) => void;
 	onEnd: () => void;
@@ -363,10 +365,12 @@ function CornerDragSession({
 	const camera = useThree((state) => state.camera);
 	const gl = useThree((state) => state.gl);
 	const [guides, setGuides] = useState<CornerGuide[]>([]);
-	// Latest corners/callbacks without resubscribing mid-drag (every move
+	// Latest corners/snap/callbacks without resubscribing mid-drag (every move
 	// rebuilds the draft the handlers close over).
 	const cornersRef = useRef(corners);
 	cornersRef.current = corners;
+	const snapRef = useRef(snapEnabled);
+	snapRef.current = snapEnabled;
 	const moveRef = useRef(onMove);
 	moveRef.current = onMove;
 	const endRef = useRef(onEnd);
@@ -394,6 +398,7 @@ function CornerDragSession({
 				drag.index,
 				point,
 				SNAP_TOLERANCE_PX / zoom,
+				snapRef.current,
 			);
 			moveRef.current(drag.index, snap.point);
 			setGuides(snap.guides);
@@ -488,11 +493,13 @@ function CornerHandle({
  */
 function OutlineEditLayer({
 	corners,
+	snapEnabled,
 	onMoveCorner,
 	onSplitWall,
 	onDragActiveChange,
 }: {
 	corners: Point[];
+	snapEnabled: boolean;
 	onMoveCorner: (index: number, point: Point) => void;
 	onSplitWall: (wallIndex: number, point: Point) => void;
 	onDragActiveChange: (active: boolean) => void;
@@ -590,6 +597,7 @@ function OutlineEditLayer({
 			{drag && (
 				<CornerDragSession
 					corners={corners}
+					snapEnabled={snapEnabled}
 					drag={drag}
 					onMove={onMoveCorner}
 					onEnd={endDrag}
@@ -604,6 +612,8 @@ export interface DrawSceneProps {
 	/** Closed loop (editing an existing room) vs open chain (fresh drawing). */
 	closed: boolean;
 	unit: Unit;
+	/** Snap toggle: off means free-hand corners (no axis lock / quantize). */
+	snapEnabled: boolean;
 	/** Wall tool active on an open draft: clicks place corners, crosshair on. */
 	placing: boolean;
 	onPlaceCorner: (point: Point) => void;
@@ -622,6 +632,7 @@ export function DrawScene({
 	corners,
 	closed,
 	unit,
+	snapEnabled,
 	placing,
 	onPlaceCorner,
 	onSetSegmentLength,
@@ -651,7 +662,7 @@ export function DrawScene({
 	const handleMove = (event: ThreeEvent<PointerEvent>) => {
 		if (!placing) return;
 		const cursor = { x: event.point.x, y: event.point.z };
-		setSnap(snapDraftPoint(corners, cursor, toleranceOf(event)));
+		setSnap(snapDraftPoint(corners, cursor, toleranceOf(event), snapEnabled));
 	};
 
 	const handleClick = (event: ThreeEvent<MouseEvent>) => {
@@ -665,6 +676,7 @@ export function DrawScene({
 			corners,
 			{ x: event.point.x, y: event.point.z },
 			tolerance,
+			snapEnabled,
 		);
 		if (corners.length >= 3) {
 			const closeTolerance =
@@ -774,6 +786,7 @@ export function DrawScene({
 			{closed && (
 				<OutlineEditLayer
 					corners={corners}
+					snapEnabled={snapEnabled}
 					onMoveCorner={onMoveCorner}
 					onSplitWall={onSplitWall}
 					onDragActiveChange={onDragActiveChange}

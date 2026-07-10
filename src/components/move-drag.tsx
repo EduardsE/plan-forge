@@ -148,6 +148,7 @@ export function MoveDragSession({
 	obstacles,
 	drag,
 	unit,
+	snapEnabled,
 	onMove,
 	onEnd,
 }: {
@@ -156,6 +157,8 @@ export function MoveDragSession({
 	obstacles: Obstacle[];
 	drag: MoveDrag;
 	unit: Unit;
+	/** Snap toggle: off means free move (contained, but no flush/quantize). */
+	snapEnabled: boolean;
 	onMove: (position: Point) => void;
 	onEnd: () => void;
 }) {
@@ -170,6 +173,8 @@ export function MoveDragSession({
 	endRef.current = onEnd;
 	const obstaclesRef = useRef(obstacles);
 	obstaclesRef.current = obstacles;
+	const snapRef = useRef(snapEnabled);
+	snapRef.current = snapEnabled;
 
 	useEffect(() => {
 		const toFloor = floorProjector(gl, camera);
@@ -195,6 +200,9 @@ export function MoveDragSession({
 					y: point.y - drag.grab.y,
 				},
 				obstaclesRef.current,
+				undefined,
+				undefined,
+				snapRef.current,
 			);
 			moveRef.current(snap.center);
 			setGuides(snap.guides);

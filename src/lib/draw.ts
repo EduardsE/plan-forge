@@ -57,12 +57,24 @@ const quantize = quantizeToStep;
  * order: first the segment from the last corner locks to an axis (within
  * `tolerance` meters), then the still-free coordinate may align with an
  * earlier corner, and whatever remains free quantizes to `DRAW_GRID_STEP`.
+ *
+ * With `snap` off (the snap toggle), the raw cursor passes straight through —
+ * no axis lock, no alignment, no quantize — for free-hand corner placement.
  */
 export function snapDraftPoint(
 	corners: Point[],
 	cursor: Point,
 	tolerance: number,
+	snap = true,
 ): DraftSnap {
+	if (!snap) {
+		return {
+			point: { x: cursor.x, y: cursor.y },
+			axisSnapped: false,
+			turnAngleDeg: null,
+			alignment: null,
+		};
+	}
 	let x = cursor.x;
 	let y = cursor.y;
 	let axisSnapped = false;

@@ -558,6 +558,9 @@ export interface PlannerCanvasProps {
 	readoutStore: CameraReadoutStore;
 	/** Display unit for draw-mode labels. */
 	unit: Unit;
+	/** Bottom-left toggles: show the reference grid, and snap while editing. */
+	gridVisible: boolean;
+	snapEnabled: boolean;
 	/** Draw-mode state, owned by the route (the header shows the count). */
 	drawTool: DrawTool;
 	draftCorners: Point[];
@@ -585,6 +588,8 @@ export function PlannerCanvas({
 	cameraApiRef,
 	readoutStore,
 	unit,
+	gridVisible,
+	snapEnabled,
 	drawTool,
 	draftCorners,
 	draftClosed,
@@ -777,26 +782,29 @@ export function PlannerCanvas({
 					apiRef={cameraApiRef}
 					readoutStore={readoutStore}
 				/>
-				<Grid
-					infiniteGrid
-					followCamera={false}
-					cellSize={0.5}
-					cellThickness={1}
-					cellColor={GRID_MINOR_COLOR}
-					sectionSize={2.5}
-					sectionThickness={1.4}
-					sectionColor={GRID_MAJOR_COLOR}
-					// One value for both lenses: a per-lens fade would pop while the
-					// transition camera is still ~40 m out at the top-down end.
-					fadeDistance={130}
-					fadeStrength={1}
-				/>
+				{gridVisible && (
+					<Grid
+						infiniteGrid
+						followCamera={false}
+						cellSize={0.5}
+						cellThickness={1}
+						cellColor={GRID_MINOR_COLOR}
+						sectionSize={2.5}
+						sectionThickness={1.4}
+						sectionColor={GRID_MAJOR_COLOR}
+						// One value for both lenses: a per-lens fade would pop while the
+						// transition camera is still ~40 m out at the top-down end.
+						fadeDistance={130}
+						fadeStrength={1}
+					/>
+				)}
 				{renderPlan ? (
 					drawing ? (
 						<DrawScene
 							corners={draftCorners}
 							closed={draftClosed}
 							unit={unit}
+							snapEnabled={snapEnabled}
 							placing={drawTool === "wall" && !draftClosed}
 							onPlaceCorner={onPlaceCorner}
 							onSetSegmentLength={onSetDraftSegmentLength}
@@ -812,6 +820,7 @@ export function PlannerCanvas({
 							selectedOpeningId={selectedOpeningId}
 							openingTool={openingTool}
 							unit={unit}
+							snapEnabled={snapEnabled}
 							onSelectItem={selectItem}
 							onRotateItem={rotateItem}
 							onDuplicateItem={duplicateItem}
@@ -831,6 +840,7 @@ export function PlannerCanvas({
 							room={room}
 							selectedId={selectedId}
 							unit={unit}
+							snapEnabled={snapEnabled}
 							onSelectItem={selectItem}
 							onRotateItem={rotateItem}
 							onDuplicateItem={duplicateItem}
@@ -844,6 +854,7 @@ export function PlannerCanvas({
 								obstacles={placementObstacles}
 								item={placingItem}
 								unit={unit}
+								snapEnabled={snapEnabled}
 								onPlace={placeDraggedItem}
 								onCancel={onPlacingEnd}
 							/>

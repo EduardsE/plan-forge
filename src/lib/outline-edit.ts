@@ -69,13 +69,18 @@ export interface CornerDragSnap {
  * nearest other corner's matching coordinate within `tolerance` (keeping
  * walls axis-aligned takes just the two neighbors, but any corner may align),
  * and whatever stays free quantizes to the drawing grid.
+ *
+ * With `snap` off (the snap toggle), the raw cursor passes straight through —
+ * no corner alignment, no quantize — for free-hand corner dragging.
  */
 export function snapCornerDrag(
 	corners: Point[],
 	index: number,
 	cursor: Point,
 	tolerance: number,
+	snap = true,
 ): CornerDragSnap {
+	if (!snap) return { point: { x: cursor.x, y: cursor.y }, guides: [] };
 	const point: Point = { x: cursor.x, y: cursor.y };
 	const guides: CornerGuide[] = [];
 	for (const axis of ["x", "y"] as const) {

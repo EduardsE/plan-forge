@@ -54,6 +54,8 @@ export interface PlacementGhostProps {
 	obstacles: Obstacle[];
 	item: CatalogItem;
 	unit: Unit;
+	/** Snap toggle: off means free placement (contained, no flush/quantize). */
+	snapEnabled: boolean;
 	onPlace: (center: Point) => void;
 	onCancel: () => void;
 }
@@ -63,6 +65,7 @@ export function PlacementGhost({
 	obstacles,
 	item,
 	unit,
+	snapEnabled,
 	onPlace,
 	onCancel,
 }: PlacementGhostProps) {
@@ -90,7 +93,17 @@ export function PlacementGhost({
 		const handleMove = (event: PointerEvent) => {
 			const point = toFloor(event);
 			setSnap(
-				point ? snapPlacement(outline, item.footprint, point, obstacles) : null,
+				point
+					? snapPlacement(
+							outline,
+							item.footprint,
+							point,
+							obstacles,
+							undefined,
+							undefined,
+							snapEnabled,
+						)
+					: null,
 			);
 		};
 		const handleUp = (event: PointerEvent) => {
@@ -99,7 +112,15 @@ export function PlacementGhost({
 			const point = toFloor(event);
 			if (point)
 				onPlace(
-					snapPlacement(outline, item.footprint, point, obstacles).center,
+					snapPlacement(
+						outline,
+						item.footprint,
+						point,
+						obstacles,
+						undefined,
+						undefined,
+						snapEnabled,
+					).center,
 				);
 			else onCancel();
 		};
@@ -109,7 +130,7 @@ export function PlacementGhost({
 			window.removeEventListener("pointermove", handleMove);
 			window.removeEventListener("pointerup", handleUp);
 		};
-	}, [outline, obstacles, item, camera, gl, onPlace, onCancel]);
+	}, [outline, obstacles, item, snapEnabled, camera, gl, onPlace, onCancel]);
 
 	const rect = useMemo(
 		() =>

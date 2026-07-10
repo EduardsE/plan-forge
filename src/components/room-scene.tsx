@@ -658,6 +658,8 @@ export interface RoomSceneProps {
 	room: Room;
 	selectedId: string | null;
 	unit: Unit;
+	/** Snap toggle: off means free furniture moves (no flush/quantize). */
+	snapEnabled: boolean;
 	onSelectItem: (id: string) => void;
 	onRotateItem: (id: string) => void;
 	onDuplicateItem: (id: string) => void;
@@ -672,6 +674,7 @@ export function RoomScene({
 	room,
 	selectedId,
 	unit,
+	snapEnabled,
 	onSelectItem,
 	onRotateItem,
 	onDuplicateItem,
@@ -730,6 +733,7 @@ export function RoomScene({
 					obstacles={moveObstacles}
 					drag={drag}
 					unit={unit}
+					snapEnabled={snapEnabled}
 					onMove={(position) => onMoveItem(drag.id, position)}
 					onEnd={endDrag}
 				/>

@@ -7,6 +7,14 @@ interface ViewControlsProps {
 	onSelectMode: (mode: ViewMode) => void;
 	/** Objects panel open (screen 1d): the controls move right to clear it. */
 	shifted?: boolean;
+	/** Whether the in-scene reference grid is shown (lit toggle). */
+	gridVisible: boolean;
+	onToggleGrid: () => void;
+	/** Whether draw/placement snapping is active (lit toggle). */
+	snapEnabled: boolean;
+	onToggleSnap: () => void;
+	/** Requests browser fullscreen on the workspace (a plain action). */
+	onFullscreen: () => void;
 }
 
 const GLASS_SURFACE = {
@@ -16,36 +24,47 @@ const GLASS_SURFACE = {
 	backdropFilter: "blur(16px)",
 } as const;
 
-interface ToggleButtonDef {
-	label: string;
-	icon: typeof Grid2x2;
-	/** Persistently on in the mockup (grid/snap); fullscreen is a plain action. */
-	active: boolean;
-}
-
-const TOGGLE_BUTTONS: ToggleButtonDef[] = [
-	{ label: "Toggle grid", icon: Grid2x2, active: true },
-	{ label: "Toggle snapping", icon: Magnet, active: true },
-	{ label: "Fullscreen", icon: Maximize, active: false },
-];
-
 /**
  * Bottom-left view controls, matching the mockup's screens 1a–1d:
  * a segmented 2D|3D pill plus a grid/snap/fullscreen button group.
  *
- * The 2D|3D pill is the only interactive chrome in Phase 1 — it reads and
- * mutates the shared `viewMode`. 2D reads active for the top-down lenses
- * ("2d" and draw mode, screen 1c); 3D reads active for the dollhouse lenses
- * ("3d" and objects mode, screen 1d) — mirroring which segment glows on each
- * mockup screen. Grid/snap render toggled-on and fullscreen as a plain action;
- * all three are no-op stubs until Phase 4 wires up real behavior.
+ * The 2D|3D pill reads and mutates the shared `viewMode`. 2D reads active for
+ * the top-down lenses ("2d" and draw mode, screen 1c); 3D reads active for the
+ * dollhouse lenses ("3d" and objects mode, screen 1d) — mirroring which
+ * segment glows on each mockup screen. Grid and snap are lit while their view-
+ * state toggles are on; fullscreen is a plain action.
  */
 export function ViewControls({
 	viewMode,
 	onSelectMode,
 	shifted = false,
+	gridVisible,
+	onToggleGrid,
+	snapEnabled,
+	onToggleSnap,
+	onFullscreen,
 }: ViewControlsProps) {
 	const is2dActive = viewMode === "2d" || viewMode === "draw";
+	const toggleButtons = [
+		{
+			label: "Toggle grid",
+			icon: Grid2x2,
+			active: gridVisible,
+			onClick: onToggleGrid,
+		},
+		{
+			label: "Toggle snapping",
+			icon: Magnet,
+			active: snapEnabled,
+			onClick: onToggleSnap,
+		},
+		{
+			label: "Fullscreen",
+			icon: Maximize,
+			active: false,
+			onClick: onFullscreen,
+		},
+	];
 
 	return (
 		<div
@@ -84,12 +103,13 @@ export function ViewControls({
 			</div>
 
 			<div className="flex gap-1 rounded-full p-[5px]" style={GLASS_SURFACE}>
-				{TOGGLE_BUTTONS.map(({ label, icon: Icon, active }) => (
+				{toggleButtons.map(({ label, icon: Icon, active, onClick }) => (
 					<button
 						key={label}
 						type="button"
 						aria-label={label}
-						onClick={() => {}}
+						aria-pressed={label === "Fullscreen" ? undefined : active}
+						onClick={onClick}
 						className={cn(
 							"flex h-[38px] w-[38px] items-center justify-center rounded-full",
 							active
