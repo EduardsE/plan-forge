@@ -35,6 +35,12 @@ export interface Opening {
 	/** Distance from the host wall's start corner to the opening's near edge. */
 	offset: number;
 	width: number;
+	/**
+	 * Doors only: which edge of the opening carries the hinge — the near edge
+	 * (`"start"`, the default) or the far edge. Doors always swing into the
+	 * room.
+	 */
+	hinge?: "start" | "end";
 }
 
 /** Axis-aligned size of a furniture item before rotation. */
@@ -56,6 +62,8 @@ export interface FurnitureItem {
 }
 
 export interface Room {
+	/** Display name, e.g. "Living room". */
+	name?: string;
 	/** Ordered corners of the closed room outline. */
 	outline: Point[];
 	openings: Opening[];

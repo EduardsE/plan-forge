@@ -63,6 +63,7 @@ describe("buildWallSolids", () => {
 				width: expect.closeTo(0.95, 10),
 				bottom: 0,
 				top: DOOR_HEIGHT,
+				hinge: "start",
 			},
 		]);
 		expect(solids[2].holes).toEqual([]);

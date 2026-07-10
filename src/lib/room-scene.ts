@@ -30,6 +30,8 @@ export interface WallHole {
 	bottom: number;
 	/** Height of the hole's upper edge above the floor. */
 	top: number;
+	/** Doors only: hinge edge, carried through from the opening. */
+	hinge?: "start" | "end";
 }
 
 /** One wall ready to extrude: a placed rectangle with holes cut into it. */
@@ -117,6 +119,7 @@ export function buildWallSolids(
 				width: end - start,
 				bottom,
 				top,
+				hinge: opening.hinge,
 			});
 		}
 		holes.sort((a, b) => a.start - b.start);

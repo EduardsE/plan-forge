@@ -17,6 +17,7 @@ import type { Room } from "./types";
  */
 export function createSampleRoom(): Room {
 	return {
+		name: "Living room",
 		outline: [
 			{ x: 0, y: 0 },
 			{ x: 6.4, y: 0 },
@@ -27,8 +28,16 @@ export function createSampleRoom(): Room {
 			// Top wall, 385 px in, 231 px wide.
 			{ id: "window-1", kind: "window", wallIndex: 0, offset: 3.5, width: 2.1 },
 			// Right wall, 396 px down; drawn 104 px (0.945 m), rounded to a
-			// standard 0.95 m leaf.
-			{ id: "door-1", kind: "door", wallIndex: 1, offset: 3.6, width: 0.95 },
+			// standard 0.95 m leaf. The 2D plan draws the leaf hinged at the
+			// opening's near (offset) edge, swinging into the room.
+			{
+				id: "door-1",
+				kind: "door",
+				wallIndex: 1,
+				offset: 3.6,
+				width: 0.95,
+				hinge: "start",
+			},
 		],
 		furniture: [
 			{

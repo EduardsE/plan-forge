@@ -21,6 +21,7 @@ import {
 	type PerspectiveCamera as ThreePerspectiveCamera,
 	Vector3,
 } from "three";
+import { PlanScene } from "#/components/plan-scene";
 import { RoomScene } from "#/components/room-scene";
 import {
 	type CameraApi,
@@ -150,11 +151,27 @@ function lerpPose(from: CameraPose, to: CameraPose, k: number): CameraPose {
 interface CameraRigProps {
 	room: Room;
 	planView: boolean;
+	/**
+	 * Which camera actually renders — owned by the parent so the scene
+	 * presentation can switch with it. Lags planView while a transition
+	 * flies: the perspective camera animates in both directions, so the
+	 * ortho camera only takes over once a to-plan flight has landed on its
+	 * matched pose.
+	 */
+	renderPlan: boolean;
+	onRenderPlanChange: (renderPlan: boolean) => void;
 	apiRef: RefObject<CameraApi | null>;
 	readoutStore: CameraReadoutStore;
 }
 
-function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
+function CameraRig({
+	room,
+	planView,
+	renderPlan,
+	onRenderPlanChange: setRenderPlan,
+	apiRef,
+	readoutStore,
+}: CameraRigProps) {
 	const size = useThree((state) => state.size);
 	const controlsRef = useRef<OrbitControlsRef | null>(null);
 	const perspectiveRef = useRef<ThreePerspectiveCamera | null>(null);
@@ -162,10 +179,6 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 	/** Perspective fit distance; "zoom 1.0×" in the readout means this far. */
 	const fitDistanceRef = useRef(1);
 
-	// Which camera actually renders. Lags planView while a transition flies:
-	// the perspective camera animates in both directions, so the ortho camera
-	// only takes over once a to-plan flight has landed on its matched pose.
-	const [renderPlan, setRenderPlan] = useState(planView);
 	const [transitioning, setTransitioning] = useState(false);
 	const transitionRef = useRef<CameraTransition | null>(null);
 	/** Orbit pose saved when leaving 3D, restored on the way back. */
@@ -390,7 +403,7 @@ function CameraRig({ room, planView, apiRef, readoutStore }: CameraRigProps) {
 		// The perspective camera renders throughout the flight.
 		setRenderPlan(false);
 		setTransitioning(true);
-	}, [planView, size, fitRadius, target]);
+	}, [planView, size, fitRadius, target, setRenderPlan]);
 
 	useFrame((_, delta) => {
 		const transition = transitionRef.current;
@@ -518,13 +531,21 @@ export function PlannerCanvas({
 	// Same lens split as the 2D|3D pill: draw is a top-down 2D flow, the
 	// objects catalog drops onto the 3D dollhouse.
 	const planView = viewMode === "2d" || viewMode === "draw";
+	// Scene presentation follows the rendering camera, not the requested
+	// lens: during a transition flight the warm 3D room stays up, and the
+	// plan drawing swaps in only at the matched top-down endpoint.
+	const [renderPlan, setRenderPlan] = useState(planView);
 
 	return (
-		<div className="absolute inset-0">
+		// isolate: drei <Html> overlays carry huge z-indexes; contain them so
+		// the chrome around the workspace still paints on top.
+		<div className="absolute inset-0 isolate">
 			<Canvas flat dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
 				<CameraRig
 					room={room}
 					planView={planView}
+					renderPlan={renderPlan}
+					onRenderPlanChange={setRenderPlan}
 					apiRef={cameraApiRef}
 					readoutStore={readoutStore}
 				/>
@@ -542,7 +563,7 @@ export function PlannerCanvas({
 					fadeDistance={130}
 					fadeStrength={1}
 				/>
-				<RoomScene room={room} />
+				{renderPlan ? <PlanScene room={room} /> : <RoomScene room={room} />}
 			</Canvas>
 		</div>
 	);
