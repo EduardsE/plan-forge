@@ -1,16 +1,18 @@
-import { Html, Line } from "@react-three/drei";
+import { Line } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useState } from "react";
 import { Plane, Raycaster, Shape, Vector2, Vector3 } from "three";
+import { SnapGuides } from "#/components/snap-guides";
 import type { CatalogItem, Point } from "#/lib/model";
 import { type PlacementSnap, snapPlacement } from "#/lib/place";
 import { dashedPolyline, roundedRectPoints } from "#/lib/plan-scene";
-import { formatLength, type Unit } from "#/lib/units";
+import type { Unit } from "#/lib/units";
 
 /**
  * The in-scene half of a placement drag (mockup screen 1d): a dashed cyan
  * ghost footprint on the floor with a matching outline hovering at the
- * item's height, plus per-axis wall-distance guides with teal readout pills.
+ * item's height, plus per-axis wall-distance guides with teal readout pills
+ * (`SnapGuides`).
  *
  * The drag never goes through R3F's event system — the pointer went down on
  * a DOM card, so this component raycasts window pointermoves onto the floor
@@ -20,17 +22,12 @@ import { formatLength, type Unit } from "#/lib/units";
  */
 
 const GHOST_COLOR = "#22d3ee";
-/** Readout pill colors, from the mockup's "3.00 m" chips. */
-const PILL_CLASS =
-	"whitespace-nowrap rounded-[7px] bg-[#0F766E] px-2.5 py-[3px] font-mono text-[12.5px] text-white";
 /** Ghost corner rounding — the mockup's 12px at plan scale. */
 const CORNER_RADIUS = 0.11;
 
 /** Stacked above the 3D floor top (0.001) and the rug (top ≈ 0.017). */
 const FILL_Y = 0.024;
-const GUIDE_Y = 0.026;
 const OUTLINE_Y = 0.028;
-const LABEL_Y = 0.032;
 
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 
@@ -121,13 +118,6 @@ export function PlacementGhost({
 		[rectLoop],
 	);
 	const shape = useMemo(() => ghostShape(rect), [rect]);
-	const guideDashes = useMemo(
-		() =>
-			snap?.guides.map((guide) =>
-				dashedPolyline([guide.from, guide.to], 0.14, 0.11),
-			) ?? [],
-		[snap],
-	);
 
 	if (!snap) return null;
 	const { center } = snap;
@@ -172,33 +162,7 @@ export function PlacementGhost({
 					/>
 				)}
 			</group>
-			{snap.guides.map((guide, index) => (
-				<group key={guide.axis}>
-					<Line
-						segments
-						points={(guideDashes[index] ?? []).map((p) => v3(p, GUIDE_Y))}
-						color={GHOST_COLOR}
-						lineWidth={2.5}
-						transparent
-						opacity={0.85}
-						alphaToCoverage={false}
-					/>
-					<Html
-						position={[
-							(guide.from.x + guide.to.x) / 2,
-							LABEL_Y,
-							(guide.from.y + guide.to.y) / 2,
-						]}
-						center
-						style={{ pointerEvents: "none" }}
-						zIndexRange={[30, 0]}
-					>
-						<span className={PILL_CLASS}>
-							{formatLength(guide.distance, unit)}
-						</span>
-					</Html>
-				</group>
-			))}
+			<SnapGuides guides={snap.guides} unit={unit} />
 		</group>
 	);
 }

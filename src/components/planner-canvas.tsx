@@ -40,6 +40,7 @@ import {
 	addFurniture,
 	type CatalogItem,
 	duplicateFurniture,
+	moveFurniture,
 	outlineBounds,
 	type Point,
 	type Room,
@@ -174,6 +175,8 @@ interface CameraRigProps {
 	 */
 	renderPlan: boolean;
 	onRenderPlanChange: (renderPlan: boolean) => void;
+	/** A furniture move drag owns the pointer — the controls sit it out. */
+	locked: boolean;
 	apiRef: RefObject<CameraApi | null>;
 	readoutStore: CameraReadoutStore;
 }
@@ -183,6 +186,7 @@ function CameraRig({
 	planView,
 	renderPlan,
 	onRenderPlanChange: setRenderPlan,
+	locked,
 	apiRef,
 	readoutStore,
 }: CameraRigProps) {
@@ -512,8 +516,13 @@ function CameraRig({
 			<OrbitControls
 				key={renderPlan ? "plan" : "orbit"}
 				ref={controlsRef}
+				// makeDefault publishes the instance as state.controls so the
+				// move drag can disable it synchronously on pointerdown — the
+				// `enabled` prop alone flushes after OrbitControls has already
+				// accepted the gesture and eaten the first pointermoves.
+				makeDefault
 				target={[target.x, 0, target.z]}
-				enabled={!transitioning}
+				enabled={!transitioning && !locked}
 				enableRotate={!renderPlan}
 				minDistance={PERSPECTIVE_MIN_DISTANCE}
 				maxDistance={PERSPECTIVE_MAX_DISTANCE}
@@ -582,9 +591,16 @@ export function PlannerCanvas({
 	// Screen position of the last pointer-down, to tell orbit drags from
 	// picks in onPointerMissed (which only carries the raw MouseEvent).
 	const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
+	// A furniture move drag in the 3D scene; orbit controls pause for it.
+	const [movingFurniture, setMovingFurniture] = useState(false);
 
 	const rotateItem = useCallback(
 		(id: string) => onRoomChange(rotateFurniture(room, id, ROTATE_STEP_DEG)),
+		[room, onRoomChange],
+	);
+	const moveItem = useCallback(
+		(id: string, position: Point) =>
+			onRoomChange(moveFurniture(room, id, position)),
 		[room, onRoomChange],
 	);
 	const duplicateItem = useCallback(
@@ -670,6 +686,7 @@ export function PlannerCanvas({
 					planView={planView}
 					renderPlan={renderPlan}
 					onRenderPlanChange={setRenderPlan}
+					locked={movingFurniture}
 					apiRef={cameraApiRef}
 					readoutStore={readoutStore}
 				/>
@@ -705,10 +722,13 @@ export function PlannerCanvas({
 						<RoomScene
 							room={room}
 							selectedId={selectedId}
+							unit={unit}
 							onSelectItem={setSelectedId}
 							onRotateItem={rotateItem}
 							onDuplicateItem={duplicateItem}
 							onDeleteItem={deleteItem}
+							onMoveItem={moveItem}
+							onMoveActiveChange={setMovingFurniture}
 						/>
 						{placingItem && (
 							<PlacementGhost

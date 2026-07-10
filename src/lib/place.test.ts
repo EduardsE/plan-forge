@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { snapPlacement } from "./place";
+import { rotatedFootprintSize, snapPlacement } from "./place";
 
 /** The sample room's rectangle: 6.40 × 5.20 m, origin top-left. */
 const RECT = [
@@ -83,5 +83,25 @@ describe("snapPlacement", () => {
 		expect(snap.center.x).toBeCloseTo(2.05, 10);
 		expect(snap.center.y).toBeCloseTo(1.0, 10);
 		expect(snap.guides).toEqual([]);
+	});
+});
+
+describe("rotatedFootprintSize", () => {
+	it("keeps the size at 0° and 180°", () => {
+		expect(rotatedFootprintSize(SOFA, 0).width).toBeCloseTo(1.68, 10);
+		expect(rotatedFootprintSize(SOFA, 180).depth).toBeCloseTo(0.88, 10);
+	});
+
+	it("swaps width and depth at 90° and 270°", () => {
+		const quarter = rotatedFootprintSize(SOFA, 90);
+		expect(quarter.width).toBeCloseTo(0.88, 10);
+		expect(quarter.depth).toBeCloseTo(1.68, 10);
+		expect(rotatedFootprintSize(SOFA, 270).width).toBeCloseTo(0.88, 10);
+	});
+
+	it("returns the rotated bounding box at other angles", () => {
+		const diagonal = rotatedFootprintSize({ width: 1, depth: 1 }, 45);
+		expect(diagonal.width).toBeCloseTo(Math.SQRT2, 10);
+		expect(diagonal.depth).toBeCloseTo(Math.SQRT2, 10);
 	});
 });

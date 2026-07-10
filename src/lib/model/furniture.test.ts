@@ -5,6 +5,7 @@ import {
 	duplicateFurniture,
 	formatFootprintCm,
 	furnitureDisplayName,
+	moveFurniture,
 	removeFurniture,
 	rotateFurniture,
 } from "./furniture";
@@ -59,6 +60,29 @@ describe("duplicateFurniture", () => {
 	it("returns the room unchanged for an unknown id", () => {
 		const room = createSampleRoom();
 		expect(duplicateFurniture(room, "nope", "nope-2")).toBe(room);
+	});
+});
+
+describe("moveFurniture", () => {
+	it("repositions the target item only, without mutating the input", () => {
+		const room = createSampleRoom();
+		const next = moveFurniture(room, "desk-chair-1", { x: 2.5, y: 3.15 });
+		expect(
+			next.furniture.find((item) => item.id === "desk-chair-1")?.position,
+		).toEqual({ x: 2.5, y: 3.15 });
+		expect(
+			next.furniture.find((item) => item.id === "desk-1")?.position,
+		).toEqual({ x: 4.7, y: 0.73 });
+		expect(
+			room.furniture.find((item) => item.id === "desk-chair-1")?.position,
+		).toEqual({ x: 4.52, y: 2.22 });
+	});
+
+	it("leaves the room unchanged for an unknown id", () => {
+		const room = createSampleRoom();
+		expect(moveFurniture(room, "nope", { x: 1, y: 1 }).furniture).toEqual(
+			room.furniture,
+		);
 	});
 });
 

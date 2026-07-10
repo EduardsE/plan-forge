@@ -48,6 +48,25 @@ function quantize(value: number, grid: number): number {
 	return Math.round(value / grid) * grid;
 }
 
+/**
+ * Axis-aligned bounding size of a footprint spun by `rotation` degrees — what
+ * snapping should treat as the item's width/depth when the item is already
+ * rotated (a move drag, unlike a fresh drop, starts from a rotated item).
+ * Exact for the toolbar's 90° steps; a conservative hull at other angles.
+ */
+export function rotatedFootprintSize(
+	size: { width: number; depth: number },
+	rotationDeg: number,
+): { width: number; depth: number } {
+	const rad = (rotationDeg * Math.PI) / 180;
+	const cos = Math.abs(Math.cos(rad));
+	const sin = Math.abs(Math.sin(rad));
+	return {
+		width: size.width * cos + size.depth * sin,
+		depth: size.width * sin + size.depth * cos,
+	};
+}
+
 /** Walls perpendicular to `axis` (vertical walls for "x", horizontal for "y"). */
 function axisWalls(outline: Point[], axis: "x" | "y"): AxisWall[] {
 	const across = axis === "x" ? "y" : "x";

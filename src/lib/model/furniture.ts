@@ -1,5 +1,5 @@
 import { catalogItemById } from "./catalog";
-import type { Footprint, FurnitureItem, Room } from "./types";
+import type { Footprint, FurnitureItem, Point, Room } from "./types";
 
 /**
  * Pure furniture mutations for the selection toolbar. Every function returns
@@ -45,6 +45,16 @@ export function duplicateFurniture(
 		},
 	};
 	return { ...room, furniture: [...room.furniture, copy] };
+}
+
+/** Absolute reposition, from a move drag (the snapped center, plan coords). */
+export function moveFurniture(room: Room, id: string, position: Point): Room {
+	return {
+		...room,
+		furniture: room.furniture.map((item) =>
+			item.id === id ? { ...item, position } : item,
+		),
+	};
 }
 
 export function removeFurniture(room: Room, id: string): Room {

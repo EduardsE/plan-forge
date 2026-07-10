@@ -32,7 +32,7 @@ Per-task implementation notes live in the git history (one commit per task).
 
 Ordered by value; re-order freely if a dependency argues for it.
 
-- [ ] **Drag-to-move placed furniture** (3D lens first, like selection was): pointer-drag a selected item across the floor reusing `snapPlacement`'s quantize / outline clamp / wall-flush snap + guide pills; selection chip follows live; esc during the drag restores the original position. Watch the R3F drag-vs-orbit guard (`event.delta`).
+- [x] **Drag-to-move placed furniture** (3D lens first, like selection was): pointer-drag a selected item across the floor reusing `snapPlacement`'s quantize / outline clamp / wall-flush snap + guide pills; selection chip follows live; esc during the drag restores the original position. Watch the R3F drag-vs-orbit guard (`event.delta`).
 - [ ] **Selection & manipulation in the 2D lens:** picking on plan footprints, hover/selected styling that suits the plan look, the same chip (rotate/duplicate/delete + dimensions) — selection id already survives lens switches, so lift it out of `PlannerCanvas` only if this task needs it elsewhere.
 - [ ] **Undo/redo history:** wire the toolbar buttons + ⌘Z/⇧⌘Z to a bounded snapshot stack over the room model (plain data — snapshot per mutation: add/move/rotate/duplicate/delete, outline close). Redo stays dimmed until an undo happens (mockup 1a shows it dimmed).
 - [ ] **Persistence:** the model is already plain JSON — autosave to localStorage on mutation, hydrate on load, and make the header's "saved just now" real (it's fake copy today). Include unit + room name; a "new room" escape hatch clears it.
@@ -63,6 +63,7 @@ Ordered by value; re-order freely if a dependency argues for it.
 - The plan camera's straight-down pose reads as polar 90° in OrbitControls' up-relative frame — don't clamp `maxPolarAngle` in plan view; and exactly-0 polar degenerates `lookAt`, use 0.01.
 - The objects drag never enters R3F's event system (pointer went down on DOM) — the ghost raycasts window pointermoves onto the y=0 plane manually. Wall-snap tolerance there is world-space (0.3 m): screen-px tolerance is depth-dependent under a perspective camera (draw mode's ortho snapping *is* screen-px based).
 - Only furniture raycasts in the 3D scene (walls/platform/dressing set `raycast={() => null}`) — that's what makes furniture clickable behind visible walls.
+- OrbitControls' `enabled` prop flushes too late to stop a gesture that begins on the same pointerdown (it eats the first pointermoves as orbit — the camera visibly drifts ~2°). The furniture move drag disables the controls *instance* synchronously in its pointerdown handler (`makeDefault` publishes it as `state.controls`); the prop only holds the steady state.
 - Textures are module-cached CanvasTextures — safe only because the canvas module is lazy-loaded client-only.
 - Browser verification: headless script with real `page.mouse` input (per CLAUDE.md — the MCP browser hangs on inactive macOS sessions, and synthetic PointerEvents make OrbitControls throw `NotFoundError`). Benign console noise: a `THREE.Clock` deprecation warning (drei 10 + r185), and `data-tsd-source` errors after HMR updates only — fresh loads are clean.
 
