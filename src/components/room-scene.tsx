@@ -1,6 +1,8 @@
+import { useCursor } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+	BackSide,
 	CanvasTexture,
 	type DirectionalLight,
 	DoubleSide,
@@ -14,6 +16,7 @@ import {
 	Shape,
 	SRGBColorSpace,
 } from "three";
+import { SelectionChip } from "#/components/selection-chip";
 import type { FurnitureItem, Point, Room } from "#/lib/model";
 import { outlineBounds } from "#/lib/model";
 import {
@@ -61,6 +64,32 @@ const FURNITURE_COLORS: Record<string, string> = {
 const FURNITURE_FALLBACK_COLOR = "#b98a5f";
 const PLANT_POT_COLOR = "#b4633e";
 const PLANT_FOLIAGE_COLOR = "#669758";
+
+/** Mockup's selection stroke: rgba(45,212,238,.7) on the desk chair faces. */
+const SELECTION_COLOR = "#2dd4ee";
+/** Rim the selection hull adds around an item's silhouette, meters. */
+const HULL_RIM = 0.02;
+
+/** Per-axis scale inflating a box by HULL_RIM on every side. */
+function hullScale(
+	width: number,
+	height: number,
+	depth: number,
+): [number, number, number] {
+	return [
+		(width + 2 * HULL_RIM) / width,
+		(height + 2 * HULL_RIM) / height,
+		(depth + 2 * HULL_RIM) / depth,
+	];
+}
+/**
+ * A click whose pointer travelled further than this (px) was an orbit drag
+ * that happened to end on a mesh, not a pick.
+ */
+const CLICK_SLOP_PX = 4;
+/** Raycast opt-out for scenery: only furniture is pickable, so any other
+ * click reaches the canvas's pointer-missed handler and deselects. */
+const noRaycast = () => null;
 
 /**
  * Cutaway threshold on the wall-to-camera facing dot: slightly negative so
@@ -177,7 +206,12 @@ function BlobShadow({
 }) {
 	const { blob } = sharedTextures();
 	return (
-		<mesh rotation-x={-Math.PI / 2} position-y={y} renderOrder={-1}>
+		<mesh
+			rotation-x={-Math.PI / 2}
+			position-y={y}
+			renderOrder={-1}
+			raycast={noRaycast}
+		>
 			<planeGeometry args={[width, depth]} />
 			<meshBasicMaterial
 				color={color}
@@ -213,6 +247,7 @@ function Platform({ outline }: { outline: Point[] }) {
 				geometry={geometry}
 				rotation-x={-Math.PI / 2}
 				position-y={FLOOR_TOP - SLAB_THICKNESS}
+				raycast={noRaycast}
 			>
 				<meshLambertMaterial attach="material-0" map={plank} />
 				<meshLambertMaterial attach="material-1" color={SLAB_SIDE_COLOR} />
@@ -266,12 +301,12 @@ function WindowDressing({
 	];
 	return (
 		<group>
-			<mesh position={[cx, cy, z]}>
+			<mesh position={[cx, cy, z]} raycast={noRaycast}>
 				<planeGeometry args={[hole.width - f, height - f]} />
 				<meshBasicMaterial map={pane} side={DoubleSide} />
 			</mesh>
 			{bars.map(([id, x, y, w, h, d]) => (
-				<mesh key={id} position={[x, y, z]}>
+				<mesh key={id} position={[x, y, z]} raycast={noRaycast}>
 					<boxGeometry args={[w, h, d]} />
 					<meshLambertMaterial color={WINDOW_FRAME_COLOR} />
 				</mesh>
@@ -332,7 +367,7 @@ function WallMesh({
 			position={[solid.start.x, 0, solid.start.y]}
 			rotation-y={rotationY}
 		>
-			<mesh geometry={geometry} position-z={zOffset}>
+			<mesh geometry={geometry} position-z={zOffset} raycast={noRaycast}>
 				<meshLambertMaterial attach="material-0" map={wall} />
 				<meshLambertMaterial attach="material-1" color={WALL_EDGE_COLOR} />
 			</mesh>
@@ -404,6 +439,7 @@ function Walls({ room }: { room: Room }) {
 						postRefs.current[i] = mesh;
 					}}
 					position={[post.center.x, WALL_HEIGHT / 2, post.center.y]}
+					raycast={noRaycast}
 				>
 					<boxGeometry args={[WALL_THICKNESS, WALL_HEIGHT, WALL_THICKNESS]} />
 					<meshLambertMaterial color={WALL_EDGE_COLOR} />
@@ -413,9 +449,32 @@ function Walls({ room }: { room: Room }) {
 	);
 }
 
-function FurnitureMesh({ item }: { item: FurnitureItem }) {
+function FurnitureMesh({
+	item,
+	selected,
+	onSelect,
+}: {
+	item: FurnitureItem;
+	selected: boolean;
+	onSelect: (id: string) => void;
+}) {
 	const { width, depth, height } = item.footprint;
 	const yaw = MathUtils.degToRad(item.rotation);
+	const [hovered, setHovered] = useState(false);
+	useCursor(hovered);
+	const active = selected || hovered;
+	// The highlight is a hand-rolled inverted hull: the same geometry inflated
+	// by a constant rim and drawn back-face-only, which reads as a silhouette
+	// stroke (the mockup's cyan selection outline). drei's <Outlines> renders
+	// nothing under this drei 10 / three r185 combination.
+	const hullMaterial = (
+		<meshBasicMaterial
+			color={SELECTION_COLOR}
+			side={BackSide}
+			transparent
+			opacity={selected ? 0.85 : 0.4}
+		/>
+	);
 	const shadow = (
 		<BlobShadow
 			width={width * 1.5}
@@ -429,14 +488,27 @@ function FurnitureMesh({ item }: { item: FurnitureItem }) {
 	let body: React.ReactNode;
 	if (item.catalogId === "rug") {
 		body = (
-			<mesh position-y={FLOOR_TOP + 0.001 + height / 2}>
-				<boxGeometry args={[width, height, depth]} />
-				<meshLambertMaterial color={FURNITURE_COLORS.rug} />
-			</mesh>
+			<>
+				<mesh position-y={FLOOR_TOP + 0.001 + height / 2}>
+					<boxGeometry args={[width, height, depth]} />
+					<meshLambertMaterial color={FURNITURE_COLORS.rug} />
+				</mesh>
+				{active && (
+					<mesh
+						position-y={FLOOR_TOP + 0.001 + height / 2}
+						scale={hullScale(width, height, depth)}
+						raycast={noRaycast}
+					>
+						<boxGeometry args={[width, height, depth]} />
+						{hullMaterial}
+					</mesh>
+				)}
+			</>
 		);
 	} else if (item.catalogId === "plant") {
 		const potHeight = height * 0.38;
 		const foliageRadius = width * 1.05;
+		const foliageHull = (foliageRadius + HULL_RIM) / foliageRadius;
 		body = (
 			<>
 				{shadow}
@@ -448,6 +520,32 @@ function FurnitureMesh({ item }: { item: FurnitureItem }) {
 					<sphereGeometry args={[foliageRadius, 24, 18]} />
 					<meshLambertMaterial color={PLANT_FOLIAGE_COLOR} />
 				</mesh>
+				{active && (
+					<>
+						<mesh
+							position-y={FLOOR_TOP + 0.017 + potHeight / 2}
+							scale={[
+								(width * 0.5 + HULL_RIM) / (width * 0.5),
+								(potHeight + 2 * HULL_RIM) / potHeight,
+								(width * 0.5 + HULL_RIM) / (width * 0.5),
+							]}
+							raycast={noRaycast}
+						>
+							<cylinderGeometry
+								args={[width * 0.5, width * 0.38, potHeight, 20]}
+							/>
+							{hullMaterial}
+						</mesh>
+						<mesh
+							position-y={height - foliageRadius / 2}
+							scale={[foliageHull, 0.92 * foliageHull, foliageHull]}
+							raycast={noRaycast}
+						>
+							<sphereGeometry args={[foliageRadius, 24, 18]} />
+							{hullMaterial}
+						</mesh>
+					</>
+				)}
 			</>
 		);
 	} else {
@@ -459,12 +557,37 @@ function FurnitureMesh({ item }: { item: FurnitureItem }) {
 					<boxGeometry args={[width, height, depth]} />
 					<meshLambertMaterial color={color} />
 				</mesh>
+				{active && (
+					<mesh
+						position-y={FLOOR_TOP + 0.017 + height / 2}
+						scale={hullScale(width, height, depth)}
+						raycast={noRaycast}
+					>
+						<boxGeometry args={[width, height, depth]} />
+						{hullMaterial}
+					</mesh>
+				)}
 			</>
 		);
 	}
 
 	return (
-		<group position={[item.position.x, 0, item.position.y]} rotation-y={yaw}>
+		// biome-ignore lint/a11y/noStaticElementInteractions: <group> is an R3F scene node, not a DOM element.
+		<group
+			position={[item.position.x, 0, item.position.y]}
+			rotation-y={yaw}
+			onClick={(event) => {
+				// A drag that ends on furniture is camera movement, not a pick.
+				if (event.delta > CLICK_SLOP_PX) return;
+				event.stopPropagation();
+				onSelect(item.id);
+			}}
+			onPointerOver={(event) => {
+				event.stopPropagation();
+				setHovered(true);
+			}}
+			onPointerOut={() => setHovered(false)}
+		>
 			{body}
 		</group>
 	);
@@ -491,11 +614,29 @@ function KeyLight({ center }: { center: [number, number, number] }) {
 	);
 }
 
-export function RoomScene({ room }: { room: Room }) {
+export interface RoomSceneProps {
+	room: Room;
+	selectedId: string | null;
+	onSelectItem: (id: string) => void;
+	onRotateItem: (id: string) => void;
+	onDuplicateItem: (id: string) => void;
+	onDeleteItem: (id: string) => void;
+}
+
+export function RoomScene({
+	room,
+	selectedId,
+	onSelectItem,
+	onRotateItem,
+	onDuplicateItem,
+	onDeleteItem,
+}: RoomSceneProps) {
 	const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
 	const center: [number, number, number] = bounds
 		? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
 		: [0, 0, 0];
+	const selectedItem =
+		room.furniture.find((item) => item.id === selectedId) ?? null;
 	return (
 		<group>
 			<ambientLight color="#fff2de" intensity={1.15} />
@@ -509,8 +650,21 @@ export function RoomScene({ room }: { room: Room }) {
 			<Platform outline={room.outline} />
 			<Walls room={room} />
 			{room.furniture.map((item) => (
-				<FurnitureMesh key={item.id} item={item} />
+				<FurnitureMesh
+					key={item.id}
+					item={item}
+					selected={item.id === selectedId}
+					onSelect={onSelectItem}
+				/>
 			))}
+			{selectedItem && (
+				<SelectionChip
+					item={selectedItem}
+					onRotate={() => onRotateItem(selectedItem.id)}
+					onDuplicate={() => onDuplicateItem(selectedItem.id)}
+					onDelete={() => onDeleteItem(selectedItem.id)}
+				/>
+			)}
 		</group>
 	);
 }

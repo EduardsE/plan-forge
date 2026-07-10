@@ -33,7 +33,13 @@ import {
 	planFitZoom,
 	wrapAngle,
 } from "#/lib/camera";
-import { outlineBounds, type Room } from "#/lib/model";
+import {
+	duplicateFurniture,
+	outlineBounds,
+	type Room,
+	removeFurniture,
+	rotateFurniture,
+} from "#/lib/model";
 import type { ViewMode } from "#/lib/view-mode";
 
 /**
@@ -515,8 +521,14 @@ function CameraRig({
 	);
 }
 
+/** How many degrees one press of the selection toolbar's rotate turns an item. */
+const ROTATE_STEP_DEG = 90;
+/** Clicks that travelled further than this (px) were camera drags, not picks. */
+const CLICK_SLOP_PX = 4;
+
 export interface PlannerCanvasProps {
 	room: Room;
+	onRoomChange: (room: Room) => void;
 	viewMode: ViewMode;
 	cameraApiRef: RefObject<CameraApi | null>;
 	readoutStore: CameraReadoutStore;
@@ -524,6 +536,7 @@ export interface PlannerCanvasProps {
 
 export function PlannerCanvas({
 	room,
+	onRoomChange,
 	viewMode,
 	cameraApiRef,
 	readoutStore,
@@ -536,11 +549,62 @@ export function PlannerCanvas({
 	// plan drawing swaps in only at the matched top-down endpoint.
 	const [renderPlan, setRenderPlan] = useState(planView);
 
+	const [selectedId, setSelectedId] = useState<string | null>(null);
+	// Screen position of the last pointer-down, to tell orbit drags from
+	// picks in onPointerMissed (which only carries the raw MouseEvent).
+	const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
+
+	const rotateItem = useCallback(
+		(id: string) => onRoomChange(rotateFurniture(room, id, ROTATE_STEP_DEG)),
+		[room, onRoomChange],
+	);
+	const duplicateItem = useCallback(
+		(id: string) => {
+			const newId = crypto.randomUUID();
+			onRoomChange(duplicateFurniture(room, id, newId));
+			setSelectedId(newId);
+		},
+		[room, onRoomChange],
+	);
+	const deleteItem = useCallback(
+		(id: string) => {
+			onRoomChange(removeFurniture(room, id));
+			setSelectedId(null);
+		},
+		[room, onRoomChange],
+	);
+
 	return (
 		// isolate: drei <Html> overlays carry huge z-indexes; contain them so
 		// the chrome around the workspace still paints on top.
-		<div className="absolute inset-0 isolate">
-			<Canvas flat dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
+		<div
+			className="absolute inset-0 isolate"
+			onPointerDown={(event) => {
+				pointerDownRef.current = { x: event.clientX, y: event.clientY };
+			}}
+		>
+			<Canvas
+				flat
+				dpr={[1, 2]}
+				gl={{ antialias: true, alpha: true }}
+				onPointerMissed={(event) => {
+					// Only furniture raycasts, so any true click elsewhere lands here.
+					if (event.type !== "click") return;
+					// R3F listens on the canvas *container*, so clicks on DOM
+					// overlays (the selection chip) also arrive as misses — only a
+					// click on the canvas itself may deselect.
+					if (!(event.target instanceof HTMLCanvasElement)) return;
+					const down = pointerDownRef.current;
+					if (
+						down &&
+						Math.hypot(event.clientX - down.x, event.clientY - down.y) >
+							CLICK_SLOP_PX
+					) {
+						return;
+					}
+					setSelectedId(null);
+				}}
+			>
 				<CameraRig
 					room={room}
 					planView={planView}
@@ -563,7 +627,18 @@ export function PlannerCanvas({
 					fadeDistance={130}
 					fadeStrength={1}
 				/>
-				{renderPlan ? <PlanScene room={room} /> : <RoomScene room={room} />}
+				{renderPlan ? (
+					<PlanScene room={room} />
+				) : (
+					<RoomScene
+						room={room}
+						selectedId={selectedId}
+						onSelectItem={setSelectedId}
+						onRotateItem={rotateItem}
+						onDuplicateItem={duplicateItem}
+						onDeleteItem={deleteItem}
+					/>
+				)}
 			</Canvas>
 		</div>
 	);

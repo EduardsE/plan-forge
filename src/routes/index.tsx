@@ -22,7 +22,7 @@ export const Route = createFileRoute("/")({ component: Planner });
 
 function Planner() {
 	const [viewMode, setViewMode] = useState<ViewMode>("3d");
-	const [room] = useState(createSampleRoom);
+	const [room, setRoom] = useState(createSampleRoom);
 	const cameraApiRef = useRef<CameraApi | null>(null);
 	const [readoutStore] = useState(createCameraReadoutStore);
 	const [canvasReady, setCanvasReady] = useState(false);
@@ -41,6 +41,7 @@ function Planner() {
 					<Suspense fallback={null}>
 						<PlannerCanvas
 							room={room}
+							onRoomChange={setRoom}
 							viewMode={viewMode}
 							cameraApiRef={cameraApiRef}
 							readoutStore={readoutStore}
