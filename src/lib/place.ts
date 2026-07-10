@@ -1,14 +1,23 @@
-import { outlineBounds, type Point, wallsOf } from "#/lib/model";
+import {
+	type FurnitureItem,
+	outlineBounds,
+	type Point,
+	wallsOf,
+} from "#/lib/model";
 
 /**
  * Pure placement math for dragging a catalog item onto the floor (mockup
- * screen 1d): the ghost footprint's snapped center plus the wall-distance
- * guides drawn beside it. Rendering lives in the placement-ghost component.
+ * screen 1d): the ghost footprint's snapped center plus the distance guides
+ * drawn beside it — to the nearest wall *and* the nearest placed item.
+ * Rendering lives in the placement-ghost component.
  *
  * Scope: guides and snapping only consider axis-aligned walls (draw mode
  * snaps to 90°, so real outlines are axis-aligned in practice); walls at
- * other angles are ignored. The item is treated as unrotated — rotation
- * happens after the drop, via the selection toolbar.
+ * other angles are ignored. Placed items snap against their rotated
+ * footprint's axis-aligned bounding box, so a rotated neighbor snaps to its
+ * hull. The dragged item is treated as unrotated on a fresh drop (rotation
+ * happens after, via the selection toolbar); a move drag passes its already
+ * rotated hull size.
  */
 
 /** Wall-snap capture distance, meters (world units, zoom-independent). */
@@ -47,6 +56,29 @@ interface AxisWall {
 	/** Wall segment's extent along the other axis. */
 	spanMin: number;
 	spanMax: number;
+}
+
+/** Axis-aligned rectangle a placed item snaps against (plan coords). */
+export interface Obstacle {
+	min: Point;
+	max: Point;
+}
+
+/**
+ * The rectangle a placed item presents to snapping: its rotated footprint's
+ * axis-aligned bounding box, centered on the item. Reuses the same hull
+ * `snapPlacement` treats a rotated *mover* as, so a turned neighbor snaps to
+ * its bounding box rather than its true edges — exact at the toolbar's 90°
+ * steps, conservative between.
+ */
+export function furnitureObstacle(item: FurnitureItem): Obstacle {
+	const size = rotatedFootprintSize(item.footprint, item.rotation);
+	const halfW = size.width / 2;
+	const halfD = size.depth / 2;
+	return {
+		min: { x: item.position.x - halfW, y: item.position.y - halfD },
+		max: { x: item.position.x + halfW, y: item.position.y + halfD },
+	};
 }
 
 function quantize(value: number, grid: number): number {
@@ -90,6 +122,46 @@ function axisWalls(outline: Point[], axis: "x" | "y"): AxisWall[] {
 	return walls;
 }
 
+/** Cross-axis overlap must be real, not a shared edge, for two items to be "beside". */
+const OVERLAP_EPSILON = 1e-4;
+
+/**
+ * The placed-item faces the mover can snap flush against on `axis`, given its
+ * current center there and its `across` position (with `crossHalf` extent) on
+ * the other axis. Emitted only when the two footprints overlap on the other
+ * axis *and* the mover already sits wholly to one side of the item on this
+ * one — the single near face of a genuine side-by-side, so the mover never
+ * gets shoved along the axis it already overlaps (which would drive it *into*
+ * the neighbor). Pre-gated, so the span is left open and `nearestWall`
+ * measures the flush gap exactly as it does for a wall.
+ */
+function objectFaces(
+	obstacles: Obstacle[],
+	axis: "x" | "y",
+	center: number,
+	across: number,
+	crossHalf: number,
+): AxisWall[] {
+	const other = axis === "x" ? "y" : "x";
+	const moverMin = across - crossHalf;
+	const moverMax = across + crossHalf;
+	const faces: AxisWall[] = [];
+	for (const obstacle of obstacles) {
+		if (moverMax <= obstacle.min[other] + OVERLAP_EPSILON) continue;
+		if (moverMin >= obstacle.max[other] - OVERLAP_EPSILON) continue;
+		let coord: number | null = null;
+		if (center < obstacle.min[axis]) coord = obstacle.min[axis];
+		else if (center > obstacle.max[axis]) coord = obstacle.max[axis];
+		if (coord === null) continue;
+		faces.push({
+			coord,
+			spanMin: Number.NEGATIVE_INFINITY,
+			spanMax: Number.POSITIVE_INFINITY,
+		});
+	}
+	return faces;
+}
+
 interface NearestWall {
 	coord: number;
 	/** Signed clearance from the ghost edge facing the wall to the wall face. */
@@ -120,13 +192,16 @@ function nearestWall(
 /**
  * Snap one axis of the ghost center: quantize happened upstream; here the
  * center clamps inside the room's bounds and sticks flush to the nearest
- * wall when the gap is within tolerance.
+ * snap line — a room wall or a placed item's near face — within tolerance.
  */
 function snapAxis(
 	walls: AxisWall[],
+	obstacles: Obstacle[],
+	axis: "x" | "y",
 	center: number,
 	across: number,
 	half: number,
+	crossHalf: number,
 	clampMin: number | null,
 	clampMax: number | null,
 	tolerance: number,
@@ -139,7 +214,11 @@ function snapAxis(
 				? (clampMin + clampMax) / 2
 				: Math.min(Math.max(snapped, clampMin), clampMax);
 	}
-	const wall = nearestWall(walls, snapped, across, half);
+	const lines = [
+		...walls,
+		...objectFaces(obstacles, axis, snapped, across, crossHalf),
+	];
+	const wall = nearestWall(lines, snapped, across, half);
 	if (wall && Math.abs(wall.gap) <= tolerance) {
 		snapped = wall.side === -1 ? wall.coord + half : wall.coord - half;
 	}
@@ -148,17 +227,19 @@ function snapAxis(
 
 function guideFor(
 	walls: AxisWall[],
+	obstacles: Obstacle[],
 	axis: "x" | "y",
 	center: Point,
 	half: number,
+	crossHalf: number,
 ): PlacementGuide | null {
+	const alongCenter = axis === "x" ? center.x : center.y;
 	const across = axis === "x" ? center.y : center.x;
-	const wall = nearestWall(
-		walls,
-		axis === "x" ? center.x : center.y,
-		across,
-		half,
-	);
+	const lines = [
+		...walls,
+		...objectFaces(obstacles, axis, alongCenter, across, crossHalf),
+	];
+	const wall = nearestWall(lines, alongCenter, across, half);
 	if (!wall || wall.gap < FLUSH_EPSILON) return null;
 	const edge =
 		(axis === "x" ? center.x : center.y) + (wall.side === -1 ? -half : half);
@@ -175,13 +256,15 @@ function guideFor(
 /**
  * Where a catalog footprint dragged to `cursor` actually lands: the center
  * quantizes to the placement grid, clamps inside the room's bounding box,
- * and sticks flush to the nearest axis-aligned wall within `tolerance`;
- * `guides` carry the per-axis wall clearances left to render.
+ * and sticks flush to the nearest snap line — an axis-aligned wall or a
+ * placed item's (`obstacles`) facing edge — within `tolerance`; `guides`
+ * carry the per-axis clearance to whichever line is nearest, left to render.
  */
 export function snapPlacement(
 	outline: Point[],
 	size: { width: number; depth: number },
 	cursor: Point,
+	obstacles: Obstacle[] = [],
 	tolerance: number = SNAP_TOLERANCE,
 	grid: number = PLACEMENT_GRID,
 ): PlacementSnap {
@@ -195,12 +278,16 @@ export function snapPlacement(
 		x: quantize(cursor.x, grid),
 		y: quantize(cursor.y, grid),
 	};
+	// halfD is the mover's cross extent when measuring along x; halfW along y.
 	const center: Point = {
 		x: snapAxis(
 			vertical,
+			obstacles,
+			"x",
 			quantized.x,
 			quantized.y,
 			halfW,
+			halfD,
 			bounds ? bounds.min.x + halfW : null,
 			bounds ? bounds.max.x - halfW : null,
 			tolerance,
@@ -209,18 +296,21 @@ export function snapPlacement(
 	};
 	center.y = snapAxis(
 		horizontal,
+		obstacles,
+		"y",
 		quantized.y,
 		center.x,
 		halfD,
+		halfW,
 		bounds ? bounds.min.y + halfD : null,
 		bounds ? bounds.max.y - halfD : null,
 		tolerance,
 	);
 
 	const guides: PlacementGuide[] = [];
-	const guideX = guideFor(vertical, "x", center, halfW);
+	const guideX = guideFor(vertical, obstacles, "x", center, halfW, halfD);
 	if (guideX) guides.push(guideX);
-	const guideY = guideFor(horizontal, "y", center, halfD);
+	const guideY = guideFor(horizontal, obstacles, "y", center, halfD, halfW);
 	if (guideY) guides.push(guideY);
 	return { center, guides };
 }

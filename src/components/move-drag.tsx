@@ -4,6 +4,7 @@ import { type Camera, Plane, Raycaster, Vector2, Vector3 } from "three";
 import { SnapGuides } from "#/components/snap-guides";
 import type { FurnitureItem, Point } from "#/lib/model";
 import {
+	type Obstacle,
 	type PlacementGuide,
 	rotatedFootprintSize,
 	snapPlacement,
@@ -144,12 +145,15 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
  */
 export function MoveDragSession({
 	outline,
+	obstacles,
 	drag,
 	unit,
 	onMove,
 	onEnd,
 }: {
 	outline: Point[];
+	/** Other placed items to snap flush against (excludes the dragged one). */
+	obstacles: Obstacle[];
 	drag: MoveDrag;
 	unit: Unit;
 	onMove: (position: Point) => void;
@@ -158,12 +162,14 @@ export function MoveDragSession({
 	const camera = useThree((state) => state.camera);
 	const gl = useThree((state) => state.gl);
 	const [guides, setGuides] = useState<PlacementGuide[]>([]);
-	// Latest callbacks without resubscribing the listeners mid-drag (onMove
-	// closes over the room, which changes on every move).
+	// Latest callbacks/obstacles without resubscribing the listeners mid-drag
+	// (both close over the room, which changes on every move).
 	const moveRef = useRef(onMove);
 	moveRef.current = onMove;
 	const endRef = useRef(onEnd);
 	endRef.current = onEnd;
+	const obstaclesRef = useRef(obstacles);
+	obstaclesRef.current = obstacles;
 
 	useEffect(() => {
 		const toFloor = floorProjector(gl, camera);
@@ -181,10 +187,15 @@ export function MoveDragSession({
 			}
 			const point = toFloor(event);
 			if (!point) return;
-			const snap = snapPlacement(outline, drag.size, {
-				x: point.x - drag.grab.x,
-				y: point.y - drag.grab.y,
-			});
+			const snap = snapPlacement(
+				outline,
+				drag.size,
+				{
+					x: point.x - drag.grab.x,
+					y: point.y - drag.grab.y,
+				},
+				obstaclesRef.current,
+			);
 			moveRef.current(snap.center);
 			setGuides(snap.guides);
 		};

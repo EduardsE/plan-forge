@@ -24,7 +24,7 @@ import {
 	furnitureDisplayName,
 	outlineBounds,
 } from "#/lib/model";
-import { rotatedFootprintSize } from "#/lib/place";
+import { furnitureObstacle, rotatedFootprintSize } from "#/lib/place";
 import {
 	circlePoints,
 	dashedPolyline,
@@ -715,6 +715,14 @@ export function PlanScene({
 	const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
 	const selectedItem =
 		room.furniture.find((item) => item.id === selectedId) ?? null;
+	// Every placed item except the one being dragged is a snap neighbor.
+	const moveObstacles = useMemo(
+		() =>
+			room.furniture
+				.filter((item) => item.id !== drag?.id)
+				.map(furnitureObstacle),
+		[room.furniture, drag?.id],
+	);
 
 	if (!bounds || !floorShape) return null;
 	const dimensionOffset = WALL_THICKNESS + DIMENSION_GAP;
@@ -792,6 +800,7 @@ export function PlanScene({
 			{drag && (
 				<MoveDragSession
 					outline={room.outline}
+					obstacles={moveObstacles}
 					drag={drag}
 					unit={unit}
 					onMove={(position) => onMoveItem(drag.id, position)}

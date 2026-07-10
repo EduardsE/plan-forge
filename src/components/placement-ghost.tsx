@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plane, Raycaster, Shape, Vector2, Vector3 } from "three";
 import { SnapGuides } from "#/components/snap-guides";
 import type { CatalogItem, Point } from "#/lib/model";
-import { type PlacementSnap, snapPlacement } from "#/lib/place";
+import { type Obstacle, type PlacementSnap, snapPlacement } from "#/lib/place";
 import { dashedPolyline, roundedRectPoints } from "#/lib/plan-scene";
 import type { Unit } from "#/lib/units";
 
@@ -50,6 +50,8 @@ function ghostShape(points: Point[]): Shape {
 
 export interface PlacementGhostProps {
 	outline: Point[];
+	/** Placed items the ghost snaps flush against, alongside the walls. */
+	obstacles: Obstacle[];
 	item: CatalogItem;
 	unit: Unit;
 	onPlace: (center: Point) => void;
@@ -58,6 +60,7 @@ export interface PlacementGhostProps {
 
 export function PlacementGhost({
 	outline,
+	obstacles,
 	item,
 	unit,
 	onPlace,
@@ -86,13 +89,18 @@ export function PlacementGhost({
 		};
 		const handleMove = (event: PointerEvent) => {
 			const point = toFloor(event);
-			setSnap(point ? snapPlacement(outline, item.footprint, point) : null);
+			setSnap(
+				point ? snapPlacement(outline, item.footprint, point, obstacles) : null,
+			);
 		};
 		const handleUp = (event: PointerEvent) => {
 			// Off-canvas releases belong to the drag layer.
 			if (!(event.target instanceof HTMLCanvasElement)) return;
 			const point = toFloor(event);
-			if (point) onPlace(snapPlacement(outline, item.footprint, point).center);
+			if (point)
+				onPlace(
+					snapPlacement(outline, item.footprint, point, obstacles).center,
+				);
 			else onCancel();
 		};
 		window.addEventListener("pointermove", handleMove);
@@ -101,7 +109,7 @@ export function PlacementGhost({
 			window.removeEventListener("pointermove", handleMove);
 			window.removeEventListener("pointerup", handleUp);
 		};
-	}, [outline, item, camera, gl, onPlace, onCancel]);
+	}, [outline, obstacles, item, camera, gl, onPlace, onCancel]);
 
 	const rect = useMemo(
 		() =>

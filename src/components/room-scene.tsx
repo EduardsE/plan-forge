@@ -26,6 +26,7 @@ import {
 import { SelectionChip } from "#/components/selection-chip";
 import type { FurnitureItem, Point, Room } from "#/lib/model";
 import { catalogItemById, outlineBounds } from "#/lib/model";
+import { furnitureObstacle } from "#/lib/place";
 import {
 	buildWallSolids,
 	cornerPosts,
@@ -686,6 +687,14 @@ export function RoomScene({
 		room.furniture.find((item) => item.id === selectedId) ?? null;
 
 	const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
+	// Every placed item except the one being dragged is a snap neighbor.
+	const moveObstacles = useMemo(
+		() =>
+			room.furniture
+				.filter((item) => item.id !== drag?.id)
+				.map(furnitureObstacle),
+		[room.furniture, drag?.id],
+	);
 	return (
 		<group>
 			<ambientLight color="#fff2de" intensity={1.15} />
@@ -718,6 +727,7 @@ export function RoomScene({
 			{drag && (
 				<MoveDragSession
 					outline={room.outline}
+					obstacles={moveObstacles}
 					drag={drag}
 					unit={unit}
 					onMove={(position) => onMoveItem(drag.id, position)}

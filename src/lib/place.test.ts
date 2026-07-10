@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { rotatedFootprintSize, snapPlacement } from "./place";
+import type { FurnitureItem } from "./model";
+import {
+	furnitureObstacle,
+	type Obstacle,
+	rotatedFootprintSize,
+	snapPlacement,
+} from "./place";
 
 /** The sample room's rectangle: 6.40 × 5.20 m, origin top-left. */
 const RECT = [
@@ -83,6 +89,69 @@ describe("snapPlacement", () => {
 		expect(snap.center.x).toBeCloseTo(2.05, 10);
 		expect(snap.center.y).toBeCloseTo(1.0, 10);
 		expect(snap.guides).toEqual([]);
+	});
+});
+
+/** A table footprint sitting mid-room, away from every wall. */
+const TABLE: Obstacle = {
+	min: { x: 2.5, y: 2.2 },
+	max: { x: 3.5, y: 3.0 },
+};
+
+describe("snapPlacement — object-to-object", () => {
+	it("sticks flush to a neighbor's facing edge within tolerance", () => {
+		// Sofa dragged just right of the table: left edge 4.5 − 0.84 = 3.66,
+		// 0.16 past the table's right face (3.5) → inside 0.3 tolerance.
+		const snap = snapPlacement(RECT, SOFA, { x: 4.5, y: 2.6 }, [TABLE]);
+		expect(snap.center.x).toBeCloseTo(3.5 + 0.84, 10);
+		// Beside on x must not drag the overlapping y axis into the table.
+		expect(snap.center.y).toBeCloseTo(2.6, 10);
+		// Flush leaves no x guide; the far walls still guide on y.
+		expect(snap.guides.some((guide) => guide.axis === "x")).toBe(false);
+	});
+
+	it("guides to the nearest neighbor edge when it beats the wall", () => {
+		// Between the table (right face 3.5) and the right wall (6.4): the
+		// table is nearer but past tolerance, so no snap, just a guide.
+		const snap = snapPlacement(RECT, SOFA, { x: 4.7, y: 2.6 }, [TABLE]);
+		expect(snap.center.x).toBeCloseTo(4.7, 10);
+		const x = snap.guides.find((guide) => guide.axis === "x");
+		expect(x?.from).toEqual({ x: 3.5, y: 2.6 });
+		expect(x?.distance).toBeCloseTo(4.7 - 0.84 - 3.5, 10);
+	});
+
+	it("ignores a neighbor the mover glides past rather than beside", () => {
+		// Above the table (no y overlap) → the table's x faces don't capture.
+		const snap = snapPlacement(RECT, SOFA, { x: 4.5, y: 0.6 }, [TABLE]);
+		expect(snap.center.x).toBeCloseTo(4.5, 10);
+		// Any x guide is to a wall, never the passed-by table's edge (3.5).
+		const x = snap.guides.find((guide) => guide.axis === "x");
+		expect(x?.from.x).not.toBe(3.5);
+	});
+});
+
+describe("furnitureObstacle", () => {
+	const base: FurnitureItem = {
+		id: "t1",
+		catalogId: "table",
+		position: { x: 3, y: 3 },
+		rotation: 0,
+		footprint: { width: 2, depth: 0.5, height: 0.75 },
+	};
+
+	it("bounds the unrotated footprint around its center", () => {
+		expect(furnitureObstacle(base)).toEqual({
+			min: { x: 2, y: 2.75 },
+			max: { x: 4, y: 3.25 },
+		});
+	});
+
+	it("uses the rotated hull at 90°", () => {
+		const box = furnitureObstacle({ ...base, rotation: 90 });
+		expect(box.min.x).toBeCloseTo(2.75, 10);
+		expect(box.max.x).toBeCloseTo(3.25, 10);
+		expect(box.min.y).toBeCloseTo(2, 10);
+		expect(box.max.y).toBeCloseTo(4, 10);
 	});
 });
 

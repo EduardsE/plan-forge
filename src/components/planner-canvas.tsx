@@ -53,6 +53,7 @@ import {
 	removeOpening,
 	rotateFurniture,
 } from "#/lib/model";
+import { furnitureObstacle } from "#/lib/place";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -616,6 +617,12 @@ export function PlannerCanvas({
 	const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
 	// A furniture or opening drag in either lens; camera controls pause for it.
 	const [sceneDragActive, setSceneDragActive] = useState(false);
+	// Placed items the placement ghost snaps flush against (a fresh drop isn't
+	// in the room yet, so every item is a neighbor).
+	const placementObstacles = useMemo(
+		() => room.furniture.map(furnitureObstacle),
+		[room.furniture],
+	);
 
 	const selectItem = useCallback((id: string) => {
 		setSelectedId(id);
@@ -834,6 +841,7 @@ export function PlannerCanvas({
 						{placingItem && (
 							<PlacementGhost
 								outline={room.outline}
+								obstacles={placementObstacles}
 								item={placingItem}
 								unit={unit}
 								onPlace={placeDraggedItem}
