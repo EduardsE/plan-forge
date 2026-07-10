@@ -3,6 +3,7 @@ import {
 	addFurniture,
 	DUPLICATE_OFFSET,
 	duplicateFurniture,
+	footprintCorners,
 	formatFootprintCm,
 	furnitureDisplayName,
 	moveFurniture,
@@ -135,5 +136,37 @@ describe("formatFootprintCm", () => {
 		expect(formatFootprintCm({ width: 0.945, depth: 0.4, height: 2.052 })).toBe(
 			"95 × 40 · H 205 cm",
 		);
+	});
+});
+
+describe("footprintCorners", () => {
+	it("returns the axis-aligned corners of an unrotated item", () => {
+		const corners = footprintCorners({
+			id: "f1",
+			catalogId: "sofa-2",
+			position: { x: 2, y: 3 },
+			rotation: 0,
+			footprint: { width: 2, depth: 1, height: 0.8 },
+		});
+		expect(corners).toEqual([
+			{ x: 1, y: 2.5 },
+			{ x: 3, y: 2.5 },
+			{ x: 3, y: 3.5 },
+			{ x: 1, y: 3.5 },
+		]);
+	});
+
+	it("swaps the extents at 90°", () => {
+		const corners = footprintCorners({
+			id: "f1",
+			catalogId: "sofa-2",
+			position: { x: 0, y: 0 },
+			rotation: 90,
+			footprint: { width: 2, depth: 1, height: 0.8 },
+		});
+		const xs = corners.map((c) => c.x);
+		const ys = corners.map((c) => c.y);
+		expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(1);
+		expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(2);
 	});
 });

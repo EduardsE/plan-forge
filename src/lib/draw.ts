@@ -41,11 +41,16 @@ export interface DraftSnap {
 	alignment: AlignmentSnap | null;
 }
 
-function quantize(value: number, step: number): number {
-	// Re-round to sub-millimeter precision: 0.05 isn't exact in binary, so the
-	// raw product leaks float junk (4.800000000000001) straight into labels.
+/**
+ * Snap a value to the drawing grid. Re-rounds to sub-millimeter precision:
+ * 0.05 isn't exact in binary, so the raw product leaks float junk
+ * (4.800000000000001) straight into labels.
+ */
+export function quantizeToStep(value: number, step: number): number {
 	return Math.round(Math.round(value / step) * step * 1e4) / 1e4;
 }
+
+const quantize = quantizeToStep;
 
 /**
  * Snap the cursor while placing the next corner. Snaps compose in priority

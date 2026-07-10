@@ -27,6 +27,14 @@ import {
 	type Point,
 } from "#/lib/model";
 import {
+	applyOutlineDraft,
+	draftFromRoom,
+	emptyOutlineDraft,
+	sameOutline,
+	setClosedSegmentLength,
+	splitOutlineWall,
+} from "#/lib/outline-edit";
+import {
 	deserializeSavedState,
 	STORAGE_KEY,
 	serializeSavedState,
@@ -90,9 +98,35 @@ function Planner() {
 	}, [storageReady, room, unit]);
 
 	// The draw-mode draft outline. Owned here (not by the canvas) so the
-	// header's status line can count corners and closing can become the room.
-	const [draft, setDraft] = useState<Point[]>([]);
+	// header's status line can count corners and committing can become the
+	// room. Entering draw mode over an existing room reopens its outline as a
+	// *closed* editable draft ("Draw" means "edit this room"); only an empty
+	// outline — right after New room — starts the open from-scratch draft.
+	// Leaving draw mode applies a closed draft, so lens switches never lose
+	// edits; esc reverts it instead.
+	const [draft, setDraft] = useState(emptyOutlineDraft);
 	const [drawTool, setDrawTool] = useState<DrawTool>("wall");
+	const prevViewModeRef = useRef(viewMode);
+	useEffect(() => {
+		const prev = prevViewModeRef.current;
+		if (prev === viewMode) return;
+		prevViewModeRef.current = viewMode;
+		if (viewMode === "draw") {
+			// Seed from the room; an in-progress open draft (mid fresh drawing)
+			// survives the round trip through another lens.
+			if (room.outline.length >= 3) setDraft(draftFromRoom(room));
+		} else if (prev === "draw" && draft.closed) {
+			if (
+				draft.corners.length >= 3 &&
+				!sameOutline(draft.corners, room.outline)
+			) {
+				setRoom((current) =>
+					applyOutlineDraft(current, draft.corners, draft.openings),
+				);
+			}
+			setDraft(emptyOutlineDraft());
+		}
+	}, [viewMode, room, draft]);
 
 	// The 2D lens's armed door/window tool. Owned here (like drawTool) so the
 	// tool stack chrome and the header status line share it with the canvas.
@@ -132,28 +166,78 @@ function Planner() {
 	}, [viewMode]);
 
 	const placeCorner = useCallback(
-		(point: Point) => setDraft((corners) => [...corners, point]),
+		(point: Point) =>
+			setDraft((current) =>
+				current.closed
+					? current
+					: { ...current, corners: [...current.corners, point] },
+			),
 		[],
 	);
 	const setDraftSegmentLength = useCallback(
 		(segmentIndex: number, meters: number) =>
-			setDraft((corners) => setSegmentLength(corners, segmentIndex, meters)),
+			setDraft((current) => ({
+				...current,
+				corners: current.closed
+					? setClosedSegmentLength(current.corners, segmentIndex, meters)
+					: setSegmentLength(current.corners, segmentIndex, meters),
+			})),
 		[],
 	);
+	const moveDraftCorner = useCallback(
+		(index: number, point: Point) =>
+			setDraft((current) =>
+				index < current.corners.length
+					? {
+							...current,
+							corners: current.corners.map((corner, i) =>
+								i === index ? point : corner,
+							),
+						}
+					: current,
+			),
+		[],
+	);
+	const splitDraftWall = useCallback(
+		(wallIndex: number, point: Point) =>
+			setDraft((current) => {
+				if (!current.closed) return current;
+				const split = splitOutlineWall(
+					current.corners,
+					current.openings,
+					wallIndex,
+					point,
+				);
+				return {
+					...current,
+					corners: split.outline,
+					openings: split.openings,
+				};
+			}),
+		[],
+	);
+	// ⏎ (or clicking the start corner while drawing) commits the draft: the
+	// outline becomes the room, openings re-anchor to their (possibly resized
+	// or split) walls, and furniture stays wherever it still fits inside.
 	const closeDraft = useCallback(() => {
-		if (draft.length < 3) return;
-		// The drawn outline becomes the room. Openings and furniture belonged
-		// to the old outline (wall indices, positions) and don't carry over.
-		setRoom((current) => ({
-			name: current.name,
-			outline: draft,
-			openings: [],
-			furniture: [],
-		}));
-		setDraft([]);
+		if (draft.corners.length < 3) return;
+		if (!sameOutline(draft.corners, room.outline)) {
+			setRoom((current) =>
+				applyOutlineDraft(current, draft.corners, draft.openings),
+			);
+		}
+		setDraft(emptyOutlineDraft());
 		setViewMode("2d");
-	}, [draft]);
-	const cancelDraft = useCallback(() => setDraft([]), []);
+	}, [draft, room.outline]);
+	// Esc reverts an edit session to the room as it stands; a fresh open
+	// draft just clears.
+	const cancelDraft = useCallback(
+		() =>
+			setDraft((current) =>
+				current.closed ? draftFromRoom(room) : emptyOutlineDraft(),
+			),
+		[room],
+	);
 
 	// The "new room" escape hatch: clear the room (autosave persists the
 	// cleared state, wiping the old save) and start over in draw mode.
@@ -171,12 +255,13 @@ function Planner() {
 			openings: [],
 			furniture: [],
 		});
-		setDraft([]);
+		setDraft(emptyOutlineDraft());
 		setViewMode("draw");
 	}, []);
 
-	// ⏎ closes the outline into the room model, esc cancels the draft —
-	// unless the keystroke belongs to the inline length input.
+	// ⏎ commits the draft into the room model, esc cancels it (reverting an
+	// edit session) — unless the keystroke belongs to the inline length input
+	// (or a corner drag, which swallows both in its capture-phase handler).
 	useEffect(() => {
 		if (viewMode !== "draw") return;
 		const handleKeyDown = (event: KeyboardEvent) => {
@@ -214,10 +299,13 @@ function Planner() {
 							readoutStore={readoutStore}
 							unit={unit}
 							drawTool={drawTool}
-							draftCorners={draft}
+							draftCorners={draft.corners}
+							draftClosed={draft.closed}
 							onPlaceCorner={placeCorner}
 							onSetDraftSegmentLength={setDraftSegmentLength}
 							onRequestCloseDraft={closeDraft}
+							onMoveDraftCorner={moveDraftCorner}
+							onSplitDraftWall={splitDraftWall}
 							placingItem={placing?.item ?? null}
 							onPlacingEnd={endPlacing}
 							openingTool={openingTool}
@@ -230,7 +318,8 @@ function Planner() {
 					roomName={room.name ?? "Untitled room"}
 					savedAt={savedAt}
 					onNewRoom={startNewRoom}
-					draftCornerCount={draft.length}
+					draftCornerCount={draft.corners.length}
+					draftClosed={draft.closed}
 					placingName={placing?.item.name ?? null}
 					openingTool={openingTool}
 					shifted={objectsOpen}
@@ -244,7 +333,7 @@ function Planner() {
 				{viewMode === "draw" && (
 					<>
 						<DrawToolStack tool={drawTool} onToolChange={setDrawTool} />
-						<DrawHintBar />
+						<DrawHintBar editing={draft.closed} />
 					</>
 				)}
 				{viewMode === "2d" && (

@@ -560,9 +560,13 @@ export interface PlannerCanvasProps {
 	/** Draw-mode state, owned by the route (the header shows the count). */
 	drawTool: DrawTool;
 	draftCorners: Point[];
+	/** Closed draft: draw mode is reshaping the room, not placing corners. */
+	draftClosed: boolean;
 	onPlaceCorner: (point: Point) => void;
 	onSetDraftSegmentLength: (segmentIndex: number, meters: number) => void;
 	onRequestCloseDraft: () => void;
+	onMoveDraftCorner: (index: number, point: Point) => void;
+	onSplitDraftWall: (wallIndex: number, point: Point) => void;
 	/** Catalog item mid-drag from the objects panel, if any. */
 	placingItem: CatalogItem | null;
 	/** Placement session over — dropped or cancelled (route clears it). */
@@ -582,9 +586,12 @@ export function PlannerCanvas({
 	unit,
 	drawTool,
 	draftCorners,
+	draftClosed,
 	onPlaceCorner,
 	onSetDraftSegmentLength,
 	onRequestCloseDraft,
+	onMoveDraftCorner,
+	onSplitDraftWall,
 	placingItem,
 	onPlacingEnd,
 	openingTool,
@@ -718,7 +725,13 @@ export function PlannerCanvas({
 		<div
 			className={cn(
 				"absolute inset-0 isolate",
-				drawing && renderPlan && drawTool === "wall" && "cursor-none",
+				// The drawn crosshair replaces the OS cursor only while placing
+				// corners — a closed draft is reshaped with the normal pointer.
+				drawing &&
+					renderPlan &&
+					drawTool === "wall" &&
+					!draftClosed &&
+					"cursor-none",
 				viewMode === "2d" && renderPlan && openingTool && "cursor-crosshair",
 			)}
 			onPointerDown={(event) => {
@@ -775,11 +788,15 @@ export function PlannerCanvas({
 					drawing ? (
 						<DrawScene
 							corners={draftCorners}
+							closed={draftClosed}
 							unit={unit}
-							placing={drawTool === "wall"}
+							placing={drawTool === "wall" && !draftClosed}
 							onPlaceCorner={onPlaceCorner}
 							onSetSegmentLength={onSetDraftSegmentLength}
 							onRequestClose={onRequestCloseDraft}
+							onMoveCorner={onMoveDraftCorner}
+							onSplitWall={onSplitDraftWall}
+							onDragActiveChange={setSceneDragActive}
 						/>
 					) : (
 						<PlanScene

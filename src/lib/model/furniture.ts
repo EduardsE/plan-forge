@@ -70,6 +70,29 @@ export function addFurniture(room: Room, item: FurnitureItem): Room {
 }
 
 /**
+ * Plan positions of the rotated footprint's four corners. The rotation
+ * matches the renderers' `rotation-y` (degrees about world up; plan y points
+ * down, so a positive turn takes +x toward -y).
+ */
+export function footprintCorners(item: FurnitureItem): Point[] {
+	const rad = (item.rotation * Math.PI) / 180;
+	const cos = Math.cos(rad);
+	const sin = Math.sin(rad);
+	const hw = item.footprint.width / 2;
+	const hd = item.footprint.depth / 2;
+	const offsets: Array<[number, number]> = [
+		[-hw, -hd],
+		[hw, -hd],
+		[hw, hd],
+		[-hw, hd],
+	];
+	return offsets.map(([ox, oy]) => ({
+		x: item.position.x + ox * cos + oy * sin,
+		y: item.position.y - ox * sin + oy * cos,
+	}));
+}
+
+/**
  * Display name from the catalog ("sofa-2" → "Sofa · 2-seat"); ids missing
  * from the catalog fall back to a title-cased slug.
  */

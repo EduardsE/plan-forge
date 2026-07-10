@@ -38,6 +38,51 @@ export function floorArea(outline: Point[]): number {
 	return Math.abs(twiceSigned) / 2;
 }
 
+function distanceToSegment(p: Point, a: Point, b: Point): number {
+	const abx = b.x - a.x;
+	const aby = b.y - a.y;
+	const lengthSq = abx * abx + aby * aby;
+	const t =
+		lengthSq === 0
+			? 0
+			: Math.max(
+					0,
+					Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / lengthSq),
+				);
+	return Math.hypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t));
+}
+
+/**
+ * Whether a point lies inside the closed outline. Points within `tolerance`
+ * of the boundary count as inside — furniture flush against a wall sits
+ * exactly on it, where a bare even-odd raycast is unstable.
+ */
+export function pointInOutline(
+	outline: Point[],
+	point: Point,
+	tolerance = 0,
+): boolean {
+	if (outline.length < 3) return false;
+	if (tolerance > 0) {
+		for (let i = 0; i < outline.length; i++) {
+			const a = outline[i];
+			const b = outline[(i + 1) % outline.length];
+			if (distanceToSegment(point, a, b) <= tolerance) return true;
+		}
+	}
+	// Even-odd raycast along +x.
+	let inside = false;
+	for (let i = 0; i < outline.length; i++) {
+		const a = outline[i];
+		const b = outline[(i + 1) % outline.length];
+		if (a.y > point.y !== b.y > point.y) {
+			const crossX = a.x + ((point.y - a.y) / (b.y - a.y)) * (b.x - a.x);
+			if (point.x < crossX) inside = !inside;
+		}
+	}
+	return inside;
+}
+
 /** Axis-aligned bounding box of the outline, or null when it has no corners. */
 export function outlineBounds(outline: Point[]): Bounds | null {
 	if (outline.length === 0) return null;

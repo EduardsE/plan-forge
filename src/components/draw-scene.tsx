@@ -1,9 +1,22 @@
-import { Html, Line } from "@react-three/drei";
-import type { ThreeEvent } from "@react-three/fiber";
-import { useMemo, useState } from "react";
-import type { OrthographicCamera as ThreeOrthographicCamera } from "three";
+import { Html, Line, useCursor } from "@react-three/drei";
+import { type ThreeEvent, useThree } from "@react-three/fiber";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	Shape,
+	type OrthographicCamera as ThreeOrthographicCamera,
+} from "three";
+import {
+	CLICK_SLOP_PX as DRAG_SLOP_PX,
+	floorProjector,
+	useControlsPause,
+} from "#/components/move-drag";
 import { type DraftSnap, snapDraftPoint } from "#/lib/draw";
 import type { Point } from "#/lib/model";
+import {
+	type CornerGuide,
+	snapCornerDrag,
+	splitPointOnWall,
+} from "#/lib/outline-edit";
 import { dashedPolyline } from "#/lib/plan-scene";
 import {
 	formatLength,
@@ -19,6 +32,11 @@ import {
  * cursor is dashed cyan with a live label, axis snapping shows the 90° badge
  * and corner-alignment snaps show a dashed guide + chip. Geometry lives in
  * `src/lib/draw.ts`; every color/proportion is lifted from the mockup.
+ *
+ * A *closed* draft (draw mode entered over an existing room) renders the
+ * same loop but flips the interactions to reshaping: corners drag with the
+ * same snapping and guides, and clicking a wall splits it with a new corner
+ * (`src/lib/outline-edit.ts` holds that geometry).
  *
  * Labels are drei `<Html>` overlays like the plan lens, so they stay crisp
  * and the length input is a real DOM input.
@@ -283,31 +301,341 @@ function DrawCursor({ at }: { at: Point }) {
 	);
 }
 
+/** Corner pick-handle radius, meters (the visual dot is smaller). */
+const CORNER_PICK_RADIUS = 0.18;
+/** Wall pick-strip half-width for splitting, meters. */
+const STRIP_PAD = 0.12;
+/** Invisible pick layers, above the visible strokes. */
+const PICK_Y = 0.018;
+
+/** Plan-coordinate polygon as a three Shape (mirrored so world z = plan y
+ * after `rotation-x={-Math.PI / 2}`); same convention as plan-openings. */
+function shapeFromPoints(points: Point[]): Shape {
+	const shape = new Shape();
+	for (const [i, p] of points.entries()) {
+		if (i === 0) shape.moveTo(p.x, -p.y);
+		else shape.lineTo(p.x, -p.y);
+	}
+	shape.closePath();
+	return shape;
+}
+
+/** Pick quad along a wall, `pad` meters to each side. */
+function wallStripPoints(a: Point, b: Point, pad: number): Point[] {
+	const length = distance(a, b);
+	if (length === 0) return [a, a, a, a];
+	const nx = (-(b.y - a.y) / length) * pad;
+	const ny = ((b.x - a.x) / length) * pad;
+	return [
+		{ x: a.x + nx, y: a.y + ny },
+		{ x: b.x + nx, y: b.y + ny },
+		{ x: b.x - nx, y: b.y - ny },
+		{ x: a.x - nx, y: a.y - ny },
+	];
+}
+
+/** A live corner drag: which corner, where it started (esc restores it). */
+interface CornerDrag {
+	index: number;
+	original: Point;
+	originScreen: { x: number; y: number };
+}
+
+/**
+ * The window-listener half of a corner drag (the pointer is already down when
+ * this mounts): pointermoves project onto the floor plane and snap through
+ * `snapCornerDrag` (axis locks to other corners + grid quantize), rendering a
+ * dashed guide per locked axis. Pointerup commits wherever the corner is; esc
+ * restores the original position. Keys register in the capture phase and stop
+ * propagation so the route's draft-wide ⏎/esc handlers sit the drag out.
+ */
+function CornerDragSession({
+	corners,
+	drag,
+	onMove,
+	onEnd,
+}: {
+	corners: Point[];
+	drag: CornerDrag;
+	onMove: (index: number, point: Point) => void;
+	onEnd: () => void;
+}) {
+	const camera = useThree((state) => state.camera);
+	const gl = useThree((state) => state.gl);
+	const [guides, setGuides] = useState<CornerGuide[]>([]);
+	// Latest corners/callbacks without resubscribing mid-drag (every move
+	// rebuilds the draft the handlers close over).
+	const cornersRef = useRef(corners);
+	cornersRef.current = corners;
+	const moveRef = useRef(onMove);
+	moveRef.current = onMove;
+	const endRef = useRef(onEnd);
+	endRef.current = onEnd;
+
+	useEffect(() => {
+		const toFloor = floorProjector(gl, camera);
+		// Pointer-still-down presses shouldn't nudge the corner onto the snap
+		// grid: nothing moves until the pointer clears the click slop.
+		let moved = false;
+		const handleMove = (event: PointerEvent) => {
+			if (!moved) {
+				const travel = Math.hypot(
+					event.clientX - drag.originScreen.x,
+					event.clientY - drag.originScreen.y,
+				);
+				if (travel <= DRAG_SLOP_PX) return;
+				moved = true;
+			}
+			const point = toFloor(event);
+			if (!point) return;
+			const zoom = (camera as ThreeOrthographicCamera).zoom || 80;
+			const snap = snapCornerDrag(
+				cornersRef.current,
+				drag.index,
+				point,
+				SNAP_TOLERANCE_PX / zoom,
+			);
+			moveRef.current(drag.index, snap.point);
+			setGuides(snap.guides);
+		};
+		const handleUp = () => endRef.current();
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				event.stopPropagation();
+				moveRef.current(drag.index, drag.original);
+				endRef.current();
+			} else if (event.key === "Enter") {
+				// Committing the draft mid-drag would pull it out from under us.
+				event.stopPropagation();
+			}
+		};
+		window.addEventListener("pointermove", handleMove);
+		window.addEventListener("pointerup", handleUp);
+		window.addEventListener("keydown", handleKeyDown, true);
+		return () => {
+			window.removeEventListener("pointermove", handleMove);
+			window.removeEventListener("pointerup", handleUp);
+			window.removeEventListener("keydown", handleKeyDown, true);
+		};
+	}, [drag, camera, gl]);
+
+	const at = corners[drag.index];
+	if (!at) return null;
+	return (
+		<group>
+			{guides.map((guide) => (
+				<AlignmentGuide
+					key={`${guide.axis}-${guide.cornerIndex}`}
+					from={corners[guide.cornerIndex]}
+					to={at}
+					startAligned={guide.cornerIndex === 0}
+				/>
+			))}
+		</group>
+	);
+}
+
+/** Draggable corner of a closed draft: visual dot + invisible pick disc. */
+function CornerHandle({
+	at,
+	index,
+	onDragStart,
+}: {
+	at: Point;
+	index: number;
+	onDragStart: (index: number, screen: { x: number; y: number }) => void;
+}) {
+	const [hovered, setHovered] = useState(false);
+	useCursor(hovered, "grab");
+	return (
+		<group>
+			<mesh
+				rotation-x={-Math.PI / 2}
+				position={[at.x, PICK_Y, at.y]}
+				onPointerDown={(event) => {
+					if (event.button !== 0) return;
+					event.stopPropagation();
+					onDragStart(index, { x: event.clientX, y: event.clientY });
+				}}
+				onPointerOver={(event) => {
+					event.stopPropagation();
+					setHovered(true);
+				}}
+				onPointerOut={() => setHovered(false)}
+			>
+				<circleGeometry args={[CORNER_PICK_RADIUS, 24]} />
+				<meshBasicMaterial transparent opacity={0} depthWrite={false} />
+			</mesh>
+			<Html position={v3(at, LABEL_Y)} center style={{ pointerEvents: "none" }}>
+				<div
+					className="h-4 w-4 rounded-full border-[3px] border-[#16213E] bg-white"
+					style={{
+						boxShadow: hovered
+							? "0 0 0 6px rgba(34,211,238,0.25), 0 0 16px rgba(34,211,238,0.5)"
+							: "0 2px 6px rgba(15,27,61,0.25)",
+					}}
+				/>
+			</Html>
+		</group>
+	);
+}
+
+/**
+ * Reshaping interactions of a closed draft: draggable corner handles, and an
+ * invisible strip along each wall that previews (ghost dot) and inserts a new
+ * corner on click — the split, which the next press can drag out. The camera
+ * controls pause around a drag, like every in-scene drag.
+ */
+function OutlineEditLayer({
+	corners,
+	onMoveCorner,
+	onSplitWall,
+	onDragActiveChange,
+}: {
+	corners: Point[];
+	onMoveCorner: (index: number, point: Point) => void;
+	onSplitWall: (wallIndex: number, point: Point) => void;
+	onDragActiveChange: (active: boolean) => void;
+}) {
+	const [drag, setDrag] = useState<CornerDrag | null>(null);
+	const [splitGhost, setSplitGhost] = useState<Point | null>(null);
+	const [stripHovered, setStripHovered] = useState(false);
+	useCursor(stripHovered && !drag, "copy");
+	const { begin, end } = useControlsPause(onDragActiveChange);
+
+	const beginDrag = useCallback(
+		(index: number, screen: { x: number; y: number }) => {
+			setDrag({ index, original: corners[index], originScreen: screen });
+			begin();
+		},
+		[corners, begin],
+	);
+	const endDrag = useCallback(() => {
+		setDrag(null);
+		end();
+	}, [end]);
+
+	const strips = useMemo(
+		() =>
+			corners.map((corner, index) => ({
+				wallIndex: index,
+				shape: shapeFromPoints(
+					wallStripPoints(
+						corner,
+						corners[(index + 1) % corners.length],
+						STRIP_PAD,
+					),
+				),
+			})),
+		[corners],
+	);
+
+	return (
+		<group>
+			{!drag &&
+				strips.map(({ wallIndex, shape }) => (
+					// biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element.
+					<mesh
+						key={wallIndex}
+						rotation-x={-Math.PI / 2}
+						position-y={PICK_Y}
+						onPointerMove={(event) => {
+							setStripHovered(true);
+							setSplitGhost(
+								splitPointOnWall(corners, wallIndex, {
+									x: event.point.x,
+									y: event.point.z,
+								}),
+							);
+						}}
+						onPointerOut={() => {
+							setStripHovered(false);
+							setSplitGhost(null);
+						}}
+						onClick={(event) => {
+							// A drag that ends on the wall is a camera pan, not a split.
+							if (event.delta > CLICK_SLOP_PX) return;
+							const point = splitPointOnWall(corners, wallIndex, {
+								x: event.point.x,
+								y: event.point.z,
+							});
+							if (!point) return;
+							event.stopPropagation();
+							setSplitGhost(null);
+							onSplitWall(wallIndex, point);
+						}}
+					>
+						<shapeGeometry args={[shape]} />
+						<meshBasicMaterial transparent opacity={0} depthWrite={false} />
+					</mesh>
+				))}
+			{corners.map((corner, index) => (
+				<CornerHandle
+					// biome-ignore lint/suspicious/noArrayIndexKey: corners are identified by position in the draft
+					key={index}
+					at={corner}
+					index={index}
+					onDragStart={beginDrag}
+				/>
+			))}
+			{splitGhost && !drag && (
+				<Html
+					position={v3(splitGhost, LABEL_Y)}
+					center
+					style={{ pointerEvents: "none" }}
+				>
+					<div className="h-3.5 w-3.5 rounded-full border-2 border-[#22D3EE] bg-[rgba(34,211,238,0.35)] shadow-[0_0_0_5px_rgba(34,211,238,0.2)]" />
+				</Html>
+			)}
+			{drag && (
+				<CornerDragSession
+					corners={corners}
+					drag={drag}
+					onMove={onMoveCorner}
+					onEnd={endDrag}
+				/>
+			)}
+		</group>
+	);
+}
+
 export interface DrawSceneProps {
 	corners: Point[];
+	/** Closed loop (editing an existing room) vs open chain (fresh drawing). */
+	closed: boolean;
 	unit: Unit;
-	/** Wall tool active: pointer places corners and shows the crosshair. */
+	/** Wall tool active on an open draft: clicks place corners, crosshair on. */
 	placing: boolean;
 	onPlaceCorner: (point: Point) => void;
 	onSetSegmentLength: (segmentIndex: number, meters: number) => void;
 	/** Requested by clicking back on the start corner (≥ 3 corners placed). */
 	onRequestClose: () => void;
+	/** Closed drafts: a corner dragged to a (snapped) new position. */
+	onMoveCorner: (index: number, point: Point) => void;
+	/** Closed drafts: a wall clicked to insert a corner at `point`. */
+	onSplitWall: (wallIndex: number, point: Point) => void;
+	/** A corner drag started/ended — the canvas locks pan/zoom meanwhile. */
+	onDragActiveChange: (active: boolean) => void;
 }
 
 export function DrawScene({
 	corners,
+	closed,
 	unit,
 	placing,
 	onPlaceCorner,
 	onSetSegmentLength,
 	onRequestClose,
+	onMoveCorner,
+	onSplitWall,
+	onDragActiveChange,
 }: DrawSceneProps) {
 	const [snap, setSnap] = useState<DraftSnap | null>(null);
 	const [editingSegment, setEditingSegment] = useState<number | null>(null);
 
 	const centroid = useMemo(() => centroidOf(corners), [corners]);
 	const last = corners.at(-1);
-	const preview = placing && last && snap ? snap : null;
+	const preview = !closed && placing && last && snap ? snap : null;
 	const previewDashes = useMemo(
 		() =>
 			preview && last ? dashedPolyline([last, preview.point], 0.12, 0.08) : [],
@@ -368,19 +696,21 @@ export function DrawScene({
 
 			{corners.length >= 2 && (
 				<Line
-					points={corners.map((p) => v3(p, WALL_Y))}
+					points={(closed ? [...corners, corners[0]] : corners).map((p) =>
+						v3(p, WALL_Y),
+					)}
 					color={WALL_COLOR}
 					lineWidth={7}
 					alphaToCoverage={false}
 				/>
 			)}
 
-			{corners.slice(0, -1).map((corner, index) => (
+			{corners.slice(0, closed ? undefined : -1).map((corner, index) => (
 				<SegmentLabel
 					// biome-ignore lint/suspicious/noArrayIndexKey: segments are identified by position in the draft
 					key={index}
 					a={corner}
-					b={corners[index + 1]}
+					b={corners[(index + 1) % corners.length]}
 					unit={unit}
 					centroid={centroid}
 					editing={editingSegment === index}
@@ -431,16 +761,26 @@ export function DrawScene({
 				/>
 			)}
 
-			{corners.map((corner, index) => (
-				<CornerDot
-					// biome-ignore lint/suspicious/noArrayIndexKey: corners are identified by position in the draft
-					key={index}
-					at={corner}
-					isStart={index === 0}
-				/>
-			))}
+			{!closed &&
+				corners.map((corner, index) => (
+					<CornerDot
+						// biome-ignore lint/suspicious/noArrayIndexKey: corners are identified by position in the draft
+						key={index}
+						at={corner}
+						isStart={index === 0}
+					/>
+				))}
 
-			{placing && snap && <DrawCursor at={snap.point} />}
+			{closed && (
+				<OutlineEditLayer
+					corners={corners}
+					onMoveCorner={onMoveCorner}
+					onSplitWall={onSplitWall}
+					onDragActiveChange={onDragActiveChange}
+				/>
+			)}
+
+			{!closed && placing && snap && <DrawCursor at={snap.point} />}
 		</group>
 	);
 }

@@ -14,6 +14,8 @@ interface WorkspaceHeaderProps {
 	onNewRoom: () => void;
 	/** Corners placed so far in the draw draft; drives the draw status line. */
 	draftCornerCount?: number;
+	/** Draw mode is editing the existing outline, not drawing a fresh one. */
+	draftClosed?: boolean;
 	/** Catalog item mid-placement; drives the objects status line. */
 	placingName?: string | null;
 	/** Armed door/window tool on the 2D lens; drives its status line. */
@@ -33,7 +35,10 @@ const DOT_BY_MODE: Record<ViewMode, string> = {
 /** How often the "saved N min ago" label re-renders to stay truthful. */
 const SAVED_TICK_MS = 30_000;
 
-function drawStatusText(cornerCount: number): string {
+function drawStatusText(cornerCount: number, editing: boolean): string {
+	if (editing) {
+		return `Editing room outline — ${cornerCount} corners`;
+	}
 	if (cornerCount === 0) {
 		return "Drawing room outline — click to place the first corner";
 	}
@@ -59,6 +64,7 @@ export function WorkspaceHeader({
 	savedAt,
 	onNewRoom,
 	draftCornerCount = 0,
+	draftClosed = false,
 	placingName = null,
 	openingTool = null,
 	shifted = false,
@@ -74,7 +80,7 @@ export function WorkspaceHeader({
 		</>
 	);
 	if (armedTool) text = `Placing a ${armedTool} — click a wall to insert it`;
-	if (mode === "draw") text = drawStatusText(draftCornerCount);
+	if (mode === "draw") text = drawStatusText(draftCornerCount, draftClosed);
 	// The mockup's 1d status, with the live item name: dragging a card takes
 	// over the objects status line until the drop or cancel.
 	if (mode === "objects") {

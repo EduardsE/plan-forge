@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	floorArea,
 	outlineBounds,
+	pointInOutline,
 	wallLength,
 	wallLengths,
 	wallsOf,
@@ -101,5 +102,29 @@ describe("outlineBounds", () => {
 
 	it("returns null for an empty outline", () => {
 		expect(outlineBounds([])).toBeNull();
+	});
+});
+
+describe("pointInOutline", () => {
+	it("tells inside from outside", () => {
+		expect(pointInOutline(rectangle, { x: 3, y: 2 })).toBe(true);
+		expect(pointInOutline(rectangle, { x: 7, y: 2 })).toBe(false);
+		expect(pointInOutline(rectangle, { x: 3, y: -0.1 })).toBe(false);
+	});
+
+	it("handles the notch of a non-convex outline", () => {
+		expect(pointInOutline(lShape, { x: 5, y: 2 })).toBe(true);
+		expect(pointInOutline(lShape, { x: 5, y: 4 })).toBe(false);
+		expect(pointInOutline(lShape, { x: 2, y: 4 })).toBe(true);
+	});
+
+	it("counts points within the tolerance of the boundary as inside", () => {
+		expect(pointInOutline(rectangle, { x: 3, y: 0 }, 1e-3)).toBe(true);
+		expect(pointInOutline(rectangle, { x: 3, y: -0.0005 }, 1e-3)).toBe(true);
+		expect(pointInOutline(rectangle, { x: 3, y: -0.01 }, 1e-3)).toBe(false);
+	});
+
+	it("rejects everything for degenerate outlines", () => {
+		expect(pointInOutline([{ x: 0, y: 0 }], { x: 0, y: 0 }, 1)).toBe(false);
 	});
 });
