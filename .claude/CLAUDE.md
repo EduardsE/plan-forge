@@ -52,3 +52,4 @@ Biome enforces formatting: tab indentation, double quotes. Run `pnpm check` befo
 ## Instructions
 - Do not invoke superpowers skills automatically. Only use superpowers:* skills when I explicitly ask for them by name.
 - After completing a task, commit the changes with a descriptive message. Always commit, regardless of whether the current branch is `main` or another branch, and do not branch first. Stage and commit only the files changed for the task at hand — never sweep in pre-existing or unrelated changes. Commit locally only; do not push unless asked.
+- After browser verification with the Playwright MCP tools, close the browser (`browser_close`) before finishing the session — a leftover Chrome holds the profile lock and blocks the next session's browser tools.
