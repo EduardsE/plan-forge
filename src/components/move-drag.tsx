@@ -1,8 +1,15 @@
 import { useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Camera, Plane, Raycaster, Vector2, Vector3 } from "three";
 import { SnapGuides } from "#/components/snap-guides";
-import type { FurnitureItem, Point } from "#/lib/model";
+import type {
+	FurnitureItem,
+	FurnitureUpdate,
+	Point,
+	WallMount,
+} from "#/lib/model";
+import { wallFrames } from "#/lib/model";
+import { mountAt } from "#/lib/mount-place";
 import {
 	type Obstacle,
 	type PlacementGuide,
@@ -34,10 +41,22 @@ export interface MoveDrag {
 	grab: Point;
 	/** Position at drag start, restored by esc. */
 	original: Point;
+	/** Rotation at drag start, restored by esc (matters for wall re-mounts). */
+	originalRotation: number;
 	/** Axis-aligned size of the (possibly rotated) footprint for snapping. */
 	size: { width: number; depth: number };
 	/** Screen point of the pointerdown, for the drag-vs-click slop guard. */
 	originScreen: { x: number; y: number };
+	/**
+	 * Present only for a wall-mounted item: the raw (unrotated) footprint, its
+	 * mount elevation, and the original mount to restore on esc. When set, the
+	 * drag re-mounts to the nearest wall instead of snapping on the floor.
+	 */
+	mount?: {
+		elevation: number;
+		footprint: { width: number; depth: number };
+		original: WallMount;
+	};
 }
 
 /**
@@ -122,8 +141,19 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
 					y: floorPoint.y - item.position.y,
 				},
 				original: item.position,
+				originalRotation: item.rotation,
 				size: rotatedFootprintSize(item.footprint, item.rotation),
 				originScreen: screen,
+				mount: item.mount
+					? {
+							elevation: item.mount.elevation,
+							footprint: {
+								width: item.footprint.width,
+								depth: item.footprint.depth,
+							},
+							original: item.mount,
+						}
+					: undefined,
 			});
 			begin();
 		},
@@ -159,12 +189,20 @@ export function MoveDragSession({
 	unit: Unit;
 	/** Snap toggle: off means free move (contained, but no flush/quantize). */
 	snapEnabled: boolean;
-	onMove: (position: Point) => void;
+	/** Live update — a floor item patches its position; a wall item also its
+	 * rotation and mount as it slides onto the nearest wall. */
+	onMove: (update: FurnitureUpdate) => void;
 	onEnd: () => void;
 }) {
 	const camera = useThree((state) => state.camera);
 	const gl = useThree((state) => state.gl);
 	const [guides, setGuides] = useState<PlacementGuide[]>([]);
+	// Wall frames for a mounted drag; empty for a floor drag. Memoised on the
+	// outline so the per-move room churn doesn't rebuild them.
+	const frames = useMemo(
+		() => (drag.mount ? wallFrames(outline) : []),
+		[drag.mount, outline],
+	);
 	// Latest callbacks/obstacles without resubscribing the listeners mid-drag
 	// (both close over the room, which changes on every move).
 	const moveRef = useRef(onMove);
@@ -175,6 +213,8 @@ export function MoveDragSession({
 	obstaclesRef.current = obstacles;
 	const snapRef = useRef(snapEnabled);
 	snapRef.current = snapEnabled;
+	const framesRef = useRef(frames);
+	framesRef.current = frames;
 
 	useEffect(() => {
 		const toFloor = floorProjector(gl, camera);
@@ -192,25 +232,53 @@ export function MoveDragSession({
 			}
 			const point = toFloor(event);
 			if (!point) return;
+			const target = {
+				x: point.x - drag.grab.x,
+				y: point.y - drag.grab.y,
+			};
+			if (drag.mount) {
+				// Wall item: re-mount to the nearest wall that fits it. When no
+				// wall does, hold the item still rather than dropping it.
+				const result = mountAt(
+					framesRef.current,
+					target,
+					drag.mount.footprint,
+					drag.mount.elevation,
+					snapRef.current,
+				);
+				if (!result) return;
+				moveRef.current({
+					position: result.position,
+					rotation: result.rotation,
+					mount: result.mount,
+				});
+				setGuides(result.guides);
+				return;
+			}
 			const snap = snapPlacement(
 				outline,
 				drag.size,
-				{
-					x: point.x - drag.grab.x,
-					y: point.y - drag.grab.y,
-				},
+				target,
 				obstaclesRef.current,
 				undefined,
 				undefined,
 				snapRef.current,
 			);
-			moveRef.current(snap.center);
+			moveRef.current({ position: snap.center });
 			setGuides(snap.guides);
 		};
 		const handleUp = () => endRef.current();
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
-			moveRef.current(drag.original);
+			moveRef.current(
+				drag.mount
+					? {
+							position: drag.original,
+							rotation: drag.originalRotation,
+							mount: drag.mount.original,
+						}
+					: { position: drag.original },
+			);
 			endRef.current();
 		};
 		window.addEventListener("pointermove", handleMove);

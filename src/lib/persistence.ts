@@ -53,7 +53,22 @@ function isOpening(value: unknown, wallCount: number): value is Opening {
 	);
 }
 
-function isFurnitureItem(value: unknown): value is FurnitureItem {
+function isWallMount(value: unknown, wallCount: number): boolean {
+	if (typeof value !== "object" || value === null) return false;
+	const mount = value as Record<string, unknown>;
+	return (
+		Number.isInteger(mount.wallIndex) &&
+		(mount.wallIndex as number) >= 0 &&
+		(mount.wallIndex as number) < wallCount &&
+		isFiniteNumber(mount.offset) &&
+		isFiniteNumber(mount.elevation)
+	);
+}
+
+function isFurnitureItem(
+	value: unknown,
+	wallCount: number,
+): value is FurnitureItem {
 	if (typeof value !== "object" || value === null) return false;
 	const item = value as Record<string, unknown>;
 	const footprint = item.footprint as Record<string, unknown> | null;
@@ -69,7 +84,8 @@ function isFurnitureItem(value: unknown): value is FurnitureItem {
 		isFiniteNumber(footprint.depth) &&
 		footprint.depth > 0 &&
 		isFiniteNumber(footprint.height) &&
-		footprint.height > 0
+		footprint.height > 0 &&
+		(item.mount === undefined || isWallMount(item.mount, wallCount))
 	);
 }
 
@@ -87,7 +103,7 @@ function isRoom(value: unknown): value is Room {
 		Array.isArray(room.openings) &&
 		room.openings.every((opening) => isOpening(opening, wallCount)) &&
 		Array.isArray(room.furniture) &&
-		room.furniture.every(isFurnitureItem)
+		room.furniture.every((item) => isFurnitureItem(item, wallCount))
 	);
 }
 

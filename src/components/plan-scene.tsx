@@ -17,7 +17,13 @@ import {
 } from "#/components/move-drag";
 import { PlanOpenings } from "#/components/plan-openings";
 import { SelectionChip } from "#/components/selection-chip";
-import type { FurnitureItem, OpeningKind, Point, Room } from "#/lib/model";
+import type {
+	FurnitureItem,
+	FurnitureUpdate,
+	OpeningKind,
+	Point,
+	Room,
+} from "#/lib/model";
 import {
 	catalogItemById,
 	floorArea,
@@ -652,8 +658,8 @@ export interface PlanSceneProps {
 	onRotateItem: (id: string) => void;
 	onDuplicateItem: (id: string) => void;
 	onDeleteItem: (id: string) => void;
-	/** Live reposition during a move drag (already snapped). */
-	onMoveItem: (id: string, position: Point) => void;
+	/** Live update during a move drag (already snapped; wall items carry mount). */
+	onMoveItem: (id: string, update: FurnitureUpdate) => void;
 	/** A move drag started/ended — the canvas locks pan/zoom while it runs. */
 	onMoveActiveChange: (active: boolean) => void;
 	onSelectOpening: (id: string) => void;
@@ -795,6 +801,7 @@ export function PlanScene({
 								2 -
 							CHIP_GAP,
 					]}
+					showRotate={!selectedItem.mount}
 					onRotate={() => onRotateItem(selectedItem.id)}
 					onDuplicate={() => onDuplicateItem(selectedItem.id)}
 					onDelete={() => onDeleteItem(selectedItem.id)}
@@ -807,7 +814,7 @@ export function PlanScene({
 					drag={drag}
 					unit={unit}
 					snapEnabled={snapEnabled}
-					onMove={(position) => onMoveItem(drag.id, position)}
+					onMove={(update) => onMoveItem(drag.id, update)}
 					onEnd={endDrag}
 				/>
 			)}

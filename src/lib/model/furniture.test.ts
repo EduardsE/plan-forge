@@ -6,11 +6,12 @@ import {
 	footprintCorners,
 	formatFootprintCm,
 	furnitureDisplayName,
-	moveFurniture,
 	removeFurniture,
 	rotateFurniture,
+	updateFurniture,
 } from "./furniture";
 import { createSampleRoom } from "./sample-room";
+import { deriveMountTransform, wallFrames } from "./wall-mount";
 
 describe("rotateFurniture", () => {
 	it("adds the delta to the target item only", () => {
@@ -62,12 +63,41 @@ describe("duplicateFurniture", () => {
 		const room = createSampleRoom();
 		expect(duplicateFurniture(room, "nope", "nope-2")).toBe(room);
 	});
+
+	it("shifts a wall-mounted copy along its host wall, staying flush", () => {
+		const room = createSampleRoom();
+		const source = room.furniture.find((item) => item.mount);
+		expect(source?.mount).toBeDefined();
+		if (!source?.mount) return;
+		const next = duplicateFurniture(room, source.id, "frame-copy");
+		const copy = next.furniture.find((item) => item.id === "frame-copy");
+		expect(copy?.mount).toMatchObject({
+			wallIndex: source.mount.wallIndex,
+			offset: source.mount.offset + DUPLICATE_OFFSET,
+			elevation: source.mount.elevation,
+		});
+		// Position/rotation re-derive from the shifted mount, not a plain nudge.
+		const frame = wallFrames(room.outline).find(
+			(f) => f.index === source.mount?.wallIndex,
+		);
+		if (!frame) throw new Error("host wall missing");
+		const expected = deriveMountTransform(
+			frame,
+			source.mount.offset + DUPLICATE_OFFSET,
+			source.footprint,
+		);
+		expect(copy?.position.x).toBeCloseTo(expected.position.x);
+		expect(copy?.position.y).toBeCloseTo(expected.position.y);
+		expect(copy?.rotation).toBeCloseTo(expected.rotation);
+	});
 });
 
-describe("moveFurniture", () => {
+describe("updateFurniture", () => {
 	it("repositions the target item only, without mutating the input", () => {
 		const room = createSampleRoom();
-		const next = moveFurniture(room, "desk-chair-1", { x: 2.5, y: 3.15 });
+		const next = updateFurniture(room, "desk-chair-1", {
+			position: { x: 2.5, y: 3.15 },
+		});
 		expect(
 			next.furniture.find((item) => item.id === "desk-chair-1")?.position,
 		).toEqual({ x: 2.5, y: 3.15 });
@@ -79,11 +109,36 @@ describe("moveFurniture", () => {
 		).toEqual({ x: 4.52, y: 2.22 });
 	});
 
+	it("applies rotation and mount when the update carries them", () => {
+		const room = createSampleRoom();
+		const mount = { wallIndex: 2, offset: 1.1, elevation: 1.4 };
+		const next = updateFurniture(room, "desk-chair-1", {
+			position: { x: 3, y: 5 },
+			rotation: 180,
+			mount,
+		});
+		const item = next.furniture.find((entry) => entry.id === "desk-chair-1");
+		expect(item?.rotation).toBe(180);
+		expect(item?.mount).toEqual(mount);
+	});
+
+	it("leaves an item's rotation and mount untouched when the update omits them", () => {
+		const room = createSampleRoom();
+		const source = room.furniture.find((item) => item.mount);
+		if (!source) throw new Error("no mounted fixture");
+		const next = updateFurniture(room, source.id, {
+			position: { x: 1, y: 1 },
+		});
+		const item = next.furniture.find((entry) => entry.id === source.id);
+		expect(item?.rotation).toBe(source.rotation);
+		expect(item?.mount).toEqual(source.mount);
+	});
+
 	it("leaves the room unchanged for an unknown id", () => {
 		const room = createSampleRoom();
-		expect(moveFurniture(room, "nope", { x: 1, y: 1 }).furniture).toEqual(
-			room.furniture,
-		);
+		expect(
+			updateFurniture(room, "nope", { position: { x: 1, y: 1 } }).furniture,
+		).toEqual(room.furniture);
 	});
 });
 

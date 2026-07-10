@@ -1,13 +1,16 @@
 import { DRAW_GRID_STEP, quantizeToStep } from "#/lib/draw";
 import {
+	type FurnitureItem,
 	footprintCorners,
 	type Opening,
 	type Point,
 	pointInOutline,
 	type Room,
+	wallFrames,
 	wallLength,
 	wallsOf,
 } from "#/lib/model";
+import { reanchorMount } from "#/lib/mount-place";
 import { slideOpening, type WallSpan } from "#/lib/opening-place";
 
 /**
@@ -255,8 +258,11 @@ const FIT_TOLERANCE = 1e-3;
 /**
  * Commit an edited outline back onto the room. Openings keep their host wall
  * and offset, re-slid by `slideOpening` into the wall's (possibly resized)
- * free stretches — those that no longer fit are dropped. Furniture stays
- * only where its rotated footprint still lies inside the new outline.
+ * free stretches — those that no longer fit are dropped. Floor furniture stays
+ * only where its rotated footprint still lies inside the new outline;
+ * wall-mounted furniture re-anchors to its geometrically nearest wall (by its
+ * synced position, so wall-index shifts from splits don't matter) and is
+ * dropped when that wall no longer fits it.
  */
 export function applyOutlineDraft(
 	room: Room,
@@ -283,10 +289,32 @@ export function applyOutlineDraft(
 			offset === opening.offset ? opening : { ...opening, offset },
 		);
 	}
-	const furniture = room.furniture.filter((item) =>
-		footprintCorners(item).every((corner) =>
-			pointInOutline(corners, corner, FIT_TOLERANCE),
-		),
-	);
+	const frames = wallFrames(corners);
+	const furniture: FurnitureItem[] = [];
+	for (const item of room.furniture) {
+		if (item.mount) {
+			const result = reanchorMount(
+				frames,
+				item.position,
+				item.footprint,
+				item.mount.elevation,
+			);
+			if (!result) continue;
+			furniture.push({
+				...item,
+				position: result.position,
+				rotation: result.rotation,
+				mount: result.mount,
+			});
+			continue;
+		}
+		if (
+			footprintCorners(item).every((corner) =>
+				pointInOutline(corners, corner, FIT_TOLERANCE),
+			)
+		) {
+			furniture.push(item);
+		}
+	}
 	return { ...room, outline: corners, openings: keptOpenings, furniture };
 }

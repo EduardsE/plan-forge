@@ -1,5 +1,6 @@
 import { catalogItemById } from "./catalog";
-import type { Footprint, FurnitureItem, Point, Room } from "./types";
+import type { Footprint, FurnitureItem, Point, Room, WallMount } from "./types";
+import { deriveMountTransform, wallFrames } from "./wall-mount";
 
 /**
  * Pure furniture mutations for the selection toolbar. Every function returns
@@ -36,6 +37,33 @@ export function duplicateFurniture(
 ): Room {
 	const source = room.furniture.find((item) => item.id === id);
 	if (!source) return room;
+	// A wall-mounted copy shifts along its host wall (staying on the wall)
+	// instead of floating out into the room like a floor copy.
+	if (source.mount) {
+		const frame = wallFrames(room.outline).find(
+			(f) => f.index === source.mount?.wallIndex,
+		);
+		if (frame) {
+			const maxOffset = Math.max(0, frame.length - source.footprint.width);
+			const offset = Math.min(
+				source.mount.offset + DUPLICATE_OFFSET,
+				maxOffset,
+			);
+			const { position, rotation } = deriveMountTransform(
+				frame,
+				offset,
+				source.footprint,
+			);
+			const mounted: FurnitureItem = {
+				...source,
+				id: newId,
+				position,
+				rotation,
+				mount: { ...source.mount, offset },
+			};
+			return { ...room, furniture: [...room.furniture, mounted] };
+		}
+	}
 	const copy: FurnitureItem = {
 		...source,
 		id: newId,
@@ -47,12 +75,31 @@ export function duplicateFurniture(
 	return { ...room, furniture: [...room.furniture, copy] };
 }
 
-/** Absolute reposition, from a move drag (the snapped center, plan coords). */
-export function moveFurniture(room: Room, id: string, position: Point): Room {
+/** A move-drag update: the snapped center, plus (for a wall item) the new
+ * derived rotation and mount. `mount` absent leaves the item's mount as-is. */
+export interface FurnitureUpdate {
+	position: Point;
+	rotation?: number;
+	mount?: WallMount;
+}
+
+/** Apply a move-drag update to one item (absolute reposition, plan coords). */
+export function updateFurniture(
+	room: Room,
+	id: string,
+	update: FurnitureUpdate,
+): Room {
 	return {
 		...room,
 		furniture: room.furniture.map((item) =>
-			item.id === id ? { ...item, position } : item,
+			item.id === id
+				? {
+						...item,
+						position: update.position,
+						rotation: update.rotation ?? item.rotation,
+						...(update.mount !== undefined ? { mount: update.mount } : {}),
+					}
+				: item,
 		),
 	};
 }

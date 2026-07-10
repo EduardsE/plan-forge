@@ -24,7 +24,7 @@ import {
 	useMoveDrag,
 } from "#/components/move-drag";
 import { SelectionChip } from "#/components/selection-chip";
-import type { FurnitureItem, Point, Room } from "#/lib/model";
+import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
 import { catalogItemById, outlineBounds } from "#/lib/model";
 import { furnitureObstacle } from "#/lib/place";
 import {
@@ -577,16 +577,21 @@ function FurnitureMesh({
 		);
 	} else {
 		const color = FURNITURE_COLORS[item.catalogId] ?? FURNITURE_FALLBACK_COLOR;
+		// Wall-mounted items hang at their mount elevation (box center), flush
+		// against the wall — no floor shadow. Floor items sit on the platform.
+		const bodyY = item.mount
+			? item.mount.elevation
+			: FLOOR_TOP + 0.017 + height / 2;
 		body = (
 			<>
-				{shadow}
-				<mesh position-y={FLOOR_TOP + 0.017 + height / 2}>
+				{!item.mount && shadow}
+				<mesh position-y={bodyY}>
 					<boxGeometry args={[width, height, depth]} />
 					<meshLambertMaterial color={color} />
 				</mesh>
 				{active && (
 					<mesh
-						position-y={FLOOR_TOP + 0.017 + height / 2}
+						position-y={bodyY}
 						scale={hullScale(width, height, depth)}
 						raycast={noRaycast}
 					>
@@ -664,8 +669,8 @@ export interface RoomSceneProps {
 	onRotateItem: (id: string) => void;
 	onDuplicateItem: (id: string) => void;
 	onDeleteItem: (id: string) => void;
-	/** Live reposition during a move drag (already snapped). */
-	onMoveItem: (id: string, position: Point) => void;
+	/** Live update during a move drag (already snapped; wall items carry mount). */
+	onMoveItem: (id: string, update: FurnitureUpdate) => void;
 	/** A move drag started/ended — the canvas locks orbit while it runs. */
 	onMoveActiveChange: (active: boolean) => void;
 }
@@ -722,6 +727,20 @@ export function RoomScene({
 			{selectedItem && (
 				<SelectionChip
 					item={selectedItem}
+					// Mounted items hang up the wall; anchor the chip above the body
+					// at its elevation instead of the default floor-relative top.
+					anchor={
+						selectedItem.mount
+							? [
+									selectedItem.position.x,
+									selectedItem.mount.elevation +
+										selectedItem.footprint.height / 2 +
+										0.14,
+									selectedItem.position.y,
+								]
+							: undefined
+					}
+					showRotate={!selectedItem.mount}
 					onRotate={() => onRotateItem(selectedItem.id)}
 					onDuplicate={() => onDuplicateItem(selectedItem.id)}
 					onDelete={() => onDeleteItem(selectedItem.id)}
@@ -734,7 +753,7 @@ export function RoomScene({
 					drag={drag}
 					unit={unit}
 					snapEnabled={snapEnabled}
-					onMove={(position) => onMoveItem(drag.id, position)}
+					onMove={(update) => onMoveItem(drag.id, update)}
 					onEnd={endDrag}
 				/>
 			)}

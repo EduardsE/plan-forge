@@ -26,6 +26,7 @@ import type { DrawTool } from "#/components/draw-tool-stack";
 import { PlacementGhost } from "#/components/placement-ghost";
 import { PlanScene } from "#/components/plan-scene";
 import { RoomScene } from "#/components/room-scene";
+import { WallMountGhost } from "#/components/wall-mount-ghost";
 import {
 	type CameraApi,
 	type CameraReadoutStore,
@@ -41,8 +42,9 @@ import {
 	addOpening,
 	type CatalogItem,
 	duplicateFurniture,
+	type FurnitureUpdate,
 	flipDoorHinge,
-	moveFurniture,
+	isWallItem,
 	moveOpening,
 	type Opening,
 	type OpeningKind,
@@ -52,7 +54,9 @@ import {
 	removeFurniture,
 	removeOpening,
 	rotateFurniture,
+	updateFurniture,
 } from "#/lib/model";
+import type { WallMountResult } from "#/lib/mount-place";
 import { furnitureObstacle } from "#/lib/place";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
@@ -643,8 +647,8 @@ export function PlannerCanvas({
 		[room, onRoomChange],
 	);
 	const moveItem = useCallback(
-		(id: string, position: Point) =>
-			onRoomChange(moveFurniture(room, id, position)),
+		(id: string, update: FurnitureUpdate) =>
+			onRoomChange(updateFurniture(room, id, update)),
 		[room, onRoomChange],
 	);
 	const duplicateItem = useCallback(
@@ -723,6 +727,25 @@ export function PlannerCanvas({
 				}),
 			);
 			// Selection follows the drop, same as duplicate.
+			setSelectedId(id);
+			onPlacingEnd();
+		},
+		[placingItem, room, onRoomChange, onPlacingEnd],
+	);
+	const placeMountedItem = useCallback(
+		(result: WallMountResult) => {
+			if (!placingItem) return;
+			const id = crypto.randomUUID();
+			onRoomChange(
+				addFurniture(room, {
+					id,
+					catalogId: placingItem.id,
+					position: result.position,
+					rotation: result.rotation,
+					footprint: placingItem.footprint,
+					mount: result.mount,
+				}),
+			);
 			setSelectedId(id);
 			onPlacingEnd();
 		},
@@ -848,17 +871,27 @@ export function PlannerCanvas({
 							onMoveItem={moveItem}
 							onMoveActiveChange={setSceneDragActive}
 						/>
-						{placingItem && (
-							<PlacementGhost
-								outline={room.outline}
-								obstacles={placementObstacles}
-								item={placingItem}
-								unit={unit}
-								snapEnabled={snapEnabled}
-								onPlace={placeDraggedItem}
-								onCancel={onPlacingEnd}
-							/>
-						)}
+						{placingItem &&
+							(isWallItem(placingItem.id) ? (
+								<WallMountGhost
+									outline={room.outline}
+									item={placingItem}
+									unit={unit}
+									snapEnabled={snapEnabled}
+									onPlace={placeMountedItem}
+									onCancel={onPlacingEnd}
+								/>
+							) : (
+								<PlacementGhost
+									outline={room.outline}
+									obstacles={placementObstacles}
+									item={placingItem}
+									unit={unit}
+									snapEnabled={snapEnabled}
+									onPlace={placeDraggedItem}
+									onCancel={onPlacingEnd}
+								/>
+							))}
 					</>
 				)}
 			</Canvas>

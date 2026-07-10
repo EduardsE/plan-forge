@@ -25,6 +25,8 @@ interface SelectionChipProps {
 	 * screen-top edge instead, since height doesn't project there.
 	 */
 	anchor?: [number, number, number];
+	/** Wall-mounted items align to their wall, so they hide the rotate button. */
+	showRotate?: boolean;
 	onRotate: () => void;
 	onDuplicate: () => void;
 	onDelete: () => void;
@@ -33,6 +35,7 @@ interface SelectionChipProps {
 export function SelectionChip({
 	item,
 	anchor,
+	showRotate = true,
 	onRotate,
 	onDuplicate,
 	onDelete,
@@ -53,14 +56,16 @@ export function SelectionChip({
 					{furnitureDisplayName(item.catalogId)}
 				</div>
 				<div className="flex items-center gap-1.5 rounded-[13px] border border-[rgba(94,234,212,0.25)] bg-[rgba(13,22,48,0.94)] px-3 py-[9px] shadow-[0_16px_40px_rgba(13,22,48,0.35),0_0_22px_rgba(45,212,238,0.18)]">
-					<button
-						type="button"
-						aria-label="Rotate 90°"
-						className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
-						onClick={onRotate}
-					>
-						<RotateCw size={17} strokeWidth={1.6} />
-					</button>
+					{showRotate && (
+						<button
+							type="button"
+							aria-label="Rotate 90°"
+							className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
+							onClick={onRotate}
+						>
+							<RotateCw size={17} strokeWidth={1.6} />
+						</button>
+					)}
 					<button
 						type="button"
 						aria-label="Duplicate"

@@ -50,6 +50,23 @@ export interface Footprint {
 	height: number;
 }
 
+/**
+ * A wall-mounted item's anchor (picture frames, clocks). Located on a wall
+ * like an `Opening` — host wall index plus a near-edge offset along it — with
+ * a vertical `elevation` for the mount's center. When present on a
+ * `FurnitureItem`, the item's `position` and `rotation` are *derived* from the
+ * mount (kept in sync by `deriveMountTransform`) so the footprint sits flush
+ * against the wall's interior face; renderers hang the body at `elevation`.
+ */
+export interface WallMount {
+	/** Index of the host wall (see `Wall.index`). */
+	wallIndex: number;
+	/** Distance from the host wall's start corner to the mount's near edge. */
+	offset: number;
+	/** Height of the item's center above the floor, meters. */
+	elevation: number;
+}
+
 export interface FurnitureItem {
 	id: string;
 	/** Reference into the furniture catalog (name, thumbnail, etc. live there). */
@@ -59,6 +76,11 @@ export interface FurnitureItem {
 	/** Rotation about the footprint center, in degrees counter-clockwise. */
 	rotation: number;
 	footprint: Footprint;
+	/**
+	 * Wall anchor for wall-mounted items; absent for floor-standing furniture.
+	 * When set, `position`/`rotation` are derived from it and the wall.
+	 */
+	mount?: WallMount;
 }
 
 export interface Room {

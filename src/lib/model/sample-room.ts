@@ -82,6 +82,18 @@ export function createSampleRoom(): Room {
 				rotation: 0,
 				footprint: { width: 0.45, depth: 0.45, height: 1.2 },
 			},
+			// A wall-mounted picture frame on the left wall (index 3, running
+			// (0,5.2) → (0,0)): its center sits 1.6 m along that wall and 1.5 m
+			// up, flush against the interior face. position/rotation are the
+			// values `deriveMountTransform` yields for this mount (kept in sync).
+			{
+				id: "picture-frame-1",
+				catalogId: "picture-frame",
+				position: { x: 0.03, y: 1.6 },
+				rotation: 90,
+				footprint: { width: 0.9, depth: 0.06, height: 0.7 },
+				mount: { wallIndex: 3, offset: 3.15, elevation: 1.5 },
+			},
 		],
 	};
 }

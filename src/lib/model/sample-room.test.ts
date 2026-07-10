@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { floorArea, outlineBounds, wallLength, wallsOf } from "./geometry";
 import { createSampleRoom } from "./sample-room";
 import type { FurnitureItem } from "./types";
+import { deriveMountTransform, wallFrames } from "./wall-mount";
 
 /** Axis-aligned x/y half-extents of a footprint after rotation. */
 function halfExtents(item: FurnitureItem): { hx: number; hy: number } {
@@ -40,13 +41,16 @@ describe("createSampleRoom", () => {
 
 	it("places every furniture item fully inside the room", () => {
 		const room = createSampleRoom();
-		expect(room.furniture).toHaveLength(6);
+		expect(room.furniture).toHaveLength(7);
+		// Wall-mounted items sit flush against a wall face, so a footprint edge
+		// lands exactly on the boundary (within floating-point noise).
+		const EPS = 1e-9;
 		for (const item of room.furniture) {
 			const { hx, hy } = halfExtents(item);
-			expect(item.position.x - hx).toBeGreaterThanOrEqual(0);
-			expect(item.position.x + hx).toBeLessThanOrEqual(6.4);
-			expect(item.position.y - hy).toBeGreaterThanOrEqual(0);
-			expect(item.position.y + hy).toBeLessThanOrEqual(5.2);
+			expect(item.position.x - hx).toBeGreaterThanOrEqual(-EPS);
+			expect(item.position.x + hx).toBeLessThanOrEqual(6.4 + EPS);
+			expect(item.position.y - hy).toBeGreaterThanOrEqual(-EPS);
+			expect(item.position.y + hy).toBeLessThanOrEqual(5.2 + EPS);
 		}
 	});
 
@@ -64,6 +68,26 @@ describe("createSampleRoom", () => {
 		const b = createSampleRoom();
 		expect(a).not.toBe(b);
 		a.furniture.pop();
-		expect(b.furniture).toHaveLength(6);
+		expect(b.furniture).toHaveLength(7);
+	});
+
+	it("keeps the wall-mounted frame's position/rotation in sync with its mount", () => {
+		const room = createSampleRoom();
+		const frame = room.furniture.find((item) => item.mount);
+		expect(frame?.mount).toBeDefined();
+		if (!frame?.mount) return;
+		const wall = wallFrames(room.outline).find(
+			(f) => f.index === frame.mount?.wallIndex,
+		);
+		expect(wall).toBeDefined();
+		if (!wall) return;
+		const derived = deriveMountTransform(
+			wall,
+			frame.mount.offset,
+			frame.footprint,
+		);
+		expect(frame.position.x).toBeCloseTo(derived.position.x);
+		expect(frame.position.y).toBeCloseTo(derived.position.y);
+		expect(frame.rotation).toBeCloseTo(derived.rotation);
 	});
 });
