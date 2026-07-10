@@ -26,8 +26,14 @@ import {
 } from "#/components/move-drag";
 import { SelectionChip } from "#/components/selection-chip";
 import { overlappingFurnitureIds } from "#/lib/collision";
+import {
+	furnitureParts,
+	type PartShape,
+	partHullScale,
+	partScale,
+} from "#/lib/furniture-parts";
 import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
-import { catalogItemById, outlineBounds } from "#/lib/model";
+import { outlineBounds } from "#/lib/model";
 import { furnitureObstacle } from "#/lib/place";
 import {
 	buildWallSolids,
@@ -65,33 +71,6 @@ const WINDOW_FRAME_COLOR = "#e6dbc6";
 const WINDOW_FRAME_SIZE = 0.09;
 const PANE_COLORS = ["#fff6de", "#ffe9c2"] as const;
 
-const FURNITURE_COLORS: Record<string, string> = {
-	desk: "#c8996b",
-	"desk-chair": "#ce7b52",
-	credenza: "#b4824e",
-	shelf: "#b98a5f",
-	rug: "#c9805f",
-	// Catalog additions, toned like their panel thumbnails.
-	"lounge-chair": "#ce7b52",
-	"sofa-2": "#ce7b52",
-	armchair: "#a87848",
-	pouf: "#c9805f",
-	"coffee-table": "#b98a5f",
-	"side-table": "#b98a5f",
-	"dining-table": "#c8996b",
-	wardrobe: "#b4824e",
-	"bed-double": "#c9805f",
-	"bed-single": "#c9805f",
-	"floor-lamp": "#d8a46b",
-	"table-lamp": "#d8a46b",
-	"floor-mirror": "#8c6b48",
-	"wall-clock": "#f7f0e2",
-	"picture-frame": "#d8845c",
-};
-const FURNITURE_FALLBACK_COLOR = "#b98a5f";
-const PLANT_POT_COLOR = "#b4633e";
-const PLANT_FOLIAGE_COLOR = "#669758";
-
 /** Mockup's selection stroke: rgba(45,212,238,.7) on the desk chair faces. */
 const SELECTION_COLOR = "#2dd4ee";
 /** Collision-warning tint mixed into a body that overlaps a neighbor. */
@@ -100,21 +79,6 @@ const WARNING_MIX = 0.55;
 /** Blend a furniture color toward the warning red (soft overlap cue). */
 function warnColor(base: string): string {
 	return new Color(base).lerp(new Color(WARNING_COLOR), WARNING_MIX).getStyle();
-}
-/** Rim the selection hull adds around an item's silhouette, meters. */
-const HULL_RIM = 0.02;
-
-/** Per-axis scale inflating a box by HULL_RIM on every side. */
-function hullScale(
-	width: number,
-	height: number,
-	depth: number,
-): [number, number, number] {
-	return [
-		(width + 2 * HULL_RIM) / width,
-		(height + 2 * HULL_RIM) / height,
-		(depth + 2 * HULL_RIM) / depth,
-	];
 }
 /** Raycast opt-out for scenery: only furniture is pickable, so any other
  * click reaches the canvas's pointer-missed handler and deselects. */
@@ -478,6 +442,22 @@ function Walls({ room }: { room: Room }) {
 	);
 }
 
+/** The geometry element for one composed-primitive part. */
+function PartGeometry({ shape }: { shape: PartShape }) {
+	switch (shape.kind) {
+		case "box":
+			return <boxGeometry args={shape.size} />;
+		case "cylinder":
+			return (
+				<cylinderGeometry
+					args={[shape.radiusTop, shape.radiusBottom, shape.height, 24]}
+				/>
+			);
+		case "sphere":
+			return <sphereGeometry args={[shape.radius, 24, 18]} />;
+	}
+}
+
 function FurnitureMesh({
 	item,
 	selected,
@@ -524,102 +504,53 @@ function FurnitureMesh({
 		/>
 	);
 
-	let body: React.ReactNode;
-	if (item.catalogId === "rug") {
-		body = (
-			<>
-				<mesh position-y={FLOOR_TOP + 0.001 + height / 2}>
-					<boxGeometry args={[width, height, depth]} />
-					<meshLambertMaterial color={FURNITURE_COLORS.rug} />
-				</mesh>
-				{active && (
+	// Composed-primitive body (src/lib/furniture-parts.ts), positioned in
+	// bottom-relative part space: floor items rest on the platform, rugs lie
+	// nearly flat on it, wall mounts hang centered at their elevation (and
+	// cast no floor shadow).
+	const parts = useMemo(
+		() => furnitureParts(item.catalogId, item.footprint),
+		[item.catalogId, item.footprint],
+	);
+	const isRug = item.catalogId === "rug";
+	const lift = item.mount
+		? item.mount.elevation - height / 2
+		: FLOOR_TOP + (isRug ? 0.001 : 0.017);
+	const body = (
+		<>
+			{!item.mount && !isRug && shadow}
+			<group position-y={lift}>
+				{parts.map((part, i) => (
 					<mesh
-						position-y={FLOOR_TOP + 0.001 + height / 2}
-						scale={hullScale(width, height, depth)}
-						raycast={noRaycast}
+						// biome-ignore lint/suspicious/noArrayIndexKey: parts are a static list per catalog id.
+						key={i}
+						position={part.position}
+						rotation={part.rotation ?? [0, 0, 0]}
+						scale={partScale(part.shape)}
 					>
-						<boxGeometry args={[width, height, depth]} />
-						{hullMaterial}
+						<PartGeometry shape={part.shape} />
+						<meshLambertMaterial
+							color={warning ? warnColor(part.color) : part.color}
+						/>
 					</mesh>
-				)}
-			</>
-		);
-	} else if (catalogItemById(item.catalogId)?.category === "plants") {
-		const potHeight = height * 0.38;
-		const foliageRadius = width * 1.05;
-		const foliageHull = (foliageRadius + HULL_RIM) / foliageRadius;
-		body = (
-			<>
-				{shadow}
-				<mesh position-y={FLOOR_TOP + 0.017 + potHeight / 2}>
-					<cylinderGeometry args={[width * 0.5, width * 0.38, potHeight, 20]} />
-					<meshLambertMaterial
-						color={warning ? warnColor(PLANT_POT_COLOR) : PLANT_POT_COLOR}
-					/>
-				</mesh>
-				<mesh position-y={height - foliageRadius / 2} scale={[1, 0.92, 1]}>
-					<sphereGeometry args={[foliageRadius, 24, 18]} />
-					<meshLambertMaterial
-						color={
-							warning ? warnColor(PLANT_FOLIAGE_COLOR) : PLANT_FOLIAGE_COLOR
-						}
-					/>
-				</mesh>
-				{active && (
-					<>
+				))}
+				{active &&
+					parts.map((part, i) => (
 						<mesh
-							position-y={FLOOR_TOP + 0.017 + potHeight / 2}
-							scale={[
-								(width * 0.5 + HULL_RIM) / (width * 0.5),
-								(potHeight + 2 * HULL_RIM) / potHeight,
-								(width * 0.5 + HULL_RIM) / (width * 0.5),
-							]}
+							// biome-ignore lint/suspicious/noArrayIndexKey: parts are a static list per catalog id.
+							key={i}
+							position={part.position}
+							rotation={part.rotation ?? [0, 0, 0]}
+							scale={partHullScale(part.shape)}
 							raycast={noRaycast}
 						>
-							<cylinderGeometry
-								args={[width * 0.5, width * 0.38, potHeight, 20]}
-							/>
+							<PartGeometry shape={part.shape} />
 							{hullMaterial}
 						</mesh>
-						<mesh
-							position-y={height - foliageRadius / 2}
-							scale={[foliageHull, 0.92 * foliageHull, foliageHull]}
-							raycast={noRaycast}
-						>
-							<sphereGeometry args={[foliageRadius, 24, 18]} />
-							{hullMaterial}
-						</mesh>
-					</>
-				)}
-			</>
-		);
-	} else {
-		const color = FURNITURE_COLORS[item.catalogId] ?? FURNITURE_FALLBACK_COLOR;
-		// Wall-mounted items hang at their mount elevation (box center), flush
-		// against the wall — no floor shadow. Floor items sit on the platform.
-		const bodyY = item.mount
-			? item.mount.elevation
-			: FLOOR_TOP + 0.017 + height / 2;
-		body = (
-			<>
-				{!item.mount && shadow}
-				<mesh position-y={bodyY}>
-					<boxGeometry args={[width, height, depth]} />
-					<meshLambertMaterial color={warning ? warnColor(color) : color} />
-				</mesh>
-				{active && (
-					<mesh
-						position-y={bodyY}
-						scale={hullScale(width, height, depth)}
-						raycast={noRaycast}
-					>
-						<boxGeometry args={[width, height, depth]} />
-						{hullMaterial}
-					</mesh>
-				)}
-			</>
-		);
-	}
+					))}
+			</group>
+		</>
+	);
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: <group> is an R3F scene node, not a DOM element.

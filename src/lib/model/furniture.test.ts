@@ -50,7 +50,7 @@ describe("duplicateFurniture", () => {
 		expect(copy).toMatchObject({
 			id: "desk-chair-2",
 			catalogId: "desk-chair",
-			rotation: 0,
+			rotation: 180,
 			footprint: { width: 0.64, depth: 0.64, height: 1.04 },
 		});
 		expect(copy?.position).toEqual({

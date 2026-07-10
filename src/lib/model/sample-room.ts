@@ -51,7 +51,9 @@ export function createSampleRoom(): Room {
 				id: "desk-chair-1",
 				catalogId: "desk-chair",
 				position: { x: 4.52, y: 2.22 },
-				rotation: 0,
+				// Facing became visible with composed meshes (+z local front):
+				// 180° turns the chair toward the desk above it, like screen 1a.
+				rotation: 180,
 				footprint: { width: 0.64, depth: 0.64, height: 1.04 },
 			},
 			{
