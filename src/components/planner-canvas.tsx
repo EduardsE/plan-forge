@@ -21,6 +21,8 @@ import {
 	type PerspectiveCamera as ThreePerspectiveCamera,
 	Vector3,
 } from "three";
+import { DrawScene } from "#/components/draw-scene";
+import type { DrawTool } from "#/components/draw-tool-stack";
 import { PlanScene } from "#/components/plan-scene";
 import { RoomScene } from "#/components/room-scene";
 import {
@@ -36,10 +38,13 @@ import {
 import {
 	duplicateFurniture,
 	outlineBounds,
+	type Point,
 	type Room,
 	removeFurniture,
 	rotateFurniture,
 } from "#/lib/model";
+import type { Unit } from "#/lib/units";
+import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
 
 /**
@@ -532,6 +537,14 @@ export interface PlannerCanvasProps {
 	viewMode: ViewMode;
 	cameraApiRef: RefObject<CameraApi | null>;
 	readoutStore: CameraReadoutStore;
+	/** Display unit for draw-mode labels. */
+	unit: Unit;
+	/** Draw-mode state, owned by the route (the header shows the count). */
+	drawTool: DrawTool;
+	draftCorners: Point[];
+	onPlaceCorner: (point: Point) => void;
+	onSetDraftSegmentLength: (segmentIndex: number, meters: number) => void;
+	onRequestCloseDraft: () => void;
 }
 
 export function PlannerCanvas({
@@ -540,10 +553,17 @@ export function PlannerCanvas({
 	viewMode,
 	cameraApiRef,
 	readoutStore,
+	unit,
+	drawTool,
+	draftCorners,
+	onPlaceCorner,
+	onSetDraftSegmentLength,
+	onRequestCloseDraft,
 }: PlannerCanvasProps) {
 	// Same lens split as the 2D|3D pill: draw is a top-down 2D flow, the
 	// objects catalog drops onto the 3D dollhouse.
 	const planView = viewMode === "2d" || viewMode === "draw";
+	const drawing = viewMode === "draw";
 	// Scene presentation follows the rendering camera, not the requested
 	// lens: during a transition flight the warm 3D room stays up, and the
 	// plan drawing swaps in only at the matched top-down endpoint.
@@ -577,8 +597,13 @@ export function PlannerCanvas({
 	return (
 		// isolate: drei <Html> overlays carry huge z-indexes; contain them so
 		// the chrome around the workspace still paints on top.
+		// cursor-none: the wall tool draws its own crosshair cursor; the length
+		// pills restore their own pointer cursor.
 		<div
-			className="absolute inset-0 isolate"
+			className={cn(
+				"absolute inset-0 isolate",
+				drawing && renderPlan && drawTool === "wall" && "cursor-none",
+			)}
 			onPointerDown={(event) => {
 				pointerDownRef.current = { x: event.clientX, y: event.clientY };
 			}}
@@ -628,7 +653,18 @@ export function PlannerCanvas({
 					fadeStrength={1}
 				/>
 				{renderPlan ? (
-					<PlanScene room={room} />
+					drawing ? (
+						<DrawScene
+							corners={draftCorners}
+							unit={unit}
+							placing={drawTool === "wall"}
+							onPlaceCorner={onPlaceCorner}
+							onSetSegmentLength={onSetDraftSegmentLength}
+							onRequestClose={onRequestCloseDraft}
+						/>
+					) : (
+						<PlanScene room={room} />
+					)
 				) : (
 					<RoomScene
 						room={room}

@@ -179,11 +179,21 @@ function floorTexture(): CanvasTexture {
 }
 
 /** Soft drop shadow under the whole plan (mockup: large blurred box-shadow),
- * baked into a texture so it hugs the plan's rectangle instead of ringing it
- * the way a radial blob would. */
+ * baked into a texture so it hugs the plan's shape instead of ringing it the
+ * way a radial blob would. The outline path is filled and stroked with a
+ * round join twice the wall thickness — a polygon dilation — so the shadow
+ * follows non-rectangular (L-shaped) rooms instead of boxing their bounds. */
 const SHADOW_MARGIN = 1;
 const SHADOW_SCALE = 48;
-function PlanShadow({ min, max }: { min: Point; max: Point }) {
+function PlanShadow({
+	outline,
+	min,
+	max,
+}: {
+	outline: Point[];
+	min: Point;
+	max: Point;
+}) {
 	const width = max.x - min.x + 2 * WALL_THICKNESS;
 	const height = max.y - min.y + 2 * WALL_THICKNESS;
 	const texture = useMemo(() => {
@@ -194,15 +204,23 @@ function PlanShadow({ min, max }: { min: Point; max: Point }) {
 		if (!ctx) throw new Error("2d canvas context unavailable");
 		ctx.filter = `blur(${0.35 * SHADOW_SCALE}px)`;
 		ctx.fillStyle = "#0f1b3d";
-		ctx.fillRect(
-			SHADOW_MARGIN * SHADOW_SCALE,
+		ctx.strokeStyle = "#0f1b3d";
+		ctx.lineWidth = 2 * WALL_THICKNESS * SHADOW_SCALE;
+		ctx.lineJoin = "round";
+		ctx.beginPath();
+		for (const [i, p] of outline.entries()) {
+			const x = (p.x - min.x + WALL_THICKNESS + SHADOW_MARGIN) * SHADOW_SCALE;
 			// Shadow falls slightly downward, like the mockup's 0 34px 90px.
-			(SHADOW_MARGIN + 0.2) * SHADOW_SCALE,
-			width * SHADOW_SCALE,
-			height * SHADOW_SCALE,
-		);
+			const y =
+				(p.y - min.y + WALL_THICKNESS + SHADOW_MARGIN + 0.2) * SHADOW_SCALE;
+			if (i === 0) ctx.moveTo(x, y);
+			else ctx.lineTo(x, y);
+		}
+		ctx.closePath();
+		ctx.fill();
+		ctx.stroke();
 		return new CanvasTexture(canvas);
-	}, [width, height]);
+	}, [outline, width, height, min.x, min.y]);
 	return (
 		<mesh
 			rotation-x={-Math.PI / 2}
@@ -495,7 +513,7 @@ export function PlanScene({ room }: { room: Room }) {
 	const dimensionOffset = WALL_THICKNESS + DIMENSION_GAP;
 	return (
 		<group>
-			<PlanShadow min={bounds.min} max={bounds.max} />
+			<PlanShadow outline={room.outline} min={bounds.min} max={bounds.max} />
 			<mesh rotation-x={-Math.PI / 2} position-y={FLOOR_Y}>
 				<shapeGeometry args={[floorShape]} />
 				<meshBasicMaterial map={floorTexture()} />

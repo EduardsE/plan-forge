@@ -1,22 +1,22 @@
-import { useState } from "react";
+import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 
-type Unit = "cm" | "m";
-
 const UNITS: Unit[] = ["cm", "m"];
+
+interface UnitsToggleProps {
+	unit: Unit;
+	onUnitChange: (unit: Unit) => void;
+}
 
 /**
  * Top-right cm/m units toggle, matching the mockup's screen 1c (draw mode)
  * only — grepping `design/planforge-mockups.html` for "Units" turns up a
  * single hit, on that screen, so it isn't rendered elsewhere.
  *
- * Selected unit is local `useState`: nothing else in the app consumes units
- * yet (Phase 1 is static chrome), so a shared store would be premature.
- * "m" is the mockup's active segment by default.
+ * Controlled: the route owns the unit so draw-mode labels and readouts render
+ * in the selected unit.
  */
-export function UnitsToggle() {
-	const [unit, setUnit] = useState<Unit>("m");
-
+export function UnitsToggle({ unit, onUnitChange }: UnitsToggleProps) {
 	return (
 		<div className="absolute right-10 top-9 flex items-center gap-2.5">
 			<span className="text-[13px] text-[var(--navy-300)]">Units</span>
@@ -36,7 +36,7 @@ export function UnitsToggle() {
 							key={option}
 							type="button"
 							aria-pressed={isActive}
-							onClick={() => setUnit(option)}
+							onClick={() => onUnitChange(option)}
 							className={cn(
 								"rounded-full px-4 py-1.5 text-[13.5px] font-semibold",
 								isActive ? "text-white" : "text-[var(--navy-500)]",

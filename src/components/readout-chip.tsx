@@ -4,18 +4,21 @@ import {
 	formatOrbitReadout,
 	formatPlanReadout,
 } from "#/lib/camera";
+import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
 
 interface ReadoutChipProps {
 	mode: ViewMode;
 	/** Live camera state; when absent the chip falls back to static text. */
 	cameraReadout?: CameraReadoutStore;
+	/** Active display unit; drives the draw chip's grid readout. */
+	unit?: Unit;
 }
 
 /**
  * Static fallback text, verbatim from the mockup's bottom-right chip per
- * screen. draw and objects stay static — their chips describe the snapping
- * tool state, not the camera (Phase 3 flows will own those).
+ * screen. The objects chip stays static — it describes the snapping tool
+ * state, not the camera (the Phase 3 objects flow will own it).
  */
 const READOUT_BY_MODE: Record<ViewMode, string> = {
 	"3d": "orbit 38° / 62° · zoom 1.0×",
@@ -34,7 +37,7 @@ const noStore: Pick<CameraReadoutStore, "subscribe" | "getSnapshot"> = {
  * In 3D it shows the live orbit angles + zoom of the perspective camera; in
  * 2D the live plan scale of the orthographic camera.
  */
-export function ReadoutChip({ mode, cameraReadout }: ReadoutChipProps) {
+export function ReadoutChip({ mode, cameraReadout, unit }: ReadoutChipProps) {
 	const store = cameraReadout ?? noStore;
 	const live = useSyncExternalStore(
 		store.subscribe,
@@ -47,6 +50,8 @@ export function ReadoutChip({ mode, cameraReadout }: ReadoutChipProps) {
 		text = formatOrbitReadout(live);
 	} else if (mode === "2d" && live?.kind === "plan") {
 		text = formatPlanReadout(live);
+	} else if (mode === "draw") {
+		text = `snap 90° · grid ${unit === "cm" ? "50 cm" : "0.5 m"}`;
 	}
 
 	return (
