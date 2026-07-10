@@ -65,7 +65,8 @@ Ordered by value; re-order freely if a dependency argues for it.
 - Only furniture raycasts in the 3D scene (walls/platform/dressing set `raycast={() => null}`) — that's what makes furniture clickable behind visible walls.
 - OrbitControls' `enabled` prop flushes too late to stop a gesture that begins on the same pointerdown (it eats the first pointermoves as orbit — the camera visibly drifts ~2°). The furniture move drag disables the controls *instance* synchronously in its pointerdown handler (`makeDefault` publishes it as `state.controls`); the prop only holds the steady state.
 - Textures are module-cached CanvasTextures — safe only because the canvas module is lazy-loaded client-only.
-- Browser verification: headless script with real `page.mouse` input (per CLAUDE.md — the MCP browser hangs on inactive macOS sessions, and synthetic PointerEvents make OrbitControls throw `NotFoundError`). Benign console noise: a `THREE.Clock` deprecation warning (drei 10 + r185), and `data-tsd-source` errors after HMR updates only — fresh loads are clean.
+- Browser verification: headless script with real `page.mouse` input (per CLAUDE.md — the MCP browser hangs on inactive macOS sessions, and synthetic PointerEvents make OrbitControls throw `NotFoundError`). Benign console noise: a `THREE.Clock` deprecation warning (drei 10 + r185).
+- The `@tanstack/devtools-vite` plugin's click-to-source injection is turned **off** in `vite.config.ts` (`injectSource: { enabled: false }`): it stamps `data-tsd-source` on every JSX element, and R3F reads hyphenated props as nested paths (`data-tsd-source` → `object.data.tsd.source`), so the attribute threw "Cannot set data-tsd-source" and tripped the canvas error boundary whenever a scene element mounted (e.g. during a furniture drag). Don't re-enable it without scoping every three.js-rendering file out.
 
 ## History
 
