@@ -11,9 +11,10 @@ import {
  * drawn beside it — to the nearest wall *and* the nearest placed item.
  * Rendering lives in the placement-ghost component.
  *
- * Scope: guides and snapping only consider axis-aligned walls (draw mode
- * snaps to 90°, so real outlines are axis-aligned in practice); walls at
- * other angles are ignored. Placed items snap against their rotated
+ * Axis-aligned walls (the common case — draw mode snaps to 90°) go through a
+ * fast per-axis x/y decomposition; non-axis walls get a general half-plane
+ * pass (`angledWalls`) that both contains the footprint and flush-snaps it
+ * along the wall's own normal. Placed items snap against their rotated
  * footprint's axis-aligned bounding box, so a rotated neighbor snaps to its
  * hull. The dragged item is treated as unrotated on a fresh drop (rotation
  * happens after, via the selection toolbar); a move drag passes its already
@@ -253,12 +254,157 @@ function guideFor(
 	};
 }
 
+/** Below this a wall counts as axis-aligned (handled by the per-axis path). */
+const ANGLE_EPSILON = 1e-6;
+const SPAN_EPSILON = 1e-6;
+/** Alternating projections to settle a box into an angled corner's vertex. */
+const ANGLED_PASSES = 8;
+
+interface AngledWall {
+	/** Stable guide key; the per-axis guides omit ids, so these can't collide. */
+	id: string;
+	/** A point on the wall line (its start corner). */
+	p0: Point;
+	/** Unit inward normal — the room interior is on the +normal side. */
+	n: Point;
+	/** Unit tangent from `p0` toward the wall's end. */
+	t: Point;
+	/** Wall length, so the tangential span along `t` is [0, length]. */
+	length: number;
+}
+
+/** Signed area of the outline; its sign encodes the winding (plan y points down). */
+function signedArea(outline: Point[]): number {
+	let twice = 0;
+	for (let i = 0; i < outline.length; i++) {
+		const a = outline[i];
+		const b = outline[(i + 1) % outline.length];
+		twice += a.x * b.y - b.x * a.y;
+	}
+	return twice;
+}
+
+/**
+ * The outline's non-axis-aligned walls as inward half-planes. Axis-aligned
+ * walls stay with the per-axis snap/clamp; these carry the arbitrary-angle
+ * walls (a 120° corner) that the x/y decomposition can't see — so an item
+ * snaps flush to them and stays contained instead of sliding straight out
+ * through the wall.
+ */
+function angledWalls(outline: Point[]): AngledWall[] {
+	const winding = signedArea(outline) > 0 ? 1 : -1;
+	const walls: AngledWall[] = [];
+	for (const wall of wallsOf(outline)) {
+		const dx = wall.end.x - wall.start.x;
+		const dy = wall.end.y - wall.start.y;
+		if (Math.abs(dx) < ANGLE_EPSILON || Math.abs(dy) < ANGLE_EPSILON) continue;
+		const length = Math.hypot(dx, dy);
+		const t = { x: dx / length, y: dy / length };
+		// Left normal of the tangent for CCW-in-coords winding, right otherwise
+		// — either way it points into the room.
+		const n = winding > 0 ? { x: -t.y, y: t.x } : { x: t.y, y: -t.x };
+		walls.push({ id: `wall-${wall.index}`, p0: wall.start, n, t, length });
+	}
+	return walls;
+}
+
+/** A box half-extent projected onto a unit direction (its support distance). */
+function support(dir: Point, halfW: number, halfD: number): number {
+	return Math.abs(dir.x) * halfW + Math.abs(dir.y) * halfD;
+}
+
+/** Signed clearance from the box centered at `c` to a wall line, along `n`. */
+function angledGap(
+	wall: AngledWall,
+	c: Point,
+	halfW: number,
+	halfD: number,
+): number {
+	const along = wall.n.x * (c.x - wall.p0.x) + wall.n.y * (c.y - wall.p0.y);
+	return along - support(wall.n, halfW, halfD);
+}
+
+/** Whether the box's tangential shadow overlaps the wall segment [0, length]. */
+function facesWall(
+	wall: AngledWall,
+	c: Point,
+	halfW: number,
+	halfD: number,
+): boolean {
+	const tc = wall.t.x * (c.x - wall.p0.x) + wall.t.y * (c.y - wall.p0.y);
+	const halfT = support(wall.t, halfW, halfD);
+	return tc + halfT > SPAN_EPSILON && tc - halfT < wall.length - SPAN_EPSILON;
+}
+
+/**
+ * Keep the box inside every angled wall and stick it flush to any within
+ * tolerance. A negative gap means the box pokes through the wall, so it gets
+ * pushed back in (containment); a small positive gap snaps to flush. Iterated
+ * because settling into a corner where two angled walls meet takes a few
+ * alternating projections.
+ */
+function applyAngledWalls(
+	walls: AngledWall[],
+	center: Point,
+	halfW: number,
+	halfD: number,
+	tolerance: number,
+): Point {
+	let c = center;
+	for (let pass = 0; pass < ANGLED_PASSES; pass++) {
+		let moved = false;
+		for (const wall of walls) {
+			if (!facesWall(wall, c, halfW, halfD)) continue;
+			const gap = angledGap(wall, c, halfW, halfD);
+			if (gap > tolerance) continue;
+			c = { x: c.x - wall.n.x * gap, y: c.y - wall.n.y * gap };
+			moved = true;
+		}
+		if (!moved) break;
+	}
+	return c;
+}
+
+/**
+ * Clearance guides to the nearest angled walls the box isn't flush against —
+ * the same perpendicular line + pill as the axis guides, drawn along the
+ * wall's normal. Capped at the two nearest so a many-walled room stays legible.
+ */
+function angledWallGuides(
+	walls: AngledWall[],
+	center: Point,
+	halfW: number,
+	halfD: number,
+): PlacementGuide[] {
+	return walls
+		.filter((wall) => facesWall(wall, center, halfW, halfD))
+		.map((wall) => ({ wall, gap: angledGap(wall, center, halfW, halfD) }))
+		.filter((entry) => entry.gap >= FLUSH_EPSILON)
+		.sort((a, b) => a.gap - b.gap)
+		.slice(0, 2)
+		.map(({ wall, gap }) => {
+			const s = support(wall.n, halfW, halfD);
+			return {
+				axis: Math.abs(wall.n.x) >= Math.abs(wall.n.y) ? "x" : "y",
+				id: wall.id,
+				from: {
+					x: center.x - wall.n.x * (s + gap),
+					y: center.y - wall.n.y * (s + gap),
+				},
+				to: { x: center.x - wall.n.x * s, y: center.y - wall.n.y * s },
+				distance: gap,
+			} satisfies PlacementGuide;
+		});
+}
+
 /**
  * Where a catalog footprint dragged to `cursor` actually lands: the center
  * quantizes to the placement grid, clamps inside the room's bounding box,
  * and sticks flush to the nearest snap line — an axis-aligned wall or a
  * placed item's (`obstacles`) facing edge — within `tolerance`; `guides`
  * carry the per-axis clearance to whichever line is nearest, left to render.
+ * A final pass contains and flush-snaps against any non-axis-aligned walls,
+ * which the x/y decomposition above can't represent.
  */
 export function snapPlacement(
 	outline: Point[],
@@ -307,10 +453,20 @@ export function snapPlacement(
 		tolerance,
 	);
 
+	// Non-axis walls, handled after the x/y pass: contain + flush-snap along
+	// each wall's own normal. The axis walls above are inside every angled
+	// wall's half-plane, so this only pulls the box further in, never out.
+	const angled = angledWalls(outline);
+	const placed =
+		angled.length > 0
+			? applyAngledWalls(angled, center, halfW, halfD, tolerance)
+			: center;
+
 	const guides: PlacementGuide[] = [];
-	const guideX = guideFor(vertical, obstacles, "x", center, halfW, halfD);
+	const guideX = guideFor(vertical, obstacles, "x", placed, halfW, halfD);
 	if (guideX) guides.push(guideX);
-	const guideY = guideFor(horizontal, obstacles, "y", center, halfD, halfW);
+	const guideY = guideFor(horizontal, obstacles, "y", placed, halfD, halfW);
 	if (guideY) guides.push(guideY);
-	return { center, guides };
+	guides.push(...angledWallGuides(angled, placed, halfW, halfD));
+	return { center: placed, guides };
 }

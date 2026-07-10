@@ -130,6 +130,56 @@ describe("snapPlacement — object-to-object", () => {
 	});
 });
 
+describe("snapPlacement — angled walls", () => {
+	// Right triangle: legs on x=0 and y=0, hypotenuse (6,0)→(0,6) at 45°
+	// (the line x + y = 6, interior x + y < 6).
+	const TRI = [
+		{ x: 0, y: 0 },
+		{ x: 6, y: 0 },
+		{ x: 0, y: 6 },
+	];
+	const BOX = { width: 0.4, depth: 0.4 }; // half 0.2 → support √2·0.2 ≈ 0.283
+
+	it("sticks flush to the hypotenuse within tolerance", () => {
+		// Center at x+y=5.4, ~0.14 off the flush line (0.283 support) → snaps.
+		const snap = snapPlacement(TRI, BOX, { x: 2.7, y: 2.7 });
+		expect(snap.center.x).toBeCloseTo(2.8, 6);
+		expect(snap.center.y).toBeCloseTo(2.8, 6);
+		// Flush leaves no guide to that wall.
+		expect(snap.guides.some((g) => g.id === "wall-1")).toBe(false);
+	});
+
+	it("contains a footprint dragged out through the angled wall", () => {
+		// Cursor at x+y=7 is outside; it must come back to the flush line.
+		const snap = snapPlacement(TRI, BOX, { x: 3.5, y: 3.5 });
+		expect(snap.center.x).toBeCloseTo(2.8, 6);
+		expect(snap.center.y).toBeCloseTo(2.8, 6);
+		expect(snap.center.x + snap.center.y).toBeLessThan(6); // inside
+	});
+
+	it("guides to the hypotenuse along its normal", () => {
+		const snap = snapPlacement(TRI, BOX, { x: 2.4, y: 2.4 });
+		expect(snap.center.x).toBeCloseTo(2.4, 6); // too far to snap
+		const g = snap.guides.find((guide) => guide.id === "wall-1");
+		// Perp distance to x+y=6 is 1.2/√2; minus the box support 0.2·√2.
+		expect(g?.distance).toBeCloseTo(1.2 / Math.SQRT2 - 0.2 * Math.SQRT2, 6);
+		// Foot of the guide sits on the wall line x + y = 6.
+		expect((g?.from.x ?? 0) + (g?.from.y ?? 0)).toBeCloseTo(6, 6);
+	});
+
+	it("finds the inward normal regardless of winding", () => {
+		// Same triangle wound the other way — containment must still pull in.
+		const reversed = [
+			{ x: 0, y: 0 },
+			{ x: 0, y: 6 },
+			{ x: 6, y: 0 },
+		];
+		const snap = snapPlacement(reversed, BOX, { x: 3.5, y: 3.5 });
+		expect(snap.center.x).toBeCloseTo(2.8, 6);
+		expect(snap.center.y).toBeCloseTo(2.8, 6);
+	});
+});
+
 describe("furnitureObstacle", () => {
 	const base: FurnitureItem = {
 		id: "t1",
