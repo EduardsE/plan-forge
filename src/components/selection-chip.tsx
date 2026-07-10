@@ -18,6 +18,12 @@ const ACTION_BUTTON_CLASS =
 
 interface SelectionChipProps {
 	item: FurnitureItem;
+	/**
+	 * Where the leader line points, world coords. Defaults to the item's top
+	 * face (the 3D lens); the 2D plan hangs the chip off the footprint's
+	 * screen-top edge instead, since height doesn't project there.
+	 */
+	anchor?: [number, number, number];
 	onRotate: () => void;
 	onDuplicate: () => void;
 	onDelete: () => void;
@@ -25,17 +31,20 @@ interface SelectionChipProps {
 
 export function SelectionChip({
 	item,
+	anchor,
 	onRotate,
 	onDuplicate,
 	onDelete,
 }: SelectionChipProps) {
 	return (
 		<Html
-			position={[
-				item.position.x,
-				item.footprint.height + CHIP_CLEARANCE,
-				item.position.y,
-			]}
+			position={
+				anchor ?? [
+					item.position.x,
+					item.footprint.height + CHIP_CLEARANCE,
+					item.position.y,
+				]
+			}
 			style={{ pointerEvents: "none" }}
 		>
 			<div className="pointer-events-none flex -translate-x-1/2 -translate-y-full flex-col items-center">

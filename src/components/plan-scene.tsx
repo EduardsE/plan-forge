@@ -1,5 +1,5 @@
-import { Html, Line } from "@react-three/drei";
-import { useMemo } from "react";
+import { Html, Line, useCursor } from "@react-three/drei";
+import { type ReactNode, useMemo, useState } from "react";
 import {
 	CanvasTexture,
 	MathUtils,
@@ -7,7 +7,15 @@ import {
 	Shape,
 	ShapeGeometry,
 	SRGBColorSpace,
+	Vector3,
 } from "three";
+import {
+	CLICK_SLOP_PX,
+	FLOOR_PLANE,
+	MoveDragSession,
+	useMoveDrag,
+} from "#/components/move-drag";
+import { SelectionChip } from "#/components/selection-chip";
 import type { FurnitureItem, Point, Room } from "#/lib/model";
 import {
 	catalogItemById,
@@ -15,6 +23,7 @@ import {
 	furnitureDisplayName,
 	outlineBounds,
 } from "#/lib/model";
+import { rotatedFootprintSize } from "#/lib/place";
 import {
 	circlePoints,
 	dashedPolyline,
@@ -31,6 +40,7 @@ import {
 	type WallHole,
 	type WallSolid,
 } from "#/lib/room-scene";
+import type { Unit } from "#/lib/units";
 
 /**
  * The 2D plan lens (mockup screen 1b): the same room model presented as an
@@ -38,6 +48,9 @@ import {
  * furniture footprints — with DOM (`<Html>`) overlays for labels, external
  * dimension lines and the room area card, so text stays crisp at any zoom.
  * Every color and proportion is lifted from `design/planforge-mockups.html`.
+ * Footprints pick like the 3D lens's furniture: hover/selected strokes go
+ * accent-cyan, selection adds a halo ring plus the shared chip, and dragging
+ * a selected footprint moves it through the shared move-drag session.
  *
  * Every stroke disables the line material's alpha-to-coverage: with it on,
  * some GPUs resolve a line's coverage-discarded fragments as opaque
@@ -111,6 +124,29 @@ const FOOTPRINT_FALLBACK: FootprintStyle = {
 	radius: 0.04,
 };
 const PLANT_FILL = "#4f7d46";
+
+/** Hover/selection stroke on the white plan sheet — the accent gradient's
+ * darker end (the 3D lens's #2dd4ee washes out against the pale floor). */
+const SELECTION_COLOR = "#0ea5e9";
+/** Gap between a selected footprint's edge and its halo ring, meters. */
+const HALO_GAP = 0.06;
+/** Extra fill strength while an item is selected. */
+const SELECTED_FILL_BOOST = 0.08;
+/** Gap between a footprint's screen-top edge and the chip's leader line. */
+const CHIP_GAP = 0.12;
+
+/** Raycast opt-out for the strokes inside a pickable footprint group — the
+ * fill mesh alone defines the hit area (drei Line quads overshoot it). */
+const noRaycast = () => null;
+
+/** The halo ring keeps a constant gap, so its corners round a touch more. */
+function haloRadius(
+	radius: number | [number, number, number, number],
+): number | [number, number, number, number] {
+	return Array.isArray(radius)
+		? (radius.map((r) => r + HALO_GAP) as [number, number, number, number])
+		: radius + HALO_GAP;
+}
 
 const LABEL_CLASS =
 	"whitespace-nowrap font-mono text-[10px] tracking-[0.1em] text-[#475569]";
@@ -334,19 +370,94 @@ function labelReadsVertically(item: FurnitureItem): boolean {
 	return quarterTurned ? width > depth : depth > width;
 }
 
-function PlantFootprint({ item }: { item: FurnitureItem }) {
+/**
+ * Picking behavior shared by every plan footprint, mirroring the 3D lens's
+ * FurnitureMesh contract: hover cursor, click-to-select with the drag slop
+ * guard, and a pointerdown on the already-selected item arming a move drag.
+ * `children` renders the footprint at the origin, styled for `active`
+ * (hovered or selected); rotation stays inside so plant symbols can skip it.
+ */
+function PickableFootprint({
+	item,
+	selected,
+	onSelect,
+	onDragStart,
+	children,
+}: {
+	item: FurnitureItem;
+	selected: boolean;
+	onSelect: (id: string) => void;
+	onDragStart: (
+		item: FurnitureItem,
+		floorPoint: Point,
+		screen: { x: number; y: number },
+	) => void;
+	children: (active: boolean) => ReactNode;
+}) {
+	const [hovered, setHovered] = useState(false);
+	useCursor(hovered);
+	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: <group> is an R3F scene node, not a DOM element.
+		<group
+			position={[item.position.x, 0, item.position.y]}
+			onClick={(event) => {
+				// A drag that ends on a footprint is a camera pan, not a pick.
+				if (event.delta > CLICK_SLOP_PX) return;
+				event.stopPropagation();
+				onSelect(item.id);
+			}}
+			onPointerDown={(event) => {
+				// Only a selected item arms a move drag — the first press picks,
+				// the next press-and-drag moves (right button still pans).
+				if (!selected || event.button !== 0) return;
+				const hit = new Vector3();
+				if (!event.ray.intersectPlane(FLOOR_PLANE, hit)) return;
+				event.stopPropagation();
+				onDragStart(
+					item,
+					{ x: hit.x, y: hit.z },
+					{ x: event.clientX, y: event.clientY },
+				);
+			}}
+			onPointerOver={(event) => {
+				event.stopPropagation();
+				setHovered(true);
+			}}
+			onPointerOut={() => setHovered(false)}
+		>
+			{children(selected || hovered)}
+		</group>
+	);
+}
+
+function PlantFootprint({
+	item,
+	active,
+	selected,
+}: {
+	item: FurnitureItem;
+	active: boolean;
+	selected: boolean;
+}) {
 	const radius = item.footprint.width / 2;
 	const outline = useMemo(() => circlePoints(radius), [radius]);
 	const shape = useMemo(() => shapeFromPoints(outline), [outline]);
+	const halo = useMemo(() => circlePoints(radius + HALO_GAP), [radius]);
 	const cross = 0.66 * radius * Math.SQRT1_2;
 	return (
-		<group position={[item.position.x, 0, item.position.y]}>
-			<FlatShape shapes={shape} y={FILL_Y} color={PLANT_FILL} opacity={0.16} />
+		<group>
+			<FlatShape
+				shapes={shape}
+				y={FILL_Y}
+				color={PLANT_FILL}
+				opacity={selected ? 0.16 + SELECTED_FILL_BOOST : 0.16}
+			/>
 			<Line
 				points={[...outline, outline[0]].map((p) => v3(p, LINE_Y))}
-				color={SYMBOL_COLOR}
-				lineWidth={2}
+				color={active ? SELECTION_COLOR : SYMBOL_COLOR}
+				lineWidth={selected ? 2.5 : 2}
 				alphaToCoverage={false}
+				raycast={noRaycast}
 			/>
 			{[1, -1].map((sign) => (
 				<Line
@@ -358,8 +469,20 @@ function PlantFootprint({ item }: { item: FurnitureItem }) {
 					color={SYMBOL_COLOR}
 					lineWidth={2}
 					alphaToCoverage={false}
+					raycast={noRaycast}
 				/>
 			))}
+			{selected && (
+				<Line
+					points={[...halo, halo[0]].map((p) => v3(p, LINE_Y))}
+					color={SELECTION_COLOR}
+					lineWidth={1.5}
+					transparent
+					opacity={0.45}
+					alphaToCoverage={false}
+					raycast={noRaycast}
+				/>
+			)}
 			<Html
 				position={[0, LINE_Y, radius + 0.18]}
 				center
@@ -371,7 +494,15 @@ function PlantFootprint({ item }: { item: FurnitureItem }) {
 	);
 }
 
-function FurnitureFootprint({ item }: { item: FurnitureItem }) {
+function FurnitureFootprint({
+	item,
+	active,
+	selected,
+}: {
+	item: FurnitureItem;
+	active: boolean;
+	selected: boolean;
+}) {
 	const style = FOOTPRINT_STYLES[item.catalogId] ?? {
 		...FOOTPRINT_FALLBACK,
 		label: furnitureDisplayName(item.catalogId).toUpperCase(),
@@ -382,6 +513,15 @@ function FurnitureFootprint({ item }: { item: FurnitureItem }) {
 		[width, depth, style.radius],
 	);
 	const shape = useMemo(() => shapeFromPoints(outline), [outline]);
+	const halo = useMemo(
+		() =>
+			roundedRectPoints(
+				width + 2 * HALO_GAP,
+				depth + 2 * HALO_GAP,
+				haloRadius(style.radius),
+			),
+		[width, depth, style.radius],
+	);
 	const isRug = style.dashed === true;
 	const border = useMemo(() => {
 		const loop = [...outline, outline[0]];
@@ -410,23 +550,34 @@ function FurnitureFootprint({ item }: { item: FurnitureItem }) {
 		</Html>
 	);
 	return (
-		<group
-			position={[item.position.x, 0, item.position.y]}
-			rotation-y={MathUtils.degToRad(item.rotation)}
-		>
+		<group rotation-y={MathUtils.degToRad(item.rotation)}>
 			<FlatShape
 				shapes={shape}
 				y={isRug ? RUG_FILL_Y : FILL_Y}
 				color={style.fill}
-				opacity={style.fillOpacity}
+				opacity={
+					selected ? style.fillOpacity + SELECTED_FILL_BOOST : style.fillOpacity
+				}
 			/>
 			<Line
 				segments={isRug}
 				points={border.map((p) => v3(p, isRug ? RUG_LINE_Y : LINE_Y))}
-				color={isRug ? "#9aa9c7" : SYMBOL_COLOR}
-				lineWidth={2}
+				color={active ? SELECTION_COLOR : isRug ? "#9aa9c7" : SYMBOL_COLOR}
+				lineWidth={selected ? 2.5 : 2}
 				alphaToCoverage={false}
+				raycast={noRaycast}
 			/>
+			{selected && (
+				<Line
+					points={[...halo, halo[0]].map((p) => v3(p, LINE_Y))}
+					color={SELECTION_COLOR}
+					lineWidth={1.5}
+					transparent
+					opacity={0.45}
+					alphaToCoverage={false}
+					raycast={noRaycast}
+				/>
+			)}
 			{label}
 		</group>
 	);
@@ -486,7 +637,31 @@ function DimensionLine({
 	);
 }
 
-export function PlanScene({ room }: { room: Room }) {
+export interface PlanSceneProps {
+	room: Room;
+	selectedId: string | null;
+	unit: Unit;
+	onSelectItem: (id: string) => void;
+	onRotateItem: (id: string) => void;
+	onDuplicateItem: (id: string) => void;
+	onDeleteItem: (id: string) => void;
+	/** Live reposition during a move drag (already snapped). */
+	onMoveItem: (id: string, position: Point) => void;
+	/** A move drag started/ended — the canvas locks pan/zoom while it runs. */
+	onMoveActiveChange: (active: boolean) => void;
+}
+
+export function PlanScene({
+	room,
+	selectedId,
+	unit,
+	onSelectItem,
+	onRotateItem,
+	onDuplicateItem,
+	onDeleteItem,
+	onMoveItem,
+	onMoveActiveChange,
+}: PlanSceneProps) {
 	const solids = useMemo(() => buildWallSolids(room), [room]);
 	const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
 	const area = useMemo(() => floorArea(room.outline), [room.outline]);
@@ -514,6 +689,10 @@ export function PlanScene({ room }: { room: Room }) {
 		return shapes;
 	}, [solids]);
 
+	const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
+	const selectedItem =
+		room.furniture.find((item) => item.id === selectedId) ?? null;
+
 	if (!bounds || !floorShape) return null;
 	const dimensionOffset = WALL_THICKNESS + DIMENSION_GAP;
 	return (
@@ -529,12 +708,60 @@ export function PlanScene({ room }: { room: Room }) {
 			{solids.map((solid) => (
 				<WallOpenings key={solid.index} solid={solid} />
 			))}
-			{room.furniture.map((item) =>
-				catalogItemById(item.catalogId)?.category === "plants" ? (
-					<PlantFootprint key={item.id} item={item} />
-				) : (
-					<FurnitureFootprint key={item.id} item={item} />
-				),
+			{room.furniture.map((item) => (
+				<PickableFootprint
+					key={item.id}
+					item={item}
+					selected={item.id === selectedId}
+					onSelect={onSelectItem}
+					onDragStart={beginDrag}
+				>
+					{(active) =>
+						catalogItemById(item.catalogId)?.category === "plants" ? (
+							<PlantFootprint
+								item={item}
+								active={active}
+								selected={item.id === selectedId}
+							/>
+						) : (
+							<FurnitureFootprint
+								item={item}
+								active={active}
+								selected={item.id === selectedId}
+							/>
+						)
+					}
+				</PickableFootprint>
+			))}
+			{selectedItem && (
+				<SelectionChip
+					item={selectedItem}
+					// Height doesn't project under the straight-down camera; hang
+					// the chip off the footprint's screen-top edge instead.
+					anchor={[
+						selectedItem.position.x,
+						LINE_Y,
+						selectedItem.position.y -
+							rotatedFootprintSize(
+								selectedItem.footprint,
+								selectedItem.rotation,
+							).depth /
+								2 -
+							CHIP_GAP,
+					]}
+					onRotate={() => onRotateItem(selectedItem.id)}
+					onDuplicate={() => onDuplicateItem(selectedItem.id)}
+					onDelete={() => onDeleteItem(selectedItem.id)}
+				/>
+			)}
+			{drag && (
+				<MoveDragSession
+					outline={room.outline}
+					drag={drag}
+					unit={unit}
+					onMove={(position) => onMoveItem(drag.id, position)}
+					onEnd={endDrag}
+				/>
 			)}
 			<DimensionLine
 				from={{ x: bounds.min.x, y: bounds.min.y - dimensionOffset }}

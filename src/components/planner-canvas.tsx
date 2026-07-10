@@ -591,7 +591,7 @@ export function PlannerCanvas({
 	// Screen position of the last pointer-down, to tell orbit drags from
 	// picks in onPointerMissed (which only carries the raw MouseEvent).
 	const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
-	// A furniture move drag in the 3D scene; orbit controls pause for it.
+	// A furniture move drag in either lens; camera controls pause for it.
 	const [movingFurniture, setMovingFurniture] = useState(false);
 
 	const rotateItem = useCallback(
@@ -715,7 +715,17 @@ export function PlannerCanvas({
 							onRequestClose={onRequestCloseDraft}
 						/>
 					) : (
-						<PlanScene room={room} />
+						<PlanScene
+							room={room}
+							selectedId={selectedId}
+							unit={unit}
+							onSelectItem={setSelectedId}
+							onRotateItem={rotateItem}
+							onDuplicateItem={duplicateItem}
+							onDeleteItem={deleteItem}
+							onMoveItem={moveItem}
+							onMoveActiveChange={setMovingFurniture}
+						/>
 					)
 				) : (
 					<>

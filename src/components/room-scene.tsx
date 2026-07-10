@@ -1,13 +1,6 @@
 import { useCursor } from "@react-three/drei";
-import { useFrame, useThree } from "@react-three/fiber";
-import {
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useFrame } from "@react-three/fiber";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
 	BackSide,
 	CanvasTexture,
@@ -19,23 +12,20 @@ import {
 	type Mesh,
 	Object3D,
 	Path,
-	Plane,
-	Raycaster,
 	RepeatWrapping,
 	Shape,
 	SRGBColorSpace,
-	Vector2,
 	Vector3,
 } from "three";
+import {
+	CLICK_SLOP_PX,
+	FLOOR_PLANE,
+	MoveDragSession,
+	useMoveDrag,
+} from "#/components/move-drag";
 import { SelectionChip } from "#/components/selection-chip";
-import { SnapGuides } from "#/components/snap-guides";
 import type { FurnitureItem, Point, Room } from "#/lib/model";
 import { catalogItemById, outlineBounds } from "#/lib/model";
-import {
-	type PlacementGuide,
-	rotatedFootprintSize,
-	snapPlacement,
-} from "#/lib/place";
 import {
 	buildWallSolids,
 	cornerPosts,
@@ -116,17 +106,9 @@ function hullScale(
 		(depth + 2 * HULL_RIM) / depth,
 	];
 }
-/**
- * A click whose pointer travelled further than this (px) was an orbit drag
- * that happened to end on a mesh, not a pick.
- */
-const CLICK_SLOP_PX = 4;
 /** Raycast opt-out for scenery: only furniture is pickable, so any other
  * click reaches the canvas's pointer-missed handler and deselects. */
 const noRaycast = () => null;
-
-/** The y=0 floor plane a move drag tracks the pointer across. */
-const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 
 /**
  * Cutaway threshold on the wall-to-camera facing dot: slightly negative so
@@ -671,109 +653,6 @@ function KeyLight({ center }: { center: [number, number, number] }) {
 	);
 }
 
-/** A live move drag: which item, where it was grabbed, where it started. */
-interface MoveDrag {
-	id: string;
-	/** Grab offset from the item's center, plan coords — dragging keeps it. */
-	grab: Point;
-	/** Position at drag start, restored by esc. */
-	original: Point;
-	/** Axis-aligned size of the (possibly rotated) footprint for snapping. */
-	size: { width: number; depth: number };
-	/** Screen point of the pointerdown, for the drag-vs-click slop guard. */
-	originScreen: { x: number; y: number };
-}
-
-/**
- * The window-listener half of a move drag. Mounted per session (the pointer
- * is already down when it appears): raycasts pointermoves onto the floor
- * plane, feeds `snapPlacement` (same quantize / clamp / wall-flush as the
- * placement ghost) into `onMove`, and renders the wall-clearance guides.
- * Pointerup commits wherever the item is; esc restores `drag.original`.
- */
-function MoveDragSession({
-	outline,
-	drag,
-	unit,
-	onMove,
-	onEnd,
-}: {
-	outline: Point[];
-	drag: MoveDrag;
-	unit: Unit;
-	onMove: (position: Point) => void;
-	onEnd: () => void;
-}) {
-	const camera = useThree((state) => state.camera);
-	const gl = useThree((state) => state.gl);
-	const [guides, setGuides] = useState<PlacementGuide[]>([]);
-	// Latest callbacks without resubscribing the listeners mid-drag (onMove
-	// closes over the room, which changes on every move).
-	const moveRef = useRef(onMove);
-	moveRef.current = onMove;
-	const endRef = useRef(onEnd);
-	endRef.current = onEnd;
-
-	useEffect(() => {
-		const raycaster = new Raycaster();
-		const hit = new Vector3();
-		// Pointer-still-down presses shouldn't nudge the item onto the snap
-		// grid: nothing moves until the pointer clears the click slop.
-		let moved = false;
-		/**
-		 * Floor point under the pointer. Unlike the placement ghost this
-		 * ignores the event target — mid-drag the pointer may cross the
-		 * selection chip's DOM and tracking must not stall there.
-		 */
-		const toFloor = (event: PointerEvent): Point | null => {
-			const rect = gl.domElement.getBoundingClientRect();
-			if (rect.width === 0 || rect.height === 0) return null;
-			const ndc = new Vector2(
-				((event.clientX - rect.left) / rect.width) * 2 - 1,
-				-(((event.clientY - rect.top) / rect.height) * 2 - 1),
-			);
-			raycaster.setFromCamera(ndc, camera);
-			return raycaster.ray.intersectPlane(FLOOR_PLANE, hit)
-				? { x: hit.x, y: hit.z }
-				: null;
-		};
-		const handleMove = (event: PointerEvent) => {
-			if (!moved) {
-				const travel = Math.hypot(
-					event.clientX - drag.originScreen.x,
-					event.clientY - drag.originScreen.y,
-				);
-				if (travel <= CLICK_SLOP_PX) return;
-				moved = true;
-			}
-			const point = toFloor(event);
-			if (!point) return;
-			const snap = snapPlacement(outline, drag.size, {
-				x: point.x - drag.grab.x,
-				y: point.y - drag.grab.y,
-			});
-			moveRef.current(snap.center);
-			setGuides(snap.guides);
-		};
-		const handleUp = () => endRef.current();
-		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
-			moveRef.current(drag.original);
-			endRef.current();
-		};
-		window.addEventListener("pointermove", handleMove);
-		window.addEventListener("pointerup", handleUp);
-		window.addEventListener("keydown", handleKeyDown);
-		return () => {
-			window.removeEventListener("pointermove", handleMove);
-			window.removeEventListener("pointerup", handleUp);
-			window.removeEventListener("keydown", handleKeyDown);
-		};
-	}, [outline, drag, camera, gl]);
-
-	return <SnapGuides guides={guides} unit={unit} />;
-}
-
 export interface RoomSceneProps {
 	room: Room;
 	selectedId: string | null;
@@ -806,55 +685,7 @@ export function RoomScene({
 	const selectedItem =
 		room.furniture.find((item) => item.id === selectedId) ?? null;
 
-	const [drag, setDrag] = useState<MoveDrag | null>(null);
-	// The default controls (OrbitControls, via makeDefault). Toggled
-	// synchronously around a drag: the declarative lock prop flushes only
-	// after OrbitControls has accepted the pointerdown and eaten the first
-	// pointermoves as orbit.
-	const controls = useThree((state) => state.controls) as {
-		enabled: boolean;
-	} | null;
-	const controlsRef = useRef(controls);
-	controlsRef.current = controls;
-	const dragActiveRef = useRef(false);
-	const beginDrag = useCallback(
-		(
-			item: FurnitureItem,
-			floorPoint: Point,
-			screen: { x: number; y: number },
-		) => {
-			setDrag({
-				id: item.id,
-				grab: {
-					x: floorPoint.x - item.position.x,
-					y: floorPoint.y - item.position.y,
-				},
-				original: item.position,
-				size: rotatedFootprintSize(item.footprint, item.rotation),
-				originScreen: screen,
-			});
-			dragActiveRef.current = true;
-			if (controlsRef.current) controlsRef.current.enabled = false;
-			onMoveActiveChange(true);
-		},
-		[onMoveActiveChange],
-	);
-	const endDrag = useCallback(() => {
-		setDrag(null);
-		dragActiveRef.current = false;
-		if (controlsRef.current) controlsRef.current.enabled = true;
-		onMoveActiveChange(false);
-	}, [onMoveActiveChange]);
-	// A lens switch mid-drag unmounts the scene — don't leave orbit locked.
-	useEffect(
-		() => () => {
-			if (!dragActiveRef.current) return;
-			dragActiveRef.current = false;
-			if (controlsRef.current) controlsRef.current.enabled = true;
-			onMoveActiveChange(false);
-		},
-		[onMoveActiveChange],
-	);
+	const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
 	return (
 		<group>
 			<ambientLight color="#fff2de" intensity={1.15} />
