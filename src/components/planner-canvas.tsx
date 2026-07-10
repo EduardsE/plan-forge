@@ -572,6 +572,7 @@ export interface PlannerCanvasProps {
 	/** Closed draft: draw mode is reshaping the room, not placing corners. */
 	draftClosed: boolean;
 	onPlaceCorner: (point: Point) => void;
+	onPlaceRect: (a: Point, b: Point) => void;
 	onSetDraftSegmentLength: (segmentIndex: number, meters: number) => void;
 	onRequestCloseDraft: () => void;
 	onMoveDraftCorner: (index: number, point: Point) => void;
@@ -599,6 +600,7 @@ export function PlannerCanvas({
 	draftCorners,
 	draftClosed,
 	onPlaceCorner,
+	onPlaceRect,
 	onSetDraftSegmentLength,
 	onRequestCloseDraft,
 	onMoveDraftCorner,
@@ -837,7 +839,9 @@ export function PlannerCanvas({
 							unit={unit}
 							snapEnabled={snapEnabled}
 							placing={drawTool === "wall" && !draftClosed}
+							rectMode={drawTool === "rect"}
 							onPlaceCorner={onPlaceCorner}
+							onPlaceRect={onPlaceRect}
 							onSetSegmentLength={onSetDraftSegmentLength}
 							onRequestClose={onRequestCloseDraft}
 							onMoveCorner={onMoveDraftCorner}

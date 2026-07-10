@@ -19,7 +19,7 @@ import { UnitsToggle } from "#/components/units-toggle";
 import { ViewControls } from "#/components/view-controls";
 import { WorkspaceHeader } from "#/components/workspace-header";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
-import { setSegmentLength } from "#/lib/draw";
+import { rectangleOutline, setSegmentLength } from "#/lib/draw";
 import {
 	type CatalogItem,
 	createSampleRoom,
@@ -188,6 +188,16 @@ function Planner() {
 			),
 		[],
 	);
+	// The rect tool's two clicks: replace the draft with a fresh closed
+	// rectangle and hand off to Select so its corners drag / lengths edit like
+	// any closed draft. Openings drop (they belonged to a different outline);
+	// furniture that still fits is kept at commit by `applyOutlineDraft`.
+	const placeRect = useCallback((a: Point, b: Point) => {
+		const corners = rectangleOutline(a, b);
+		if (!corners) return;
+		setDraft({ corners, closed: true, openings: [] });
+		setDrawTool("select");
+	}, []);
 	const setDraftSegmentLength = useCallback(
 		(segmentIndex: number, meters: number) =>
 			setDraft((current) => ({
@@ -319,6 +329,7 @@ function Planner() {
 							draftCorners={draft.corners}
 							draftClosed={draft.closed}
 							onPlaceCorner={placeCorner}
+							onPlaceRect={placeRect}
 							onSetDraftSegmentLength={setDraftSegmentLength}
 							onRequestCloseDraft={closeDraft}
 							onMoveDraftCorner={moveDraftCorner}
@@ -350,7 +361,7 @@ function Planner() {
 				{viewMode === "draw" && (
 					<>
 						<DrawToolStack tool={drawTool} onToolChange={setDrawTool} />
-						<DrawHintBar editing={draft.closed} />
+						<DrawHintBar editing={draft.closed} rect={drawTool === "rect"} />
 					</>
 				)}
 				{viewMode === "2d" && (

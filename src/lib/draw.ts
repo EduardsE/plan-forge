@@ -147,6 +147,43 @@ export function snapDraftPoint(
 	return { point: { x, y }, axisSnapped, turnAngleDeg, alignment };
 }
 
+/** A rectangle side thinner than this (meters) is degenerate — no room. */
+const MIN_RECT_SIDE = 0.01;
+
+/**
+ * Snap a free cursor for the rect tool: quantize both axes to the draw grid
+ * (there's no last corner to axis-lock against — the two corners are placed
+ * independently). Raw cursor through when `snap` is off.
+ */
+export function snapRectPoint(cursor: Point, snap = true): Point {
+	if (!snap) return { x: cursor.x, y: cursor.y };
+	return {
+		x: quantize(cursor.x, DRAW_GRID_STEP),
+		y: quantize(cursor.y, DRAW_GRID_STEP),
+	};
+}
+
+/**
+ * The four corners of the axis-aligned rectangle spanning opposite corners
+ * `a` and `b`, wound clockwise in plan coords (x right, y down: top-left →
+ * top-right → bottom-right → bottom-left) to match the outline convention.
+ * Null when either side collapses (the two clicks landed on the same row or
+ * column) — the caller ignores such a second click.
+ */
+export function rectangleOutline(a: Point, b: Point): Point[] | null {
+	const minX = Math.min(a.x, b.x);
+	const maxX = Math.max(a.x, b.x);
+	const minY = Math.min(a.y, b.y);
+	const maxY = Math.max(a.y, b.y);
+	if (maxX - minX < MIN_RECT_SIDE || maxY - minY < MIN_RECT_SIDE) return null;
+	return [
+		{ x: minX, y: minY },
+		{ x: maxX, y: minY },
+		{ x: maxX, y: maxY },
+		{ x: minX, y: maxY },
+	];
+}
+
 /**
  * Set the true length of the drafted segment from corner `segmentIndex` to
  * the next corner, keeping its direction. The segment's end corner moves,

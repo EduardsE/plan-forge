@@ -10,7 +10,12 @@ import {
 	floorProjector,
 	useControlsPause,
 } from "#/components/move-drag";
-import { type DraftSnap, snapDraftPoint } from "#/lib/draw";
+import {
+	type DraftSnap,
+	rectangleOutline,
+	snapDraftPoint,
+	snapRectPoint,
+} from "#/lib/draw";
 import type { Point } from "#/lib/model";
 import {
 	type CornerGuide,
@@ -298,6 +303,59 @@ function DrawCursor({ at }: { at: Point }) {
 				<div className="-translate-x-1/2 -translate-y-1/2 absolute left-0 top-0 h-3.5 w-3.5 rounded-full bg-[#22D3EE] shadow-[0_0_0_5px_rgba(34,211,238,0.25),0_0_18px_rgba(34,211,238,0.7)]" />
 			</div>
 		</Html>
+	);
+}
+
+/** The cyan rectangle preview between the rect tool's two clicks, with a width
+ * label on the top edge and a height label on the right edge. Solid cyan (not
+ * the dashed preview language the open draft uses) on purpose: a dashed loop
+ * chops into ~50 segment quads that stall drei's `<Line>` on this GPU stack,
+ * and the cyan already reads as "not committed" against the navy strokes. */
+function RectPreview({ a, b, unit }: { a: Point; b: Point; unit: Unit }) {
+	const minX = Math.min(a.x, b.x);
+	const maxX = Math.max(a.x, b.x);
+	const minY = Math.min(a.y, b.y);
+	const maxY = Math.max(a.y, b.y);
+	const width = maxX - minX;
+	const height = maxY - minY;
+	const loop: Point[] = [
+		{ x: minX, y: minY },
+		{ x: maxX, y: minY },
+		{ x: maxX, y: maxY },
+		{ x: minX, y: maxY },
+		{ x: minX, y: minY },
+	];
+	return (
+		<group>
+			<Line
+				points={loop.map((p) => v3(p, PREVIEW_Y))}
+				color={SNAP_COLOR}
+				lineWidth={3.5}
+				alphaToCoverage={false}
+			/>
+			{width > MIN_SEGMENT && (
+				<Html
+					position={[(minX + maxX) / 2, LABEL_Y, minY - LABEL_OFFSET]}
+					center
+					style={{ pointerEvents: "none" }}
+				>
+					<span className="whitespace-nowrap rounded-lg border-[1.5px] border-[#22D3EE] bg-[rgba(34,211,238,0.10)] px-[11px] py-[3px] font-mono text-[13.5px] text-[#0F766E]">
+						{formatLength(width, unit)}
+					</span>
+				</Html>
+			)}
+			{height > MIN_SEGMENT && (
+				<Html
+					position={[maxX + LABEL_OFFSET, LABEL_Y, (minY + maxY) / 2]}
+					center
+					style={{ pointerEvents: "none" }}
+				>
+					<span className="whitespace-nowrap rounded-lg border-[1.5px] border-[#22D3EE] bg-[rgba(34,211,238,0.10)] px-[11px] py-[3px] font-mono text-[13.5px] text-[#0F766E]">
+						{formatLength(height, unit)}
+					</span>
+				</Html>
+			)}
+		</group>
 	);
 }
 
@@ -616,7 +674,11 @@ export interface DrawSceneProps {
 	snapEnabled: boolean;
 	/** Wall tool active on an open draft: clicks place corners, crosshair on. */
 	placing: boolean;
+	/** Rect tool active: two opposite-corner clicks draw a rectangular room. */
+	rectMode: boolean;
 	onPlaceCorner: (point: Point) => void;
+	/** Rect tool: the two clicked opposite corners define the new outline. */
+	onPlaceRect: (a: Point, b: Point) => void;
 	onSetSegmentLength: (segmentIndex: number, meters: number) => void;
 	/** Requested by clicking back on the start corner (≥ 3 corners placed). */
 	onRequestClose: () => void;
@@ -634,7 +696,9 @@ export function DrawScene({
 	unit,
 	snapEnabled,
 	placing,
+	rectMode,
 	onPlaceCorner,
+	onPlaceRect,
 	onSetSegmentLength,
 	onRequestClose,
 	onMoveCorner,
@@ -643,6 +707,29 @@ export function DrawScene({
 }: DrawSceneProps) {
 	const [snap, setSnap] = useState<DraftSnap | null>(null);
 	const [editingSegment, setEditingSegment] = useState<number | null>(null);
+	// Rect tool: the first clicked corner (null until the first click), and the
+	// live snapped cursor for the second. Cleared when the tool deactivates.
+	const [rectAnchor, setRectAnchor] = useState<Point | null>(null);
+	const [rectCursor, setRectCursor] = useState<Point | null>(null);
+	useEffect(() => {
+		if (!rectMode) {
+			setRectAnchor(null);
+			setRectCursor(null);
+		}
+	}, [rectMode]);
+	// Esc drops the in-progress rectangle without reverting the whole draft;
+	// capture-phase + stopPropagation keeps it away from the route's esc.
+	useEffect(() => {
+		if (!rectMode || !rectAnchor) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				event.stopPropagation();
+				setRectAnchor(null);
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown, true);
+		return () => window.removeEventListener("keydown", handleKeyDown, true);
+	}, [rectMode, rectAnchor]);
 
 	const centroid = useMemo(() => centroidOf(corners), [corners]);
 	const last = corners.at(-1);
@@ -660,17 +747,38 @@ export function DrawScene({
 	};
 
 	const handleMove = (event: ThreeEvent<PointerEvent>) => {
-		if (!placing) return;
 		const cursor = { x: event.point.x, y: event.point.z };
+		if (rectMode) {
+			setRectCursor(snapRectPoint(cursor, snapEnabled));
+			return;
+		}
+		if (!placing) return;
 		setSnap(snapDraftPoint(corners, cursor, toleranceOf(event), snapEnabled));
 	};
 
 	const handleClick = (event: ThreeEvent<MouseEvent>) => {
-		if (!placing) return;
+		if (!placing && !rectMode) return;
 		// Clicks on DOM overlays (length pills) also raycast through to this
 		// plane; only true canvas clicks may place corners.
 		if (!(event.nativeEvent.target instanceof HTMLCanvasElement)) return;
 		if (event.delta > CLICK_SLOP_PX) return;
+		if (rectMode) {
+			const corner = snapRectPoint(
+				{ x: event.point.x, y: event.point.z },
+				snapEnabled,
+			);
+			if (!rectAnchor) {
+				setRectAnchor(corner);
+				return;
+			}
+			// Ignore a second click that would collapse the rectangle (same row
+			// or column) — keep the anchor and wait for a real opposite corner.
+			if (rectangleOutline(rectAnchor, corner)) {
+				onPlaceRect(rectAnchor, corner);
+				setRectAnchor(null);
+			}
+			return;
+		}
 		const tolerance = toleranceOf(event);
 		const { point } = snapDraftPoint(
 			corners,
@@ -699,7 +807,10 @@ export function DrawScene({
 				rotation-x={-Math.PI / 2}
 				position-y={0.001}
 				onPointerMove={handleMove}
-				onPointerOut={() => setSnap(null)}
+				onPointerOut={() => {
+					setSnap(null);
+					setRectCursor(null);
+				}}
 				onClick={handleClick}
 			>
 				<planeGeometry args={[1000, 1000]} />
@@ -717,23 +828,24 @@ export function DrawScene({
 				/>
 			)}
 
-			{corners.slice(0, closed ? undefined : -1).map((corner, index) => (
-				<SegmentLabel
-					// biome-ignore lint/suspicious/noArrayIndexKey: segments are identified by position in the draft
-					key={index}
-					a={corner}
-					b={corners[(index + 1) % corners.length]}
-					unit={unit}
-					centroid={centroid}
-					editing={editingSegment === index}
-					onBeginEdit={() => setEditingSegment(index)}
-					onCommit={(meters) => {
-						onSetSegmentLength(index, meters);
-						setEditingSegment(null);
-					}}
-					onCancel={() => setEditingSegment(null)}
-				/>
-			))}
+			{!rectMode &&
+				corners.slice(0, closed ? undefined : -1).map((corner, index) => (
+					<SegmentLabel
+						// biome-ignore lint/suspicious/noArrayIndexKey: segments are identified by position in the draft
+						key={index}
+						a={corner}
+						b={corners[(index + 1) % corners.length]}
+						unit={unit}
+						centroid={centroid}
+						editing={editingSegment === index}
+						onBeginEdit={() => setEditingSegment(index)}
+						onCommit={(meters) => {
+							onSetSegmentLength(index, meters);
+							setEditingSegment(null);
+						}}
+						onCancel={() => setEditingSegment(null)}
+					/>
+				))}
 
 			{preview && last && distance(last, preview.point) > MIN_SEGMENT && (
 				<group>
@@ -783,7 +895,7 @@ export function DrawScene({
 					/>
 				))}
 
-			{closed && (
+			{closed && !rectMode && (
 				<OutlineEditLayer
 					corners={corners}
 					snapEnabled={snapEnabled}
@@ -792,6 +904,12 @@ export function DrawScene({
 					onDragActiveChange={onDragActiveChange}
 				/>
 			)}
+
+			{rectMode && rectAnchor && rectCursor && (
+				<RectPreview a={rectAnchor} b={rectCursor} unit={unit} />
+			)}
+			{rectMode && rectAnchor && <CornerDot at={rectAnchor} isStart={true} />}
+			{rectMode && rectCursor && <DrawCursor at={rectCursor} />}
 
 			{!closed && placing && snap && <DrawCursor at={snap.point} />}
 		</group>

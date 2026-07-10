@@ -1,7 +1,9 @@
 /**
  * Bottom-center helper hint bar for draw mode (mockup screen 1c): what a
- * click does plus the ⏎ / esc keys, in a dark navy pill. Editing an existing
- * outline (a closed draft) swaps the copy to the reshaping gestures.
+ * click does plus the ⏎ / esc keys, in a dark navy pill. The rect tool swaps
+ * the copy to its two-click gesture; otherwise editing an existing outline (a
+ * closed draft) shows the reshaping gestures, and fresh drawing the placement
+ * ones.
  */
 
 function Key({ children }: { children: string }) {
@@ -22,10 +24,24 @@ function Hint({ children }: { children: React.ReactNode }) {
 
 const DIVIDER = <span className="text-white/25">·</span>;
 
-export function DrawHintBar({ editing = false }: { editing?: boolean }) {
+export function DrawHintBar({
+	editing = false,
+	rect = false,
+}: {
+	editing?: boolean;
+	rect?: boolean;
+}) {
 	return (
 		<div className="-translate-x-1/2 absolute bottom-11 left-1/2 flex items-center gap-2.5 rounded-full bg-[rgba(13,22,48,0.88)] px-[18px] py-[9px] shadow-[0_14px_34px_rgba(13,22,48,0.3)]">
-			{editing ? (
+			{rect ? (
+				<>
+					<Hint>Click two opposite corners</Hint>
+					{DIVIDER}
+					<Hint>
+						<Key>esc</Key> cancel
+					</Hint>
+				</>
+			) : editing ? (
 				<>
 					<Hint>Drag corners to reshape</Hint>
 					{DIVIDER}

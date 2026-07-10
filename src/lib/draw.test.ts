@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { setSegmentLength, snapDraftPoint } from "./draw";
+import {
+	rectangleOutline,
+	setSegmentLength,
+	snapDraftPoint,
+	snapRectPoint,
+} from "./draw";
 
 const TOL = 0.1;
 
@@ -92,6 +97,43 @@ describe("snapDraftPoint", () => {
 		expect(snap.axisSnapped).toBe(false);
 		expect(snap.alignment).toBeNull();
 		expect(snap.turnAngleDeg).toBeNull();
+	});
+});
+
+describe("snapRectPoint", () => {
+	it("quantizes both axes to the 5 cm draw grid", () => {
+		expect(snapRectPoint({ x: 2.03, y: 1.28 })).toEqual({ x: 2.05, y: 1.3 });
+	});
+
+	it("passes the raw cursor through when snapping is off", () => {
+		expect(snapRectPoint({ x: 2.03, y: 1.28 }, false)).toEqual({
+			x: 2.03,
+			y: 1.28,
+		});
+	});
+});
+
+describe("rectangleOutline", () => {
+	it("winds clockwise from two opposite corners regardless of click order", () => {
+		const expected = [
+			{ x: 0, y: 0 },
+			{ x: 6.4, y: 0 },
+			{ x: 6.4, y: 5.2 },
+			{ x: 0, y: 5.2 },
+		];
+		// Bottom-right dragged from the top-left, and the reverse.
+		expect(rectangleOutline({ x: 0, y: 0 }, { x: 6.4, y: 5.2 })).toEqual(
+			expected,
+		);
+		expect(rectangleOutline({ x: 6.4, y: 5.2 }, { x: 0, y: 0 })).toEqual(
+			expected,
+		);
+	});
+
+	it("returns null when either side collapses", () => {
+		expect(rectangleOutline({ x: 1, y: 1 }, { x: 1, y: 4 })).toBeNull();
+		expect(rectangleOutline({ x: 1, y: 1 }, { x: 4, y: 1 })).toBeNull();
+		expect(rectangleOutline({ x: 1, y: 1 }, { x: 1, y: 1 })).toBeNull();
 	});
 });
 
