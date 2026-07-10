@@ -20,6 +20,11 @@ import { WorkspaceHeader } from "#/components/workspace-header";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
 import { setSegmentLength } from "#/lib/draw";
 import { type CatalogItem, createSampleRoom, type Point } from "#/lib/model";
+import {
+	deserializeSavedState,
+	STORAGE_KEY,
+	serializeSavedState,
+} from "#/lib/persistence";
 import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -43,6 +48,40 @@ function Planner() {
 	useEffect(() => {
 		setCanvasReady(true);
 	}, []);
+
+	// Autosave: hydrate once after mount (SSR renders the sample room —
+	// localStorage only exists on the client), then write back on every room
+	// or unit change. `lastSavedRef` holds the last payload written or loaded,
+	// so hydration itself doesn't count as a save and reloads keep the honest
+	// saved-at time instead of resetting the clock to "just now".
+	const [savedAt, setSavedAt] = useState<number | null>(null);
+	const [storageReady, setStorageReady] = useState(false);
+	const lastSavedRef = useRef<string | null>(null);
+	useEffect(() => {
+		const saved = deserializeSavedState(localStorage.getItem(STORAGE_KEY));
+		if (saved) {
+			setRoom(saved.room);
+			setUnit(saved.unit);
+			setSavedAt(saved.savedAt);
+			lastSavedRef.current = JSON.stringify({
+				room: saved.room,
+				unit: saved.unit,
+			});
+		}
+		setStorageReady(true);
+	}, []);
+	useEffect(() => {
+		if (!storageReady) return;
+		const payload = JSON.stringify({ room, unit });
+		if (payload === lastSavedRef.current) return;
+		lastSavedRef.current = payload;
+		const now = Date.now();
+		localStorage.setItem(
+			STORAGE_KEY,
+			serializeSavedState({ room, unit, savedAt: now }),
+		);
+		setSavedAt(now);
+	}, [storageReady, room, unit]);
 
 	// The draw-mode draft outline. Owned here (not by the canvas) so the
 	// header's status line can count corners and closing can become the room.
@@ -91,6 +130,26 @@ function Planner() {
 		setViewMode("2d");
 	}, [draft]);
 	const cancelDraft = useCallback(() => setDraft([]), []);
+
+	// The "new room" escape hatch: clear the room (autosave persists the
+	// cleared state, wiping the old save) and start over in draw mode.
+	const startNewRoom = useCallback(() => {
+		if (
+			!window.confirm(
+				"Start a new room? The current room and its autosave will be cleared.",
+			)
+		) {
+			return;
+		}
+		setRoom({
+			name: "Untitled room",
+			outline: [],
+			openings: [],
+			furniture: [],
+		});
+		setDraft([]);
+		setViewMode("draw");
+	}, []);
 
 	// ⏎ closes the outline into the room model, esc cancels the draft —
 	// unless the keystroke belongs to the inline length input.
@@ -142,6 +201,9 @@ function Planner() {
 				)}
 				<WorkspaceHeader
 					mode={viewMode}
+					roomName={room.name ?? "Untitled room"}
+					savedAt={savedAt}
+					onNewRoom={startNewRoom}
 					draftCornerCount={draft.length}
 					placingName={placing?.item.name ?? null}
 					shifted={objectsOpen}
