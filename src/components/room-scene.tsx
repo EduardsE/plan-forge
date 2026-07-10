@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
 	BackSide,
 	CanvasTexture,
+	Color,
 	type DirectionalLight,
 	DoubleSide,
 	ExtrudeGeometry,
@@ -24,6 +25,7 @@ import {
 	useMoveDrag,
 } from "#/components/move-drag";
 import { SelectionChip } from "#/components/selection-chip";
+import { overlappingFurnitureIds } from "#/lib/collision";
 import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
 import { catalogItemById, outlineBounds } from "#/lib/model";
 import { furnitureObstacle } from "#/lib/place";
@@ -92,6 +94,13 @@ const PLANT_FOLIAGE_COLOR = "#669758";
 
 /** Mockup's selection stroke: rgba(45,212,238,.7) on the desk chair faces. */
 const SELECTION_COLOR = "#2dd4ee";
+/** Collision-warning tint mixed into a body that overlaps a neighbor. */
+const WARNING_COLOR = "#e0533a";
+const WARNING_MIX = 0.55;
+/** Blend a furniture color toward the warning red (soft overlap cue). */
+function warnColor(base: string): string {
+	return new Color(base).lerp(new Color(WARNING_COLOR), WARNING_MIX).getStyle();
+}
 /** Rim the selection hull adds around an item's silhouette, meters. */
 const HULL_RIM = 0.02;
 
@@ -472,11 +481,14 @@ function Walls({ room }: { room: Room }) {
 function FurnitureMesh({
 	item,
 	selected,
+	warning,
 	onSelect,
 	onDragStart,
 }: {
 	item: FurnitureItem;
 	selected: boolean;
+	/** Footprint overlaps a neighbor: tint the body as a soft warning. */
+	warning: boolean;
 	onSelect: (id: string) => void;
 	/** Pointer went down on the selected item: begin a move drag. */
 	onDragStart: (
@@ -541,11 +553,17 @@ function FurnitureMesh({
 				{shadow}
 				<mesh position-y={FLOOR_TOP + 0.017 + potHeight / 2}>
 					<cylinderGeometry args={[width * 0.5, width * 0.38, potHeight, 20]} />
-					<meshLambertMaterial color={PLANT_POT_COLOR} />
+					<meshLambertMaterial
+						color={warning ? warnColor(PLANT_POT_COLOR) : PLANT_POT_COLOR}
+					/>
 				</mesh>
 				<mesh position-y={height - foliageRadius / 2} scale={[1, 0.92, 1]}>
 					<sphereGeometry args={[foliageRadius, 24, 18]} />
-					<meshLambertMaterial color={PLANT_FOLIAGE_COLOR} />
+					<meshLambertMaterial
+						color={
+							warning ? warnColor(PLANT_FOLIAGE_COLOR) : PLANT_FOLIAGE_COLOR
+						}
+					/>
 				</mesh>
 				{active && (
 					<>
@@ -587,7 +605,7 @@ function FurnitureMesh({
 				{!item.mount && shadow}
 				<mesh position-y={bodyY}>
 					<boxGeometry args={[width, height, depth]} />
-					<meshLambertMaterial color={color} />
+					<meshLambertMaterial color={warning ? warnColor(color) : color} />
 				</mesh>
 				{active && (
 					<mesh
@@ -693,6 +711,10 @@ export function RoomScene({
 		: [0, 0, 0];
 	const selectedItem =
 		room.furniture.find((item) => item.id === selectedId) ?? null;
+	const warnings = useMemo(
+		() => overlappingFurnitureIds(room.furniture),
+		[room.furniture],
+	);
 
 	const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
 	// Every placed item except the one being dragged is a snap neighbor.
@@ -720,6 +742,7 @@ export function RoomScene({
 					key={item.id}
 					item={item}
 					selected={item.id === selectedId}
+					warning={warnings.has(item.id)}
 					onSelect={onSelectItem}
 					onDragStart={beginDrag}
 				/>

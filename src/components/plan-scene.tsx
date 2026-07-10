@@ -17,6 +17,7 @@ import {
 } from "#/components/move-drag";
 import { PlanOpenings } from "#/components/plan-openings";
 import { SelectionChip } from "#/components/selection-chip";
+import { overlappingFurnitureIds } from "#/lib/collision";
 import type {
 	FurnitureItem,
 	FurnitureUpdate,
@@ -139,6 +140,10 @@ const SELECTION_COLOR = "#0ea5e9";
 const HALO_GAP = 0.06;
 /** Extra fill strength while an item is selected. */
 const SELECTED_FILL_BOOST = 0.08;
+/** Collision-warning tint on a footprint that overlaps another (soft cue). */
+const WARNING_COLOR = "#e0533a";
+/** Extra fill strength while an item overlaps a neighbor. */
+const WARNING_FILL_BOOST = 0.12;
 /** Gap between a footprint's screen-top edge and the chip's leader line. */
 const CHIP_GAP = 0.12;
 
@@ -441,10 +446,12 @@ function PlantFootprint({
 	item,
 	active,
 	selected,
+	warning,
 }: {
 	item: FurnitureItem;
 	active: boolean;
 	selected: boolean;
+	warning: boolean;
 }) {
 	const radius = item.footprint.width / 2;
 	const outline = useMemo(() => circlePoints(radius), [radius]);
@@ -456,12 +463,17 @@ function PlantFootprint({
 			<FlatShape
 				shapes={shape}
 				y={FILL_Y}
-				color={PLANT_FILL}
-				opacity={selected ? 0.16 + SELECTED_FILL_BOOST : 0.16}
+				color={warning ? WARNING_COLOR : PLANT_FILL}
+				opacity={
+					(selected ? 0.16 + SELECTED_FILL_BOOST : 0.16) +
+					(warning ? WARNING_FILL_BOOST : 0)
+				}
 			/>
 			<Line
 				points={[...outline, outline[0]].map((p) => v3(p, LINE_Y))}
-				color={active ? SELECTION_COLOR : SYMBOL_COLOR}
+				color={
+					active ? SELECTION_COLOR : warning ? WARNING_COLOR : SYMBOL_COLOR
+				}
 				lineWidth={selected ? 2.5 : 2}
 				alphaToCoverage={false}
 				raycast={noRaycast}
@@ -505,10 +517,12 @@ function FurnitureFootprint({
 	item,
 	active,
 	selected,
+	warning,
 }: {
 	item: FurnitureItem;
 	active: boolean;
 	selected: boolean;
+	warning: boolean;
 }) {
 	const style = FOOTPRINT_STYLES[item.catalogId] ?? {
 		...FOOTPRINT_FALLBACK,
@@ -561,15 +575,25 @@ function FurnitureFootprint({
 			<FlatShape
 				shapes={shape}
 				y={isRug ? RUG_FILL_Y : FILL_Y}
-				color={style.fill}
+				color={warning ? WARNING_COLOR : style.fill}
 				opacity={
-					selected ? style.fillOpacity + SELECTED_FILL_BOOST : style.fillOpacity
+					(selected
+						? style.fillOpacity + SELECTED_FILL_BOOST
+						: style.fillOpacity) + (warning ? WARNING_FILL_BOOST : 0)
 				}
 			/>
 			<Line
 				segments={isRug}
 				points={border.map((p) => v3(p, isRug ? RUG_LINE_Y : LINE_Y))}
-				color={active ? SELECTION_COLOR : isRug ? "#9aa9c7" : SYMBOL_COLOR}
+				color={
+					active
+						? SELECTION_COLOR
+						: warning
+							? WARNING_COLOR
+							: isRug
+								? "#9aa9c7"
+								: SYMBOL_COLOR
+				}
 				lineWidth={selected ? 2.5 : 2}
 				alphaToCoverage={false}
 				raycast={noRaycast}
@@ -722,6 +746,10 @@ export function PlanScene({
 	}, [solids]);
 
 	const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
+	const warnings = useMemo(
+		() => overlappingFurnitureIds(room.furniture),
+		[room.furniture],
+	);
 	const selectedItem =
 		room.furniture.find((item) => item.id === selectedId) ?? null;
 	// Every placed item except the one being dragged is a snap neighbor.
@@ -774,12 +802,14 @@ export function PlanScene({
 								item={item}
 								active={active}
 								selected={item.id === selectedId}
+								warning={warnings.has(item.id)}
 							/>
 						) : (
 							<FurnitureFootprint
 								item={item}
 								active={active}
 								selected={item.id === selectedId}
+								warning={warnings.has(item.id)}
 							/>
 						)
 					}

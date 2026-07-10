@@ -37,6 +37,7 @@ import {
 	planFitZoom,
 	wrapAngle,
 } from "#/lib/camera";
+import { containRoomFurniture } from "#/lib/collision";
 import {
 	addFurniture,
 	addOpening,
@@ -643,7 +644,12 @@ export function PlannerCanvas({
 	}, []);
 
 	const rotateItem = useCallback(
-		(id: string) => onRoomChange(rotateFurniture(room, id, ROTATE_STEP_DEG)),
+		// A 90° turn grows the footprint's hull along the wall it faced; contain
+		// it so the spun item can't poke through (a duplicated copy likewise).
+		(id: string) =>
+			onRoomChange(
+				containRoomFurniture(rotateFurniture(room, id, ROTATE_STEP_DEG), id),
+			),
 		[room, onRoomChange],
 	);
 	const moveItem = useCallback(
@@ -654,7 +660,9 @@ export function PlannerCanvas({
 	const duplicateItem = useCallback(
 		(id: string) => {
 			const newId = crypto.randomUUID();
-			onRoomChange(duplicateFurniture(room, id, newId));
+			onRoomChange(
+				containRoomFurniture(duplicateFurniture(room, id, newId), newId),
+			);
 			setSelectedId(newId);
 		},
 		[room, onRoomChange],
