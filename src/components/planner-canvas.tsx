@@ -23,6 +23,7 @@ import {
 } from "three";
 import { DrawScene } from "#/components/draw-scene";
 import type { DrawTool } from "#/components/draw-tool-stack";
+import { PlacementGhost } from "#/components/placement-ghost";
 import { PlanScene } from "#/components/plan-scene";
 import { RoomScene } from "#/components/room-scene";
 import {
@@ -36,6 +37,8 @@ import {
 	wrapAngle,
 } from "#/lib/camera";
 import {
+	addFurniture,
+	type CatalogItem,
 	duplicateFurniture,
 	outlineBounds,
 	type Point,
@@ -545,6 +548,10 @@ export interface PlannerCanvasProps {
 	onPlaceCorner: (point: Point) => void;
 	onSetDraftSegmentLength: (segmentIndex: number, meters: number) => void;
 	onRequestCloseDraft: () => void;
+	/** Catalog item mid-drag from the objects panel, if any. */
+	placingItem: CatalogItem | null;
+	/** Placement session over — dropped or cancelled (route clears it). */
+	onPlacingEnd: () => void;
 }
 
 export function PlannerCanvas({
@@ -559,6 +566,8 @@ export function PlannerCanvas({
 	onPlaceCorner,
 	onSetDraftSegmentLength,
 	onRequestCloseDraft,
+	placingItem,
+	onPlacingEnd,
 }: PlannerCanvasProps) {
 	// Same lens split as the 2D|3D pill: draw is a top-down 2D flow, the
 	// objects catalog drops onto the 3D dollhouse.
@@ -592,6 +601,32 @@ export function PlannerCanvas({
 			setSelectedId(null);
 		},
 		[room, onRoomChange],
+	);
+
+	// A placement drag takes over the scene; a leftover selection chip would
+	// sit between the pointer and the floor (its DOM would eat the drop).
+	useEffect(() => {
+		if (placingItem) setSelectedId(null);
+	}, [placingItem]);
+
+	const placeDraggedItem = useCallback(
+		(center: Point) => {
+			if (!placingItem) return;
+			const id = crypto.randomUUID();
+			onRoomChange(
+				addFurniture(room, {
+					id,
+					catalogId: placingItem.id,
+					position: center,
+					rotation: 0,
+					footprint: placingItem.footprint,
+				}),
+			);
+			// Selection follows the drop, same as duplicate.
+			setSelectedId(id);
+			onPlacingEnd();
+		},
+		[placingItem, room, onRoomChange, onPlacingEnd],
 	);
 
 	return (
@@ -666,14 +701,25 @@ export function PlannerCanvas({
 						<PlanScene room={room} />
 					)
 				) : (
-					<RoomScene
-						room={room}
-						selectedId={selectedId}
-						onSelectItem={setSelectedId}
-						onRotateItem={rotateItem}
-						onDuplicateItem={duplicateItem}
-						onDeleteItem={deleteItem}
-					/>
+					<>
+						<RoomScene
+							room={room}
+							selectedId={selectedId}
+							onSelectItem={setSelectedId}
+							onRotateItem={rotateItem}
+							onDuplicateItem={duplicateItem}
+							onDeleteItem={deleteItem}
+						/>
+						{placingItem && (
+							<PlacementGhost
+								outline={room.outline}
+								item={placingItem}
+								unit={unit}
+								onPlace={placeDraggedItem}
+								onCancel={onPlacingEnd}
+							/>
+						)}
+					</>
 				)}
 			</Canvas>
 		</div>

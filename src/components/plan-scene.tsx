@@ -9,7 +9,12 @@ import {
 	SRGBColorSpace,
 } from "three";
 import type { FurnitureItem, Point, Room } from "#/lib/model";
-import { floorArea, outlineBounds } from "#/lib/model";
+import {
+	catalogItemById,
+	floorArea,
+	furnitureDisplayName,
+	outlineBounds,
+} from "#/lib/model";
 import {
 	circlePoints,
 	dashedPolyline,
@@ -369,7 +374,7 @@ function PlantFootprint({ item }: { item: FurnitureItem }) {
 function FurnitureFootprint({ item }: { item: FurnitureItem }) {
 	const style = FOOTPRINT_STYLES[item.catalogId] ?? {
 		...FOOTPRINT_FALLBACK,
-		label: item.catalogId.toUpperCase(),
+		label: furnitureDisplayName(item.catalogId).toUpperCase(),
 	};
 	const { width, depth } = item.footprint;
 	const outline = useMemo(
@@ -525,7 +530,7 @@ export function PlanScene({ room }: { room: Room }) {
 				<WallOpenings key={solid.index} solid={solid} />
 			))}
 			{room.furniture.map((item) =>
-				item.catalogId === "plant" ? (
+				catalogItemById(item.catalogId)?.category === "plants" ? (
 					<PlantFootprint key={item.id} item={item} />
 				) : (
 					<FurnitureFootprint key={item.id} item={item} />

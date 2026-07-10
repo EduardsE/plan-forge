@@ -1,9 +1,14 @@
+import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
 
 interface WorkspaceHeaderProps {
 	mode: ViewMode;
 	/** Corners placed so far in the draw draft; drives the draw status line. */
 	draftCornerCount?: number;
+	/** Catalog item mid-placement; drives the objects status line. */
+	placingName?: string | null;
+	/** Objects panel open (screen 1d): the header moves right to clear it. */
+	shifted?: boolean;
 }
 
 interface StatusDef {
@@ -18,7 +23,7 @@ const STATUS_BY_MODE: Record<ViewMode, StatusDef> = {
 	draw: { dot: "#f59e0b", text: "Drawing room outline" },
 	objects: {
 		dot: "#22d3ee",
-		text: "Placing “Sofa · 2-seat” — drop to confirm",
+		text: "Object library — drag an item onto the floor",
 	},
 };
 
@@ -33,11 +38,24 @@ function drawStatusText(cornerCount: number): string {
 export function WorkspaceHeader({
 	mode,
 	draftCornerCount = 0,
+	placingName = null,
+	shifted = false,
 }: WorkspaceHeaderProps) {
 	const status = STATUS_BY_MODE[mode];
-	const text = mode === "draw" ? drawStatusText(draftCornerCount) : status.text;
+	let text = status.text;
+	if (mode === "draw") text = drawStatusText(draftCornerCount);
+	// The mockup's 1d status, with the live item name: dragging a card takes
+	// over the objects status line until the drop or cancel.
+	if (mode === "objects" && placingName) {
+		text = `Placing “${placingName}” — drop to confirm`;
+	}
 	return (
-		<div className="absolute left-10 top-8">
+		<div
+			className={cn(
+				"absolute top-8 transition-[left] duration-300",
+				shifted ? "left-[404px]" : "left-10",
+			)}
+		>
 			<h1 className="font-bold text-[28px] text-foreground tracking-[-0.01em]">
 				PlanForge
 			</h1>

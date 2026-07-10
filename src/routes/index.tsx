@@ -11,13 +11,15 @@ import { DrawHintBar } from "#/components/draw-hint-bar";
 import { type DrawTool, DrawToolStack } from "#/components/draw-tool-stack";
 import { FloatingToolbar } from "#/components/floating-toolbar";
 import { NavRail } from "#/components/nav-rail";
+import { ObjectsPanel } from "#/components/objects-panel";
+import { PlacementDragLayer } from "#/components/placement-drag-layer";
 import { ReadoutChip } from "#/components/readout-chip";
 import { UnitsToggle } from "#/components/units-toggle";
 import { ViewControls } from "#/components/view-controls";
 import { WorkspaceHeader } from "#/components/workspace-header";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
 import { setSegmentLength } from "#/lib/draw";
-import { createSampleRoom, type Point } from "#/lib/model";
+import { type CatalogItem, createSampleRoom, type Point } from "#/lib/model";
 import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -46,6 +48,25 @@ function Planner() {
 	// header's status line can count corners and closing can become the room.
 	const [draft, setDraft] = useState<Point[]>([]);
 	const [drawTool, setDrawTool] = useState<DrawTool>("wall");
+
+	// A live placement drag from the objects panel. Owned here so the header
+	// status line, the panel's "placing…" card, the DOM drag layer and the
+	// in-scene ghost all read one session.
+	const [placing, setPlacing] = useState<{
+		item: CatalogItem;
+		origin: { x: number; y: number };
+	} | null>(null);
+	const startPlacing = useCallback(
+		(item: CatalogItem, origin: { x: number; y: number }) =>
+			setPlacing({ item, origin }),
+		[],
+	);
+	const endPlacing = useCallback(() => setPlacing(null), []);
+	// Leaving objects mode mid-drag (Escape only cancels the drag) drops the
+	// session with it.
+	useEffect(() => {
+		if (viewMode !== "objects") setPlacing(null);
+	}, [viewMode]);
 
 	const placeCorner = useCallback(
 		(point: Point) => setDraft((corners) => [...corners, point]),
@@ -89,6 +110,10 @@ function Planner() {
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [viewMode, closeDraft, cancelDraft]);
 
+	// Screen 1d: the objects panel overlays the top-left chrome, which all
+	// moves right (mockup: left 404px) while the panel is open.
+	const objectsOpen = viewMode === "objects";
+
 	return (
 		<div className="flex h-screen w-screen overflow-hidden">
 			<NavRail activeMode={viewMode} onSelectMode={setViewMode} />
@@ -110,27 +135,51 @@ function Planner() {
 							onPlaceCorner={placeCorner}
 							onSetDraftSegmentLength={setDraftSegmentLength}
 							onRequestCloseDraft={closeDraft}
+							placingItem={placing?.item ?? null}
+							onPlacingEnd={endPlacing}
 						/>
 					</Suspense>
 				)}
-				<WorkspaceHeader mode={viewMode} draftCornerCount={draft.length} />
-				{viewMode !== "objects" && (
-					<FloatingToolbar
-						onZoomIn={() => cameraApiRef.current?.zoomIn()}
-						onZoomOut={() => cameraApiRef.current?.zoomOut()}
-						onZoomToFit={() => cameraApiRef.current?.zoomToFit()}
-					/>
-				)}
+				<WorkspaceHeader
+					mode={viewMode}
+					draftCornerCount={draft.length}
+					placingName={placing?.item.name ?? null}
+					shifted={objectsOpen}
+				/>
+				<FloatingToolbar
+					onZoomIn={() => cameraApiRef.current?.zoomIn()}
+					onZoomOut={() => cameraApiRef.current?.zoomOut()}
+					onZoomToFit={() => cameraApiRef.current?.zoomToFit()}
+					shifted={objectsOpen}
+				/>
 				{viewMode === "draw" && (
 					<>
 						<DrawToolStack tool={drawTool} onToolChange={setDrawTool} />
 						<DrawHintBar />
 					</>
 				)}
-				<ViewControls viewMode={viewMode} onSelectMode={setViewMode} />
+				{objectsOpen && (
+					<ObjectsPanel
+						placingId={placing?.item.id ?? null}
+						onStartPlacing={startPlacing}
+						onClose={() => setViewMode("3d")}
+					/>
+				)}
+				<ViewControls
+					viewMode={viewMode}
+					onSelectMode={setViewMode}
+					shifted={objectsOpen}
+				/>
 				<ReadoutChip mode={viewMode} cameraReadout={readoutStore} unit={unit} />
 				{viewMode === "draw" && (
 					<UnitsToggle unit={unit} onUnitChange={setUnit} />
+				)}
+				{placing && (
+					<PlacementDragLayer
+						item={placing.item}
+						origin={placing.origin}
+						onCancel={endPlacing}
+					/>
 				)}
 			</div>
 		</div>

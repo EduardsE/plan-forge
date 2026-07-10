@@ -5,6 +5,8 @@ import type { ViewMode } from "#/lib/view-mode";
 interface ViewControlsProps {
 	viewMode: ViewMode;
 	onSelectMode: (mode: ViewMode) => void;
+	/** Objects panel open (screen 1d): the controls move right to clear it. */
+	shifted?: boolean;
 }
 
 const GLASS_SURFACE = {
@@ -38,11 +40,20 @@ const TOGGLE_BUTTONS: ToggleButtonDef[] = [
  * mockup screen. Grid/snap render toggled-on and fullscreen as a plain action;
  * all three are no-op stubs until Phase 4 wires up real behavior.
  */
-export function ViewControls({ viewMode, onSelectMode }: ViewControlsProps) {
+export function ViewControls({
+	viewMode,
+	onSelectMode,
+	shifted = false,
+}: ViewControlsProps) {
 	const is2dActive = viewMode === "2d" || viewMode === "draw";
 
 	return (
-		<div className="absolute bottom-10 left-10 flex items-center gap-3">
+		<div
+			className={cn(
+				"absolute bottom-10 flex items-center gap-3 transition-[left] duration-300",
+				shifted ? "left-[404px]" : "left-10",
+			)}
+		>
 			<div className="flex rounded-full p-[5px]" style={GLASS_SURFACE}>
 				{(["2d", "3d"] as const).map((mode) => {
 					const isActive = mode === "2d" ? is2dActive : !is2dActive;

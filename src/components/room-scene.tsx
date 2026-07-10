@@ -18,7 +18,7 @@ import {
 } from "three";
 import { SelectionChip } from "#/components/selection-chip";
 import type { FurnitureItem, Point, Room } from "#/lib/model";
-import { outlineBounds } from "#/lib/model";
+import { catalogItemById, outlineBounds } from "#/lib/model";
 import {
 	buildWallSolids,
 	cornerPosts,
@@ -60,6 +60,22 @@ const FURNITURE_COLORS: Record<string, string> = {
 	credenza: "#b4824e",
 	shelf: "#b98a5f",
 	rug: "#c9805f",
+	// Catalog additions, toned like their panel thumbnails.
+	"lounge-chair": "#ce7b52",
+	"sofa-2": "#ce7b52",
+	armchair: "#a87848",
+	pouf: "#c9805f",
+	"coffee-table": "#b98a5f",
+	"side-table": "#b98a5f",
+	"dining-table": "#c8996b",
+	wardrobe: "#b4824e",
+	"bed-double": "#c9805f",
+	"bed-single": "#c9805f",
+	"floor-lamp": "#d8a46b",
+	"table-lamp": "#d8a46b",
+	"floor-mirror": "#8c6b48",
+	"wall-clock": "#f7f0e2",
+	"picture-frame": "#d8845c",
 };
 const FURNITURE_FALLBACK_COLOR = "#b98a5f";
 const PLANT_POT_COLOR = "#b4633e";
@@ -505,7 +521,7 @@ function FurnitureMesh({
 				)}
 			</>
 		);
-	} else if (item.catalogId === "plant") {
+	} else if (catalogItemById(item.catalogId)?.category === "plants") {
 		const potHeight = height * 0.38;
 		const foliageRadius = width * 1.05;
 		const foliageHull = (foliageRadius + HULL_RIM) / foliageRadius;

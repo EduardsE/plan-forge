@@ -12,11 +12,13 @@ interface FloatingToolbarProps {
 	onZoomIn?: () => void;
 	onZoomOut?: () => void;
 	onZoomToFit?: () => void;
+	/** Objects panel open (screen 1d): the whole bar moves right to clear it. */
+	shifted?: boolean;
 }
 
 /**
- * Floating undo/redo + zoom toolbar, matching the mockup's screens 1a/1b/1c
- * (absent on 1d, where the objects panel occupies this area).
+ * Floating undo/redo + zoom toolbar, present on all four mockup screens —
+ * on 1d it sits at left 404px, clear of the objects panel.
  * The zoom buttons drive the camera rig via the handler props; undo/redo
  * stay no-ops until Phase 4 wires up real history.
  */
@@ -24,6 +26,7 @@ export function FloatingToolbar({
 	onZoomIn,
 	onZoomOut,
 	onZoomToFit,
+	shifted = false,
 }: FloatingToolbarProps) {
 	const buttons: ToolbarButtonDef[] = [
 		{ label: "Undo", icon: Undo2 },
@@ -35,7 +38,10 @@ export function FloatingToolbar({
 
 	return (
 		<div
-			className="absolute left-10 top-[116px] flex gap-1 rounded-2xl p-1.5"
+			className={cn(
+				"absolute top-[116px] flex gap-1 rounded-2xl p-1.5 transition-[left] duration-300",
+				shifted ? "left-[404px]" : "left-10",
+			)}
 			style={{
 				background: "var(--surface-glass)",
 				border: "1px solid var(--border-subtle)",

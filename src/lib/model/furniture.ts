@@ -1,3 +1,4 @@
+import { catalogItemById } from "./catalog";
 import type { Footprint, FurnitureItem, Room } from "./types";
 
 /**
@@ -53,11 +54,18 @@ export function removeFurniture(room: Room, id: string): Room {
 	};
 }
 
+/** A dropped catalog item joining the room (objects-panel placement). */
+export function addFurniture(room: Room, item: FurnitureItem): Room {
+	return { ...room, furniture: [...room.furniture, item] };
+}
+
 /**
- * Display name derived from the catalog id ("desk-chair" → "Desk Chair").
- * The objects-panel task's real catalog data should replace this lookup.
+ * Display name from the catalog ("sofa-2" → "Sofa · 2-seat"); ids missing
+ * from the catalog fall back to a title-cased slug.
  */
 export function furnitureDisplayName(catalogId: string): string {
+	const entry = catalogItemById(catalogId);
+	if (entry) return entry.name;
 	return catalogId
 		.split("-")
 		.filter(Boolean)

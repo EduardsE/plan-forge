@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	addFurniture,
 	DUPLICATE_OFFSET,
 	duplicateFurniture,
 	formatFootprintCm,
@@ -71,10 +72,31 @@ describe("removeFurniture", () => {
 	});
 });
 
+describe("addFurniture", () => {
+	it("appends the item without mutating the input", () => {
+		const room = createSampleRoom();
+		const item = {
+			id: "sofa-2-1",
+			catalogId: "sofa-2",
+			position: { x: 3, y: 3.8 },
+			rotation: 0,
+			footprint: { width: 1.68, depth: 0.88, height: 0.82 },
+		};
+		const next = addFurniture(room, item);
+		expect(next.furniture.at(-1)).toBe(item);
+		expect(next.furniture).toHaveLength(room.furniture.length + 1);
+		expect(room.furniture.some((entry) => entry.id === "sofa-2-1")).toBe(false);
+	});
+});
+
 describe("furnitureDisplayName", () => {
-	it("title-cases the catalog id slug", () => {
-		expect(furnitureDisplayName("desk-chair")).toBe("Desk Chair");
-		expect(furnitureDisplayName("plant")).toBe("Plant");
+	it("uses the catalog name when the id is known", () => {
+		expect(furnitureDisplayName("sofa-2")).toBe("Sofa · 2-seat");
+		expect(furnitureDisplayName("plant")).toBe("Potted Plant");
+	});
+
+	it("falls back to a title-cased slug for unknown ids", () => {
+		expect(furnitureDisplayName("bean-bag")).toBe("Bean Bag");
 	});
 });
 
