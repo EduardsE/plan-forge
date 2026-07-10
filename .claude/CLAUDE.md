@@ -21,7 +21,7 @@ The 2D|3D pill is the hinge of the whole product: one model, instant lens switch
 
 Use pnpm (a pnpm-lock.yaml is committed).
 
-- `pnpm dev` — start dev server on port 3000
+- `pnpm dev` — start dev server on port 3005
 - `pnpm build` — production build
 - `pnpm test` — run tests with Vitest (`pnpm vitest run <file>` for a single file)
 - `pnpm check` — Biome lint + format check (also `pnpm lint`, `pnpm format`)
