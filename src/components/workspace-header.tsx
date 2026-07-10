@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { OpeningKind } from "#/lib/model";
 import { formatSavedStatus } from "#/lib/persistence";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -15,6 +16,8 @@ interface WorkspaceHeaderProps {
 	draftCornerCount?: number;
 	/** Catalog item mid-placement; drives the objects status line. */
 	placingName?: string | null;
+	/** Armed door/window tool on the 2D lens; drives its status line. */
+	openingTool?: OpeningKind | null;
 	/** Objects panel open (screen 1d): the header moves right to clear it. */
 	shifted?: boolean;
 }
@@ -57,16 +60,20 @@ export function WorkspaceHeader({
 	onNewRoom,
 	draftCornerCount = 0,
 	placingName = null,
+	openingTool = null,
 	shifted = false,
 }: WorkspaceHeaderProps) {
+	// An armed opening tool takes over the 2D status line until the insert.
+	const armedTool = mode === "2d" ? openingTool : null;
 	// The 2D/3D lenses show the room itself: name, draft state, autosave age.
-	const homeLens = mode === "3d" || mode === "2d";
+	const homeLens = (mode === "3d" || mode === "2d") && !armedTool;
 	let text: React.ReactNode = (
 		<>
 			{roomName} — draft
 			<SavedStatus savedAt={savedAt} />
 		</>
 	);
+	if (armedTool) text = `Placing a ${armedTool} — click a wall to insert it`;
 	if (mode === "draw") text = drawStatusText(draftCornerCount);
 	// The mockup's 1d status, with the live item name: dragging a card takes
 	// over the objects status line until the drop or cancel.
@@ -75,7 +82,7 @@ export function WorkspaceHeader({
 			? `Placing “${placingName}” — drop to confirm`
 			: "Object library — drag an item onto the floor";
 	}
-	const dot = DOT_BY_MODE[mode];
+	const dot = armedTool ? "#22d3ee" : DOT_BY_MODE[mode];
 	return (
 		<div
 			className={cn(

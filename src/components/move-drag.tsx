@@ -1,6 +1,6 @@
 import { useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plane, Raycaster, Vector2, Vector3 } from "three";
+import { type Camera, Plane, Raycaster, Vector2, Vector3 } from "three";
 import { SnapGuides } from "#/components/snap-guides";
 import type { FurnitureItem, Point } from "#/lib/model";
 import {
@@ -40,21 +40,74 @@ export interface MoveDrag {
 }
 
 /**
- * Move-drag state for a scene: `beginDrag` from an item's pointerdown handler
- * arms a session, and the camera controls are disabled *synchronously* around
- * it — the declarative lock prop flushes only after OrbitControls has
- * accepted the pointerdown and eaten the first pointermoves as a gesture.
- * Unmounting mid-drag (a lens switch) releases the controls too.
+ * Pausing the camera controls around any in-scene drag (furniture moves,
+ * opening slides): `begin` disables them *synchronously* — the declarative
+ * lock prop flushes only after OrbitControls has accepted the pointerdown
+ * and eaten the first pointermoves as a gesture. Unmounting mid-drag (a lens
+ * switch) releases the controls too.
  */
-export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
-	const [drag, setDrag] = useState<MoveDrag | null>(null);
+export function useControlsPause(onActiveChange: (active: boolean) => void) {
 	// The default controls (OrbitControls, via makeDefault).
 	const controls = useThree((state) => state.controls) as {
 		enabled: boolean;
 	} | null;
 	const controlsRef = useRef(controls);
 	controlsRef.current = controls;
-	const dragActiveRef = useRef(false);
+	const activeRef = useRef(false);
+	const begin = useCallback(() => {
+		activeRef.current = true;
+		if (controlsRef.current) controlsRef.current.enabled = false;
+		onActiveChange(true);
+	}, [onActiveChange]);
+	const end = useCallback(() => {
+		activeRef.current = false;
+		if (controlsRef.current) controlsRef.current.enabled = true;
+		onActiveChange(false);
+	}, [onActiveChange]);
+	useEffect(
+		() => () => {
+			if (!activeRef.current) return;
+			activeRef.current = false;
+			if (controlsRef.current) controlsRef.current.enabled = true;
+			onActiveChange(false);
+		},
+		[onActiveChange],
+	);
+	return { begin, end };
+}
+
+/**
+ * Project window pointer events onto the y=0 floor plane through `camera`.
+ * Ignores the event target on purpose: mid-drag the pointer may cross a DOM
+ * overlay (the selection chip) and tracking must not stall there.
+ */
+export function floorProjector(
+	gl: { domElement: HTMLCanvasElement },
+	camera: Camera,
+): (event: PointerEvent) => Point | null {
+	const raycaster = new Raycaster();
+	const hit = new Vector3();
+	return (event) => {
+		const rect = gl.domElement.getBoundingClientRect();
+		if (rect.width === 0 || rect.height === 0) return null;
+		const ndc = new Vector2(
+			((event.clientX - rect.left) / rect.width) * 2 - 1,
+			-(((event.clientY - rect.top) / rect.height) * 2 - 1),
+		);
+		raycaster.setFromCamera(ndc, camera);
+		return raycaster.ray.intersectPlane(FLOOR_PLANE, hit)
+			? { x: hit.x, y: hit.z }
+			: null;
+	};
+}
+
+/**
+ * Move-drag state for a scene: `beginDrag` from an item's pointerdown handler
+ * arms a session and pauses the camera controls around it.
+ */
+export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
+	const [drag, setDrag] = useState<MoveDrag | null>(null);
+	const { begin, end } = useControlsPause(onMoveActiveChange);
 	const beginDrag = useCallback(
 		(
 			item: FurnitureItem,
@@ -71,28 +124,14 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
 				size: rotatedFootprintSize(item.footprint, item.rotation),
 				originScreen: screen,
 			});
-			dragActiveRef.current = true;
-			if (controlsRef.current) controlsRef.current.enabled = false;
-			onMoveActiveChange(true);
+			begin();
 		},
-		[onMoveActiveChange],
+		[begin],
 	);
 	const endDrag = useCallback(() => {
 		setDrag(null);
-		dragActiveRef.current = false;
-		if (controlsRef.current) controlsRef.current.enabled = true;
-		onMoveActiveChange(false);
-	}, [onMoveActiveChange]);
-	// A lens switch mid-drag unmounts the scene — don't leave controls locked.
-	useEffect(
-		() => () => {
-			if (!dragActiveRef.current) return;
-			dragActiveRef.current = false;
-			if (controlsRef.current) controlsRef.current.enabled = true;
-			onMoveActiveChange(false);
-		},
-		[onMoveActiveChange],
-	);
+		end();
+	}, [end]);
 	return { drag, beginDrag, endDrag };
 }
 
@@ -127,28 +166,10 @@ export function MoveDragSession({
 	endRef.current = onEnd;
 
 	useEffect(() => {
-		const raycaster = new Raycaster();
-		const hit = new Vector3();
+		const toFloor = floorProjector(gl, camera);
 		// Pointer-still-down presses shouldn't nudge the item onto the snap
 		// grid: nothing moves until the pointer clears the click slop.
 		let moved = false;
-		/**
-		 * Floor point under the pointer. Unlike the placement ghost this
-		 * ignores the event target — mid-drag the pointer may cross the
-		 * selection chip's DOM and tracking must not stall there.
-		 */
-		const toFloor = (event: PointerEvent): Point | null => {
-			const rect = gl.domElement.getBoundingClientRect();
-			if (rect.width === 0 || rect.height === 0) return null;
-			const ndc = new Vector2(
-				((event.clientX - rect.left) / rect.width) * 2 - 1,
-				-(((event.clientY - rect.top) / rect.height) * 2 - 1),
-			);
-			raycaster.setFromCamera(ndc, camera);
-			return raycaster.ray.intersectPlane(FLOOR_PLANE, hit)
-				? { x: hit.x, y: hit.z }
-				: null;
-		};
 		const handleMove = (event: PointerEvent) => {
 			if (!moved) {
 				const travel = Math.hypot(

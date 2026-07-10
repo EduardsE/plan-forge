@@ -13,7 +13,8 @@ import { formatFootprintCm, furnitureDisplayName } from "#/lib/model";
 /** Gap between the item's top face and the leader line's lower end. */
 const CHIP_CLEARANCE = 0.12;
 
-const ACTION_BUTTON_CLASS =
+/** Shared by the furniture chip and the opening chip (plan-openings.tsx). */
+export const ACTION_BUTTON_CLASS =
 	"pointer-events-auto flex size-[30px] items-center justify-center rounded-lg bg-white/[0.06] transition-colors hover:bg-white/[0.14]";
 
 interface SelectionChipProps {

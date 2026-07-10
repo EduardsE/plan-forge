@@ -22,6 +22,11 @@ const AXIS_EPSILON = 1e-6;
 export interface PlacementGuide {
 	/** Axis the distance is measured along. */
 	axis: "x" | "y";
+	/**
+	 * Stable render key when several guides share an axis (the opening
+	 * corner guides); wall guides omit it — their axis is unique.
+	 */
+	id?: string;
 	/** On the wall's interior face, at the ghost's center on the other axis. */
 	from: Point;
 	/** On the ghost's near edge. */

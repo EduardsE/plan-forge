@@ -36,8 +36,15 @@ describe("solidSpans", () => {
 			outward: { x: 0, y: -1 },
 			length: 4,
 			holes: [
-				{ kind: "door", start: 0, width: 1.5, bottom: 0, top: 2 },
-				{ kind: "window", start: 1, width: 1, bottom: 0.4, top: 1.9 },
+				{ id: "door-a", kind: "door", start: 0, width: 1.5, bottom: 0, top: 2 },
+				{
+					id: "window-a",
+					kind: "window",
+					start: 1,
+					width: 1,
+					bottom: 0.4,
+					top: 1.9,
+				},
 			],
 		};
 		expect(solidSpans(solid)).toEqual([{ start: 2, end: 4 }]);

@@ -49,6 +49,7 @@ describe("buildWallSolids", () => {
 		const solids = buildWallSolids(createSampleRoom());
 		expect(solids[0].holes).toEqual([
 			{
+				id: "window-1",
 				kind: "window",
 				start: 3.5,
 				width: expect.closeTo(2.1, 10),
@@ -58,6 +59,7 @@ describe("buildWallSolids", () => {
 		]);
 		expect(solids[1].holes).toEqual([
 			{
+				id: "door-1",
 				kind: "door",
 				start: 3.6,
 				width: expect.closeTo(0.95, 10),
@@ -79,6 +81,7 @@ describe("buildWallSolids", () => {
 		const solids = buildWallSolids(room);
 		expect(solids[0].holes).toEqual([
 			{
+				id: "w",
 				kind: "window",
 				start: 5.5,
 				width: expect.closeTo(0.9, 10),

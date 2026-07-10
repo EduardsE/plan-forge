@@ -38,13 +38,19 @@ import {
 } from "#/lib/camera";
 import {
 	addFurniture,
+	addOpening,
 	type CatalogItem,
 	duplicateFurniture,
+	flipDoorHinge,
 	moveFurniture,
+	moveOpening,
+	type Opening,
+	type OpeningKind,
 	outlineBounds,
 	type Point,
 	type Room,
 	removeFurniture,
+	removeOpening,
 	rotateFurniture,
 } from "#/lib/model";
 import type { Unit } from "#/lib/units";
@@ -561,6 +567,10 @@ export interface PlannerCanvasProps {
 	placingItem: CatalogItem | null;
 	/** Placement session over — dropped or cancelled (route clears it). */
 	onPlacingEnd: () => void;
+	/** Armed door/window tool on the 2D lens (route owns it, like drawTool). */
+	openingTool: OpeningKind | null;
+	/** An insert landed — the route disarms the tool. */
+	onOpeningToolDone: () => void;
 }
 
 export function PlannerCanvas({
@@ -577,6 +587,8 @@ export function PlannerCanvas({
 	onRequestCloseDraft,
 	placingItem,
 	onPlacingEnd,
+	openingTool,
+	onOpeningToolDone,
 }: PlannerCanvasProps) {
 	// Same lens split as the 2D|3D pill: draw is a top-down 2D flow, the
 	// objects catalog drops onto the 3D dollhouse.
@@ -588,11 +600,24 @@ export function PlannerCanvas({
 	const [renderPlan, setRenderPlan] = useState(planView);
 
 	const [selectedId, setSelectedId] = useState<string | null>(null);
+	// Selected opening (2D lens only) — one selection at a time across both.
+	const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(
+		null,
+	);
 	// Screen position of the last pointer-down, to tell orbit drags from
 	// picks in onPointerMissed (which only carries the raw MouseEvent).
 	const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
-	// A furniture move drag in either lens; camera controls pause for it.
-	const [movingFurniture, setMovingFurniture] = useState(false);
+	// A furniture or opening drag in either lens; camera controls pause for it.
+	const [sceneDragActive, setSceneDragActive] = useState(false);
+
+	const selectItem = useCallback((id: string) => {
+		setSelectedId(id);
+		setSelectedOpeningId(null);
+	}, []);
+	const selectOpening = useCallback((id: string) => {
+		setSelectedOpeningId(id);
+		setSelectedId(null);
+	}, []);
 
 	const rotateItem = useCallback(
 		(id: string) => onRoomChange(rotateFurniture(room, id, ROTATE_STEP_DEG)),
@@ -619,11 +644,51 @@ export function PlannerCanvas({
 		[room, onRoomChange],
 	);
 
+	const insertOpening = useCallback(
+		(kind: OpeningKind, wallIndex: number, offset: number, width: number) => {
+			const opening: Opening = {
+				id: crypto.randomUUID(),
+				kind,
+				wallIndex,
+				offset,
+				width,
+			};
+			if (kind === "door") opening.hinge = "start";
+			onRoomChange(addOpening(room, opening));
+			// Selection follows the insert (like a drop), ready to drag/adjust.
+			selectOpening(opening.id);
+			onOpeningToolDone();
+		},
+		[room, onRoomChange, selectOpening, onOpeningToolDone],
+	);
+	const moveOpeningTo = useCallback(
+		(id: string, offset: number) => onRoomChange(moveOpening(room, id, offset)),
+		[room, onRoomChange],
+	);
+	const flipHinge = useCallback(
+		(id: string) => onRoomChange(flipDoorHinge(room, id)),
+		[room, onRoomChange],
+	);
+	const deleteOpening = useCallback(
+		(id: string) => {
+			onRoomChange(removeOpening(room, id));
+			setSelectedOpeningId(null);
+		},
+		[room, onRoomChange],
+	);
+
 	// A placement drag takes over the scene; a leftover selection chip would
 	// sit between the pointer and the floor (its DOM would eat the drop).
 	useEffect(() => {
 		if (placingItem) setSelectedId(null);
 	}, [placingItem]);
+	// Arming a door/window tool likewise clears any selection — clicks now
+	// mean "insert here", and a chip would sit over the wall pick strips.
+	useEffect(() => {
+		if (!openingTool) return;
+		setSelectedId(null);
+		setSelectedOpeningId(null);
+	}, [openingTool]);
 
 	const placeDraggedItem = useCallback(
 		(center: Point) => {
@@ -654,6 +719,7 @@ export function PlannerCanvas({
 			className={cn(
 				"absolute inset-0 isolate",
 				drawing && renderPlan && drawTool === "wall" && "cursor-none",
+				viewMode === "2d" && renderPlan && openingTool && "cursor-crosshair",
 			)}
 			onPointerDown={(event) => {
 				pointerDownRef.current = { x: event.clientX, y: event.clientY };
@@ -679,6 +745,7 @@ export function PlannerCanvas({
 						return;
 					}
 					setSelectedId(null);
+					setSelectedOpeningId(null);
 				}}
 			>
 				<CameraRig
@@ -686,7 +753,7 @@ export function PlannerCanvas({
 					planView={planView}
 					renderPlan={renderPlan}
 					onRenderPlanChange={setRenderPlan}
-					locked={movingFurniture}
+					locked={sceneDragActive}
 					apiRef={cameraApiRef}
 					readoutStore={readoutStore}
 				/>
@@ -718,13 +785,20 @@ export function PlannerCanvas({
 						<PlanScene
 							room={room}
 							selectedId={selectedId}
+							selectedOpeningId={selectedOpeningId}
+							openingTool={openingTool}
 							unit={unit}
-							onSelectItem={setSelectedId}
+							onSelectItem={selectItem}
 							onRotateItem={rotateItem}
 							onDuplicateItem={duplicateItem}
 							onDeleteItem={deleteItem}
 							onMoveItem={moveItem}
-							onMoveActiveChange={setMovingFurniture}
+							onMoveActiveChange={setSceneDragActive}
+							onSelectOpening={selectOpening}
+							onInsertOpening={insertOpening}
+							onMoveOpening={moveOpeningTo}
+							onFlipDoorHinge={flipHinge}
+							onDeleteOpening={deleteOpening}
 						/>
 					)
 				) : (
@@ -733,12 +807,12 @@ export function PlannerCanvas({
 							room={room}
 							selectedId={selectedId}
 							unit={unit}
-							onSelectItem={setSelectedId}
+							onSelectItem={selectItem}
 							onRotateItem={rotateItem}
 							onDuplicateItem={duplicateItem}
 							onDeleteItem={deleteItem}
 							onMoveItem={moveItem}
-							onMoveActiveChange={setMovingFurniture}
+							onMoveActiveChange={setSceneDragActive}
 						/>
 						{placingItem && (
 							<PlacementGhost

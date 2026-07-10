@@ -22,6 +22,8 @@ export const WINDOW_HEAD = 1.94;
 
 /** A rectangular cut in a wall face, in wall-local coordinates. */
 export interface WallHole {
+	/** Id of the model opening the hole came from (picking needs it). */
+	id: string;
 	kind: OpeningKind;
 	/** Distance from the wall's start corner to the hole's near edge. */
 	start: number;
@@ -114,6 +116,7 @@ export function buildWallSolids(
 			);
 			if (end - start < MIN_HOLE_SIZE || top - bottom < MIN_HOLE_SIZE) continue;
 			holes.push({
+				id: opening.id,
 				kind: opening.kind,
 				start,
 				width: end - start,

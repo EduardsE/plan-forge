@@ -15,8 +15,9 @@ import {
 	MoveDragSession,
 	useMoveDrag,
 } from "#/components/move-drag";
+import { PlanOpenings } from "#/components/plan-openings";
 import { SelectionChip } from "#/components/selection-chip";
-import type { FurnitureItem, Point, Room } from "#/lib/model";
+import type { FurnitureItem, OpeningKind, Point, Room } from "#/lib/model";
 import {
 	catalogItemById,
 	floorArea,
@@ -640,6 +641,10 @@ function DimensionLine({
 export interface PlanSceneProps {
 	room: Room;
 	selectedId: string | null;
+	/** Selected opening id — never set together with `selectedId`. */
+	selectedOpeningId: string | null;
+	/** Armed door/window insert tool, or null. */
+	openingTool: OpeningKind | null;
 	unit: Unit;
 	onSelectItem: (id: string) => void;
 	onRotateItem: (id: string) => void;
@@ -649,11 +654,24 @@ export interface PlanSceneProps {
 	onMoveItem: (id: string, position: Point) => void;
 	/** A move drag started/ended — the canvas locks pan/zoom while it runs. */
 	onMoveActiveChange: (active: boolean) => void;
+	onSelectOpening: (id: string) => void;
+	onInsertOpening: (
+		kind: OpeningKind,
+		wallIndex: number,
+		offset: number,
+		width: number,
+	) => void;
+	/** Live re-offset during an opening drag (already snapped). */
+	onMoveOpening: (id: string, offset: number) => void;
+	onFlipDoorHinge: (id: string) => void;
+	onDeleteOpening: (id: string) => void;
 }
 
 export function PlanScene({
 	room,
 	selectedId,
+	selectedOpeningId,
+	openingTool,
 	unit,
 	onSelectItem,
 	onRotateItem,
@@ -661,6 +679,11 @@ export function PlanScene({
 	onDeleteItem,
 	onMoveItem,
 	onMoveActiveChange,
+	onSelectOpening,
+	onInsertOpening,
+	onMoveOpening,
+	onFlipDoorHinge,
+	onDeleteOpening,
 }: PlanSceneProps) {
 	const solids = useMemo(() => buildWallSolids(room), [room]);
 	const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
@@ -708,6 +731,18 @@ export function PlanScene({
 			{solids.map((solid) => (
 				<WallOpenings key={solid.index} solid={solid} />
 			))}
+			<PlanOpenings
+				solids={solids}
+				selectedId={selectedOpeningId}
+				tool={openingTool}
+				unit={unit}
+				onSelect={onSelectOpening}
+				onInsert={onInsertOpening}
+				onMove={onMoveOpening}
+				onFlipHinge={onFlipDoorHinge}
+				onDelete={onDeleteOpening}
+				onDragActiveChange={onMoveActiveChange}
+			/>
 			{room.furniture.map((item) => (
 				<PickableFootprint
 					key={item.id}

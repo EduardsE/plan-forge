@@ -12,6 +12,7 @@ import { type DrawTool, DrawToolStack } from "#/components/draw-tool-stack";
 import { FloatingToolbar } from "#/components/floating-toolbar";
 import { NavRail } from "#/components/nav-rail";
 import { ObjectsPanel } from "#/components/objects-panel";
+import { OpeningToolStack } from "#/components/opening-tool-stack";
 import { PlacementDragLayer } from "#/components/placement-drag-layer";
 import { ReadoutChip } from "#/components/readout-chip";
 import { UnitsToggle } from "#/components/units-toggle";
@@ -19,7 +20,12 @@ import { ViewControls } from "#/components/view-controls";
 import { WorkspaceHeader } from "#/components/workspace-header";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
 import { setSegmentLength } from "#/lib/draw";
-import { type CatalogItem, createSampleRoom, type Point } from "#/lib/model";
+import {
+	type CatalogItem,
+	createSampleRoom,
+	type OpeningKind,
+	type Point,
+} from "#/lib/model";
 import {
 	deserializeSavedState,
 	STORAGE_KEY,
@@ -87,6 +93,24 @@ function Planner() {
 	// header's status line can count corners and closing can become the room.
 	const [draft, setDraft] = useState<Point[]>([]);
 	const [drawTool, setDrawTool] = useState<DrawTool>("wall");
+
+	// The 2D lens's armed door/window tool. Owned here (like drawTool) so the
+	// tool stack chrome and the header status line share it with the canvas.
+	const [openingTool, setOpeningTool] = useState<OpeningKind | null>(null);
+	const disarmOpeningTool = useCallback(() => setOpeningTool(null), []);
+	// Leaving the 2D lens drops the armed tool with it.
+	useEffect(() => {
+		if (viewMode !== "2d") setOpeningTool(null);
+	}, [viewMode]);
+	// Esc disarms without inserting.
+	useEffect(() => {
+		if (viewMode !== "2d" || openingTool === null) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setOpeningTool(null);
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [viewMode, openingTool]);
 
 	// A live placement drag from the objects panel. Owned here so the header
 	// status line, the panel's "placing…" card, the DOM drag layer and the
@@ -196,6 +220,8 @@ function Planner() {
 							onRequestCloseDraft={closeDraft}
 							placingItem={placing?.item ?? null}
 							onPlacingEnd={endPlacing}
+							openingTool={openingTool}
+							onOpeningToolDone={disarmOpeningTool}
 						/>
 					</Suspense>
 				)}
@@ -206,6 +232,7 @@ function Planner() {
 					onNewRoom={startNewRoom}
 					draftCornerCount={draft.length}
 					placingName={placing?.item.name ?? null}
+					openingTool={openingTool}
 					shifted={objectsOpen}
 				/>
 				<FloatingToolbar
@@ -219,6 +246,9 @@ function Planner() {
 						<DrawToolStack tool={drawTool} onToolChange={setDrawTool} />
 						<DrawHintBar />
 					</>
+				)}
+				{viewMode === "2d" && (
+					<OpeningToolStack tool={openingTool} onToolChange={setOpeningTool} />
 				)}
 				{objectsOpen && (
 					<ObjectsPanel

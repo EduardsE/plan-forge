@@ -38,7 +38,9 @@ export function SnapGuides({ guides, unit }: SnapGuidesProps) {
 	return (
 		<>
 			{guides.map((guide, index) => (
-				<group key={guide.axis}>
+				// Wall guides carry one guide per axis, but the opening corner
+				// guides share their wall's axis and set an id instead.
+				<group key={guide.id ?? guide.axis}>
 					<Line
 						segments
 						points={(dashes[index] ?? []).map((p) => v3(p, GUIDE_Y))}
