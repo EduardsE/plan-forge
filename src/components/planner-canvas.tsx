@@ -557,7 +557,12 @@ const CLICK_SLOP_PX = 4;
 
 export interface PlannerCanvasProps {
 	room: Room;
+	/** A discrete mutation — one undo step in the route's room history. */
 	onRoomChange: (room: Room) => void;
+	/** A mid-drag state: applied live but not a history step of its own. */
+	onRoomPreview: (room: Room) => void;
+	/** A drag ended (however) — the route folds its previews into one step. */
+	onRoomGestureEnd: () => void;
 	viewMode: ViewMode;
 	cameraApiRef: RefObject<CameraApi | null>;
 	readoutStore: CameraReadoutStore;
@@ -590,6 +595,8 @@ export interface PlannerCanvasProps {
 export function PlannerCanvas({
 	room,
 	onRoomChange,
+	onRoomPreview,
+	onRoomGestureEnd,
 	viewMode,
 	cameraApiRef,
 	readoutStore,
@@ -629,6 +636,19 @@ export function PlannerCanvas({
 	const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
 	// A furniture or opening drag in either lens; camera controls pause for it.
 	const [sceneDragActive, setSceneDragActive] = useState(false);
+	// Every room drag (furniture move, opening slide) reports through here —
+	// releasing the controls is also the moment its previews become one
+	// history step. Ends however the drag does: pointerup, esc (the restore
+	// preview lands first, so settling finds nothing to fold), or unmount on
+	// a lens switch. DrawScene keeps plain `setSceneDragActive` — corner
+	// drags edit the draft, not the room.
+	const handleRoomDragActive = useCallback(
+		(active: boolean) => {
+			setSceneDragActive(active);
+			if (!active) onRoomGestureEnd();
+		},
+		[onRoomGestureEnd],
+	);
 	// Placed items the placement ghost snaps flush against (a fresh drop isn't
 	// in the room yet, so every item is a neighbor).
 	const placementObstacles = useMemo(
@@ -655,9 +675,11 @@ export function PlannerCanvas({
 		[room, onRoomChange],
 	);
 	const moveItem = useCallback(
+		// Streams per pointermove — a preview, folded into one history step
+		// when the drag session releases the camera controls below.
 		(id: string, update: FurnitureUpdate) =>
-			onRoomChange(updateFurniture(room, id, update)),
-		[room, onRoomChange],
+			onRoomPreview(updateFurniture(room, id, update)),
+		[room, onRoomPreview],
 	);
 	const duplicateItem = useCallback(
 		(id: string) => {
@@ -695,8 +717,10 @@ export function PlannerCanvas({
 		[room, onRoomChange, selectOpening, onOpeningToolDone],
 	);
 	const moveOpeningTo = useCallback(
-		(id: string, offset: number) => onRoomChange(moveOpening(room, id, offset)),
-		[room, onRoomChange],
+		// Streams per pointermove during an opening slide, like moveItem.
+		(id: string, offset: number) =>
+			onRoomPreview(moveOpening(room, id, offset)),
+		[room, onRoomPreview],
 	);
 	const flipHinge = useCallback(
 		(id: string) => onRoomChange(flipDoorHinge(room, id)),
@@ -861,7 +885,7 @@ export function PlannerCanvas({
 							onDuplicateItem={duplicateItem}
 							onDeleteItem={deleteItem}
 							onMoveItem={moveItem}
-							onMoveActiveChange={setSceneDragActive}
+							onMoveActiveChange={handleRoomDragActive}
 							onSelectOpening={selectOpening}
 							onInsertOpening={insertOpening}
 							onMoveOpening={moveOpeningTo}
@@ -881,7 +905,7 @@ export function PlannerCanvas({
 							onDuplicateItem={duplicateItem}
 							onDeleteItem={deleteItem}
 							onMoveItem={moveItem}
-							onMoveActiveChange={setSceneDragActive}
+							onMoveActiveChange={handleRoomDragActive}
 						/>
 						{placingItem &&
 							(isWallItem(placingItem.id) ? (

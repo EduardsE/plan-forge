@@ -9,6 +9,12 @@ interface ToolbarButtonDef {
 }
 
 interface FloatingToolbarProps {
+	onUndo?: () => void;
+	onRedo?: () => void;
+	/** Steps available on the room history — dimmed like mockup 1a's redo
+	 * when there's nothing to step to (or history is out, in draw mode). */
+	canUndo?: boolean;
+	canRedo?: boolean;
 	onZoomIn?: () => void;
 	onZoomOut?: () => void;
 	onZoomToFit?: () => void;
@@ -19,18 +25,22 @@ interface FloatingToolbarProps {
 /**
  * Floating undo/redo + zoom toolbar, present on all four mockup screens —
  * on 1d it sits at left 404px, clear of the objects panel.
- * The zoom buttons drive the camera rig via the handler props; undo/redo
- * stay no-ops until Phase 4 wires up real history.
+ * Undo/redo step the room history and the zoom buttons drive the camera
+ * rig, all via the handler props.
  */
 export function FloatingToolbar({
+	onUndo,
+	onRedo,
+	canUndo = false,
+	canRedo = false,
 	onZoomIn,
 	onZoomOut,
 	onZoomToFit,
 	shifted = false,
 }: FloatingToolbarProps) {
 	const buttons: ToolbarButtonDef[] = [
-		{ label: "Undo", icon: Undo2 },
-		{ label: "Redo", icon: Redo2, disabled: true },
+		{ label: "Undo", icon: Undo2, disabled: !canUndo, onClick: onUndo },
+		{ label: "Redo", icon: Redo2, disabled: !canRedo, onClick: onRedo },
 		{ label: "Zoom in", icon: ZoomIn, onClick: onZoomIn },
 		{ label: "Zoom out", icon: ZoomOut, onClick: onZoomOut },
 		{ label: "Fit to view", icon: Crosshair, onClick: onZoomToFit },

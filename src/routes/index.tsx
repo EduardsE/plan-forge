@@ -21,10 +21,19 @@ import { WorkspaceHeader } from "#/components/workspace-header";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
 import { rectangleOutline, setSegmentLength } from "#/lib/draw";
 import {
+	commitHistory,
+	createHistory,
+	previewHistory,
+	redoHistory,
+	settleHistory,
+	undoHistory,
+} from "#/lib/history";
+import {
 	type CatalogItem,
 	createSampleRoom,
 	type OpeningKind,
 	type Point,
+	type Room,
 } from "#/lib/model";
 import {
 	applyOutlineDraft,
@@ -54,7 +63,35 @@ export const Route = createFileRoute("/")({ component: Planner });
 
 function Planner() {
 	const [viewMode, setViewMode] = useState<ViewMode>("3d");
-	const [room, setRoom] = useState(createSampleRoom);
+	// The room lives inside a bounded undo/redo history. Discrete mutations
+	// (add/rotate/duplicate/delete, opening edits, outline close) go through
+	// `setRoom` = one undo step each; the continuous drags stream through
+	// `previewRoom` and fold into a single step when `settleRoom` fires at
+	// gesture end — an esc-cancelled drag leaves no step at all.
+	const [roomHistory, setRoomHistory] = useState(() =>
+		createHistory(createSampleRoom()),
+	);
+	const room = roomHistory.current;
+	const setRoom = useCallback((next: Room | ((room: Room) => Room)) => {
+		setRoomHistory((history) =>
+			commitHistory(
+				history,
+				typeof next === "function" ? next(history.current) : next,
+			),
+		);
+	}, []);
+	const previewRoom = useCallback(
+		(next: Room) => setRoomHistory((history) => previewHistory(history, next)),
+		[],
+	);
+	const settleRoom = useCallback(() => setRoomHistory(settleHistory), []);
+	const undoRoom = useCallback(() => setRoomHistory(undoHistory), []);
+	const redoRoom = useCallback(() => setRoomHistory(redoHistory), []);
+	// Draw mode edits the draft, not the room — room history sits it out
+	// (undoing the room underneath a seeded draft would silently desync them).
+	const historyActive = viewMode !== "draw";
+	const canUndo = historyActive && roomHistory.past.length > 0;
+	const canRedo = historyActive && roomHistory.future.length > 0;
 	const [unit, setUnit] = useState<Unit>("m");
 	// Bottom-left view toggles. Grid shows the in-scene reference grid; snap
 	// gates draw/placement quantize + flush snapping. Both default on, matching
@@ -88,7 +125,9 @@ function Planner() {
 	useEffect(() => {
 		const saved = deserializeSavedState(localStorage.getItem(STORAGE_KEY));
 		if (saved) {
-			setRoom(saved.room);
+			// Hydration replaces the pre-mount sample room outright — resetting
+			// history keeps it out of the undo stack.
+			setRoomHistory(createHistory(saved.room));
 			setUnit(saved.unit);
 			setSavedAt(saved.savedAt);
 			lastSavedRef.current = JSON.stringify({
@@ -140,7 +179,7 @@ function Planner() {
 			}
 			setDraft(emptyOutlineDraft());
 		}
-	}, [viewMode, room, draft]);
+	}, [viewMode, room, draft, setRoom]);
 
 	// The 2D lens's armed door/window tool. Owned here (like drawTool) so the
 	// tool stack chrome and the header status line share it with the canvas.
@@ -252,7 +291,7 @@ function Planner() {
 		}
 		setDraft(emptyOutlineDraft());
 		setViewMode("2d");
-	}, [draft, room.outline]);
+	}, [draft, room.outline, setRoom]);
 	// Esc reverts an edit session to the room as it stands; a fresh open
 	// draft just clears.
 	const cancelDraft = useCallback(
@@ -281,7 +320,7 @@ function Planner() {
 		});
 		setDraft(emptyOutlineDraft());
 		setViewMode("draw");
-	}, []);
+	}, [setRoom]);
 
 	// ⏎ commits the draft into the room model, esc cancels it (reverting an
 	// edit session) — unless the keystroke belongs to the inline length input
@@ -302,6 +341,28 @@ function Planner() {
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [viewMode, closeDraft, cancelDraft]);
 
+	// ⌘Z / ⇧⌘Z (ctrl on non-mac) step the room history, everywhere history is
+	// live — draw mode sits out (see `historyActive`), and keystrokes inside
+	// inputs keep their native undo.
+	useEffect(() => {
+		if (!historyActive) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+			if (event.key.toLowerCase() !== "z") return;
+			if (
+				event.target instanceof HTMLElement &&
+				event.target.closest("input, textarea, [contenteditable]")
+			) {
+				return;
+			}
+			event.preventDefault();
+			if (event.shiftKey) redoRoom();
+			else undoRoom();
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [historyActive, undoRoom, redoRoom]);
+
 	// Screen 1d: the objects panel overlays the top-left chrome, which all
 	// moves right (mockup: left 404px) while the panel is open.
 	const objectsOpen = viewMode === "objects";
@@ -319,6 +380,8 @@ function Planner() {
 						<PlannerCanvas
 							room={room}
 							onRoomChange={setRoom}
+							onRoomPreview={previewRoom}
+							onRoomGestureEnd={settleRoom}
 							viewMode={viewMode}
 							cameraApiRef={cameraApiRef}
 							readoutStore={readoutStore}
@@ -353,6 +416,10 @@ function Planner() {
 					shifted={objectsOpen}
 				/>
 				<FloatingToolbar
+					onUndo={undoRoom}
+					onRedo={redoRoom}
+					canUndo={canUndo}
+					canRedo={canRedo}
 					onZoomIn={() => cameraApiRef.current?.zoomIn()}
 					onZoomOut={() => cameraApiRef.current?.zoomOut()}
 					onZoomToFit={() => cameraApiRef.current?.zoomToFit()}
