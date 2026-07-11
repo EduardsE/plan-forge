@@ -44,6 +44,7 @@ function item(overrides: Partial<FurnitureItem>): FurnitureItem {
 
 function room(overrides: Partial<Room>): Room {
   return {
+    id: "room-1",
     name: "Test",
     outline: RECT,
     openings: [],

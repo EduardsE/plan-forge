@@ -31,8 +31,9 @@ import {
 } from "#/lib/history";
 import {
   type CatalogItem,
-  createSampleRoom,
+  createSampleFloor,
   duplicateFurniture,
+  type Floor,
   type Footprint,
   type OpeningKind,
   type Point,
@@ -46,6 +47,7 @@ import {
   setRoomName,
   setRoomWallHeight,
   updateFurniture,
+  updateRoomIn,
 } from "#/lib/model";
 import {
   applyOutlineDraft,
@@ -79,37 +81,63 @@ export const Route = createFileRoute("/")({ component: Planner });
 
 function Planner() {
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
-  // The room lives inside a bounded undo/redo history. Discrete mutations
+  // The floor lives inside a bounded undo/redo history. Discrete mutations
   // (add/rotate/duplicate/delete, opening edits, outline close) go through
   // `setRoom` = one undo step each; the continuous drags stream through
   // `previewRoom` and fold into a single step when `settleRoom` fires at
   // gesture end — an esc-cancelled drag leaves no step at all.
-  const [roomHistory, setRoomHistory] = useState(() =>
-    createHistory(createSampleRoom()),
+  const [floorHistory, setFloorHistory] = useState(() =>
+    createHistory(createSampleFloor()),
   );
-  const room = roomHistory.current;
-  const setRoom = useCallback((next: Room | ((room: Room) => Room)) => {
-    setRoomHistory((history) => {
-      const value = typeof next === "function" ? next(history.current) : next;
-      // The pure model setters return the same reference for no-ops —
-      // those must not become empty undo steps (or clear the redo stack).
-      return value === history.current
-        ? history
-        : commitHistory(history, value);
-    });
+  const floor = floorHistory.current;
+  // One room today: scenes render `floor.rooms` through it, and every
+  // room-scoped mutation below addresses it by id (M2 makes the scenes
+  // iterate all rooms; nothing here assumes more structure than "the room
+  // being edited").
+  const room = floor.rooms[0];
+  const roomId = room.id;
+  // Whole-floor commits ("New room" today, "add room" later).
+  const setFloor = useCallback((next: Floor) => {
+    setFloorHistory((history) =>
+      next === history.current ? history : commitHistory(history, next),
+    );
   }, []);
-  const previewRoom = useCallback(
-    (next: Room) => setRoomHistory((history) => previewHistory(history, next)),
-    [],
+  const setRoom = useCallback(
+    (next: Room | ((room: Room) => Room)) => {
+      setFloorHistory((history) => {
+        // `updateRoomIn` keeps the pure setters' no-op contract at floor
+        // level: a same-reference room yields the same floor, which must not
+        // become an empty undo step (or clear the redo stack).
+        const value = updateRoomIn(
+          history.current,
+          roomId,
+          typeof next === "function" ? next : () => next,
+        );
+        return value === history.current
+          ? history
+          : commitHistory(history, value);
+      });
+    },
+    [roomId],
   );
-  const settleRoom = useCallback(() => setRoomHistory(settleHistory), []);
-  const undoRoom = useCallback(() => setRoomHistory(undoHistory), []);
-  const redoRoom = useCallback(() => setRoomHistory(redoHistory), []);
-  // Draw mode edits the draft, not the room — room history sits it out
-  // (undoing the room underneath a seeded draft would silently desync them).
+  const previewRoom = useCallback(
+    (next: Room) =>
+      setFloorHistory((history) =>
+        previewHistory(
+          history,
+          updateRoomIn(history.current, roomId, () => next),
+        ),
+      ),
+    [roomId],
+  );
+  const settleRoom = useCallback(() => setFloorHistory(settleHistory), []);
+  const undoRoom = useCallback(() => setFloorHistory(undoHistory), []);
+  const redoRoom = useCallback(() => setFloorHistory(redoHistory), []);
+  // Draw mode edits the draft, not the room — floor history sits it out
+  // (undoing the floor underneath a seeded draft would silently desync them).
   const historyActive = viewMode !== "draw";
-  const canUndo = historyActive && roomHistory.past.length > 0;
-  const canRedo = historyActive && roomHistory.future.length > 0;
+  const canUndo = historyActive && floorHistory.past.length > 0;
+  const canRedo = historyActive && floorHistory.future.length > 0;
   const [unit, setUnit] = useState<Unit>("m");
   // The furniture selection is route state so the inspector (outside the
   // canvas) and the in-scene picking/label share one selection. The canvas
@@ -215,14 +243,16 @@ function Planner() {
   const nudgeSelected = useCallback(
     (dx: number, dy: number) => {
       if (!selectedId) return;
-      setRoomHistory((history) => {
-        const next = nudgeFurniture(history.current, selectedId, dx, dy);
+      setFloorHistory((history) => {
+        const next = updateRoomIn(history.current, roomId, (current) =>
+          nudgeFurniture(current, selectedId, dx, dy),
+        );
         return next === history.current
           ? history
           : previewHistory(history, next);
       });
     },
-    [selectedId],
+    [selectedId, roomId],
   );
   // The Settings rail button's popover: room name + ceiling height, each
   // commit one history step through the pure room setters (no-ops return the
@@ -260,24 +290,26 @@ function Planner() {
     setCanvasReady(true);
   }, []);
 
-  // Autosave: hydrate once after mount (SSR renders the sample room —
-  // localStorage only exists on the client), then write back on every room
+  // Autosave: hydrate once after mount (SSR renders the sample floor —
+  // localStorage only exists on the client), then write back on every floor
   // or unit change. `lastSavedRef` holds the last payload written or loaded,
   // so hydration itself doesn't count as a save and reloads keep the honest
-  // saved-at time instead of resetting the clock to "just now".
+  // saved-at time instead of resetting the clock to "just now". A legacy
+  // single-room save hydrates as a migrated one-room floor and stays on disk
+  // in its old shape until the first real change writes v4.
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [storageReady, setStorageReady] = useState(false);
   const lastSavedRef = useRef<string | null>(null);
   useEffect(() => {
     const saved = deserializeSavedState(localStorage.getItem(STORAGE_KEY));
     if (saved) {
-      // Hydration replaces the pre-mount sample room outright — resetting
+      // Hydration replaces the pre-mount sample floor outright — resetting
       // history keeps it out of the undo stack.
-      setRoomHistory(createHistory(saved.room));
+      setFloorHistory(createHistory(saved.floor));
       setUnit(saved.unit);
       setSavedAt(saved.savedAt);
       lastSavedRef.current = JSON.stringify({
-        room: saved.room,
+        floor: saved.floor,
         unit: saved.unit,
       });
     }
@@ -285,16 +317,16 @@ function Planner() {
   }, []);
   useEffect(() => {
     if (!storageReady) return;
-    const payload = JSON.stringify({ room, unit });
+    const payload = JSON.stringify({ floor, unit });
     if (payload === lastSavedRef.current) return;
     lastSavedRef.current = payload;
     const now = Date.now();
     localStorage.setItem(
       STORAGE_KEY,
-      serializeSavedState({ room, unit, savedAt: now }),
+      serializeSavedState({ floor, unit, savedAt: now }),
     );
     setSavedAt(now);
-  }, [storageReady, room, unit]);
+  }, [storageReady, floor, unit]);
 
   // The draw-mode draft outline. Owned here (not by the canvas) so the
   // header's status line can count corners and committing can become the
@@ -448,8 +480,9 @@ function Planner() {
     [room],
   );
 
-  // The "new room" escape hatch: clear the room (autosave persists the
-  // cleared state, wiping the old save) and start over in draw mode.
+  // The "new room" escape hatch: clear the floor down to one fresh empty
+  // room (autosave persists the cleared state, wiping the old save) and
+  // start over in draw mode.
   const startNewRoom = useCallback(() => {
     if (
       !window.confirm(
@@ -458,15 +491,20 @@ function Planner() {
     ) {
       return;
     }
-    setRoom({
-      name: "Untitled room",
-      outline: [],
-      openings: [],
-      furniture: [],
+    setFloor({
+      rooms: [
+        {
+          id: crypto.randomUUID(),
+          name: "Untitled room",
+          outline: [],
+          openings: [],
+          furniture: [],
+        },
+      ],
     });
     setDraft(emptyOutlineDraft());
     setViewMode("draw");
-  }, [setRoom]);
+  }, [setFloor]);
 
   // ⏎ commits the draft into the room model, esc cancels it (reverting an
   // edit session) — unless the keystroke belongs to the inline length input

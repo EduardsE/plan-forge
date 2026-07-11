@@ -10,6 +10,7 @@ import {
 import type { FurnitureItem, Room } from "./types";
 
 const makeRoom = (overrides: Partial<Room> = {}): Room => ({
+  id: "room-1",
   name: "Living room",
   outline: [
     { x: 0, y: 0 },

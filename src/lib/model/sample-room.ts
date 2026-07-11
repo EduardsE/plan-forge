@@ -1,4 +1,4 @@
-import type { Room } from "./types";
+import type { Floor, Room } from "./types";
 
 /**
  * The mockup's living room (screens 1a/1b of `design/planforge-mockups.html`)
@@ -17,6 +17,7 @@ import type { Room } from "./types";
  */
 export function createSampleRoom(): Room {
   return {
+    id: "living-room",
     name: "Living room",
     outline: [
       { x: 0, y: 0 },
@@ -98,4 +99,9 @@ export function createSampleRoom(): Room {
       },
     ],
   };
+}
+
+/** The sample living room wrapped as the app's default one-room floor. */
+export function createSampleFloor(): Floor {
+  return { rooms: [createSampleRoom()] };
 }

@@ -114,6 +114,12 @@ export interface FurnitureItem {
 }
 
 export interface Room {
+  /**
+   * Stable identity within the floor. Outlines reshape and rooms reorder;
+   * the id never changes, so selections, mounts, and helpers can address a
+   * room across mutations (see `model/floor.ts`).
+   */
+  id: string;
   /** Display name, e.g. "Living room". */
   name?: string;
   /**
@@ -126,6 +132,19 @@ export interface Room {
   outline: Point[];
   openings: Opening[];
   furniture: FurnitureItem[];
+}
+
+/**
+ * A floor plan: one or more rooms sharing a single plan coordinate space —
+ * every room's outline, openings, and furniture live directly in floor
+ * coordinates (no per-room origin offset). The floor is the unit of app
+ * state: history and persistence hold a `Floor`; room-scoped mutations
+ * address a room by `Room.id` through `model/floor.ts`.
+ */
+export interface Floor {
+  /** Display name, e.g. "Loft apartment". */
+  name?: string;
+  rooms: Room[];
 }
 
 /** Axis-aligned bounding box of an outline. */

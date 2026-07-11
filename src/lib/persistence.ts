@@ -1,9 +1,9 @@
-import type { FurnitureItem, Opening, Point, Room } from "#/lib/model";
+import type { Floor, FurnitureItem, Opening, Point, Room } from "#/lib/model";
 import { MAX_WALL_HEIGHT, MIN_WALL_HEIGHT } from "#/lib/model";
 import type { Unit } from "#/lib/units";
 
 /**
- * localStorage autosave for the room model. The model is plain JSON already;
+ * localStorage autosave for the floor model. The model is plain JSON already;
  * this module owns the storage payload — serialization, and the paranoid
  * deserialization that keeps a stale or hand-edited save from crashing the
  * scenes (anything malformed hydrates as "no save").
@@ -12,19 +12,19 @@ import type { Unit } from "#/lib/units";
 export const STORAGE_KEY = "planforge.room";
 
 /** Bumped whenever the payload shape changes; older saves are discarded. */
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
 
 /**
- * Versions this build can still read. v1 predates the optional
- * `FurnitureItem.colorway`, v2 the optional `Room.wallHeight`; both fields
- * are purely additive, so older saves validate unchanged (absent field =
- * default) and load rather than being thrown away — the bumps only mark the
- * newer write shapes.
+ * Versions this build can still read. v1–v3 stored a single `room` (v1
+ * predates the optional `FurnitureItem.colorway`, v2 the optional
+ * `Room.wallHeight` — both purely additive); v4 stores a `floor` whose rooms
+ * carry ids. Legacy saves migrate on read — the room wraps into a one-room
+ * floor with a generated id — rather than being thrown away.
  */
-const READABLE_VERSIONS = new Set([1, 2, STORAGE_VERSION]);
+const READABLE_VERSIONS = new Set([1, 2, 3, STORAGE_VERSION]);
 
 export interface SavedState {
-  room: Room;
+  floor: Floor;
   /** Display unit the user last picked. */
   unit: Unit;
   /** Epoch ms of the write, so a reload reports "saved 5 min ago" honestly. */
@@ -125,7 +125,8 @@ function stacksResolve(furniture: FurnitureItem[]): boolean {
   });
 }
 
-function isRoom(value: unknown): value is Room {
+/** The pre-v4 room shape: everything but the id (legacy saves predate it). */
+function isLegacyRoom(value: unknown): value is Omit<Room, "id"> {
   if (typeof value !== "object" || value === null) return false;
   const room = value as Record<string, unknown>;
   if (room.name !== undefined && typeof room.name !== "string") return false;
@@ -154,10 +155,29 @@ function isRoom(value: unknown): value is Room {
   );
 }
 
+function isRoom(value: unknown): value is Room {
+  if (!isLegacyRoom(value)) return false;
+  const id = (value as Record<string, unknown>).id;
+  return typeof id === "string" && id.length > 0;
+}
+
+function isFloor(value: unknown): value is Floor {
+  if (typeof value !== "object" || value === null) return false;
+  const floor = value as Record<string, unknown>;
+  if (floor.name !== undefined && typeof floor.name !== "string") return false;
+  // A floor always holds at least one room (the app's "New room" invariant),
+  // and room ids must be unique — every helper addresses rooms by id.
+  if (!Array.isArray(floor.rooms) || floor.rooms.length === 0) return false;
+  if (!floor.rooms.every(isRoom)) return false;
+  const ids = new Set(floor.rooms.map((room: Room) => room.id));
+  return ids.size === floor.rooms.length;
+}
+
 /**
  * Parse a raw localStorage payload back into saved state. Returns null —
  * meaning "start fresh" — for missing, unparsable, wrong-version, or
- * structurally invalid saves.
+ * structurally invalid saves. Pre-v4 payloads (a single id-less `room`)
+ * migrate into a one-room floor with a freshly generated room id.
  */
 export function deserializeSavedState(json: string | null): SavedState | null {
   if (json === null) return null;
@@ -176,8 +196,17 @@ export function deserializeSavedState(json: string | null): SavedState | null {
     return null;
   if (state.unit !== "cm" && state.unit !== "m") return null;
   if (!isFiniteNumber(state.savedAt)) return null;
-  if (!isRoom(state.room)) return null;
-  return { room: state.room, unit: state.unit, savedAt: state.savedAt };
+  if (state.version < STORAGE_VERSION) {
+    if (!isLegacyRoom(state.room)) return null;
+    const room: Room = { ...state.room, id: crypto.randomUUID() };
+    return {
+      floor: { rooms: [room] },
+      unit: state.unit,
+      savedAt: state.savedAt,
+    };
+  }
+  if (!isFloor(state.floor)) return null;
+  return { floor: state.floor, unit: state.unit, savedAt: state.savedAt };
 }
 
 /** "saved just now" → "saved 5 min ago" → "saved 3 h ago" → "saved 2 d ago". */

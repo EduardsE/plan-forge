@@ -33,6 +33,7 @@ const rider = (over: Partial<FurnitureItem> = {}): FurnitureItem => ({
 });
 
 const roomWith = (furniture: FurnitureItem[]): Room => ({
+  id: "room-1",
   outline: [
     { x: 0, y: 0 },
     { x: 8, y: 0 },

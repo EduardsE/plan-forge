@@ -12,10 +12,16 @@ import {
 describe("buildWallSolids", () => {
   it("yields no walls for degenerate outlines", () => {
     expect(
-      buildWallSolids({ outline: [], openings: [], furniture: [] }),
+      buildWallSolids({
+        id: "room-1",
+        outline: [],
+        openings: [],
+        furniture: [],
+      }),
     ).toEqual([]);
     expect(
       buildWallSolids({
+        id: "room-1",
         outline: [
           { x: 0, y: 0 },
           { x: 4, y: 0 },
@@ -133,7 +139,12 @@ describe("cornerPosts", () => {
       { x: 2, y: 4 },
       { x: 0, y: 4 },
     ];
-    const solids = buildWallSolids({ outline, openings: [], furniture: [] });
+    const solids = buildWallSolids({
+      id: "room-1",
+      outline,
+      openings: [],
+      furniture: [],
+    });
     const posts = cornerPosts(solids, 0.1);
     expect(posts).toHaveLength(5);
     expect(

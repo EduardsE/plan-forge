@@ -439,6 +439,7 @@ describe("stacked riders through the mutations", () => {
     stack: { hostId: "table-1", dx: 0.4, dy: 0.1 },
   });
   const stackedRoom = (): Room => ({
+    id: "room-1",
     outline: [
       { x: 0, y: 0 },
       { x: 8, y: 0 },

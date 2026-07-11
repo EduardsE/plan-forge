@@ -73,6 +73,7 @@ describe("containRoomFurniture", () => {
       footprint: { width: 1, depth: 1, height: 1 },
     });
     const room: Room = {
+      id: "room-1",
       outline: RECT,
       openings: [],
       furniture: [inside, poking],
@@ -145,7 +146,7 @@ describe("overlappingFurnitureIds", () => {
 
 describe("nudgeFurniture", () => {
   function roomWith(...furniture: FurnitureItem[]): Room {
-    return { outline: RECT, openings: [], furniture };
+    return { id: "room-1", outline: RECT, openings: [], furniture };
   }
 
   it("shifts a floor item by the given delta", () => {
@@ -228,6 +229,7 @@ describe("stacked riders", () => {
 
   it("containRoomFurniture carries riders with a slid host", () => {
     const room: Room = {
+      id: "room-1",
       outline: RECT,
       openings: [],
       furniture: [host, rider],

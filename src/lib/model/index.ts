@@ -1,4 +1,5 @@
 export * from "./catalog";
+export * from "./floor";
 export * from "./furniture";
 export * from "./geometry";
 export * from "./openings";
