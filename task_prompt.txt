@@ -1,0 +1,49 @@
+You are running as an autonomous, single-task worker in the PlanForge repository.
+Your context is fresh: you have no memory of previous tasks. Read what you need.
+
+GOAL: complete exactly ONE task from PROGRESS.md, verify it, record it, and commit.
+
+Follow these steps in order:
+
+1. Read PROGRESS.md. Also read CLAUDE.md and any file it points you to (it holds the
+   project rules and working conventions).
+
+2. Find the FIRST incomplete task — the first line matching "- [ ]".
+   - If PROGRESS.md has a "## Upcoming" section, only look inside it.
+   - Otherwise take the first "- [ ]" line anywhere in the file (the tasks live under
+     per-phase headings such as "## Phase 6").
+   This one task is your ENTIRE job. Ignore every other task.
+
+3. If the task is ambiguous, under-specified, or you become blocked (missing decision,
+   external dependency, conflicting requirements): DO NOT guess and DO NOT start editing.
+   Instead, append a short note on a new indented line directly under that task in
+   PROGRESS.md, prefixed "  > BLOCKED: <what you need>", save the file, and STOP without
+   committing code. Explain the block in your final message. Leave the checkbox unchecked.
+
+4. Otherwise, do the work for that one task only. Stay in scope — modify only what the
+   task names. If you notice unrelated problems, note them under the task; do not fix them.
+
+5. VERIFY the work actually works before marking it done. Use whatever applies to what you
+   changed:
+     - pnpm check      (Biome lint + format — always run this if you touched src/)
+     - pnpm test       (or: pnpm vitest run <file> for a focused run)
+     - pnpm build      (if the change could affect the production build)
+   If verification fails, fix it and re-run. If you cannot make it pass, treat this as a
+   block: revert your working changes (git restore / git checkout as appropriate) so the
+   tree is clean, add a "  > BLOCKED:" note under the task per step 3, and STOP.
+
+6. Mark the task done in PROGRESS.md:
+     - If the file uses per-phase sections with in-place checkboxes (the current format),
+       change "- [ ]" to "- [x]" on that line IN PLACE and append a terse note of what you
+       did (one line, mirroring the style of the already-completed items near it).
+     - If the file is organized into "## Upcoming" / "## Completed" sections, move the
+       finished task's line into "## Completed" as "- [x] ..." with a one-line note.
+
+7. Commit ONLY the files you changed for this task, with a message that references the
+   task (e.g. its short id/title). Do not push. Do not sweep in unrelated changes —
+   `git add` the specific paths, never `git add -A` if the tree has unrelated edits.
+
+8. In your final message, state plainly: which task you did, that verification passed (name
+   the commands you ran), and the commit hash. If you blocked instead, say so and why.
+
+Do not attempt a second task. One task, then stop.
