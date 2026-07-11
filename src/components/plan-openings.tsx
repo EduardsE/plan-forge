@@ -36,9 +36,9 @@ import { formatLengthValue, parseLength, type Unit } from "#/lib/units";
  */
 
 /** Hover/selection stroke, same accent as the plan footprints. */
-const SELECTION_COLOR = "#0ea5e9";
+const SELECTION_COLOR = "#3a5bf0";
 /** Ghost fill while an armed tool hovers a wall (the guide cyan). */
-const GHOST_COLOR = "#22d3ee";
+const GHOST_COLOR = "#3a5bf0";
 
 /** Pick target reach beyond the wall faces, meters — the wall band is only
  * 0.1 m deep, a sliver at typical zoom. */
@@ -233,7 +233,7 @@ function ChipWidthField({
 	const cancelledRef = useRef(false);
 	useEffect(() => setText(value), [value]);
 	return (
-		<span className="flex items-center gap-1 whitespace-nowrap font-mono text-[#7ee9e1] text-[12.5px]">
+		<span className="flex items-center gap-1 whitespace-nowrap font-mono text-[#aebdf9] text-[12.5px]">
 			W
 			<input
 				type="text"
@@ -259,7 +259,7 @@ function ChipWidthField({
 						event.currentTarget.blur();
 					}
 				}}
-				className="pointer-events-auto w-[52px] rounded-md bg-white/[0.06] px-1.5 py-0.5 text-center font-mono text-[#7ee9e1] text-[12.5px] outline-none focus:bg-white/[0.12] focus:shadow-[0_0_0_1px_rgba(94,234,212,0.45)]"
+				className="pointer-events-auto w-[52px] rounded-md bg-white/[0.06] px-1.5 py-0.5 text-center font-mono text-[#aebdf9] text-[12.5px] outline-none focus:bg-white/[0.12] focus:shadow-[0_0_0_1px_rgba(58,91,240,0.45)]"
 			/>
 			{unit}
 		</span>
@@ -289,10 +289,10 @@ function OpeningChip({
 			style={{ pointerEvents: "none" }}
 		>
 			<div className="pointer-events-none flex -translate-x-1/2 -translate-y-full flex-col items-center">
-				<div className="mb-1.5 whitespace-nowrap rounded-full border border-[rgba(34,211,238,0.5)] bg-white/90 px-3 py-[5px] font-semibold text-[#0f766e] text-[12.5px] shadow-[0_8px_20px_rgba(15,27,61,0.12)]">
+				<div className="mb-1.5 whitespace-nowrap rounded-full border border-[rgba(58,91,240,0.5)] bg-white/90 px-3 py-[5px] font-semibold text-[#3a5bf0] text-[12.5px] shadow-[0_8px_20px_rgba(15,27,61,0.12)]">
 					{hole.kind === "door" ? "Door" : "Window"}
 				</div>
-				<div className="flex items-center gap-1.5 rounded-[13px] border border-[rgba(94,234,212,0.25)] bg-[rgba(13,22,48,0.94)] px-3 py-[9px] shadow-[0_16px_40px_rgba(13,22,48,0.35),0_0_22px_rgba(45,212,238,0.18)]">
+				<div className="flex items-center gap-1.5 rounded-[13px] border border-[rgba(58,91,240,0.25)] bg-[rgba(13,22,48,0.94)] px-3 py-[9px] shadow-[0_16px_40px_rgba(13,22,48,0.35),0_0_22px_rgba(58,91,240,0.18)]">
 					{hole.kind === "door" && (
 						<Tooltip label="Flip hinge side" side="bottom">
 							<button
@@ -322,7 +322,7 @@ function OpeningChip({
 						onCommit={(width) => onResize(hole.id, width)}
 					/>
 				</div>
-				<div className="h-[26px] w-[1.5px] bg-gradient-to-b from-[rgba(45,212,238,0.8)] to-transparent" />
+				<div className="h-[26px] w-[1.5px] bg-gradient-to-b from-[rgba(58,91,240,0.8)] to-transparent" />
 			</div>
 		</Html>
 	);

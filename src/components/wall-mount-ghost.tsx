@@ -29,7 +29,7 @@ import type { Unit } from "#/lib/units";
  * canvas commits the mount; anywhere else the drag layer cancels.
  */
 
-const GHOST_COLOR = "#22d3ee";
+const GHOST_COLOR = "#3a5bf0";
 
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 

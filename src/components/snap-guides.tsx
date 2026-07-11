@@ -11,10 +11,10 @@ import { formatLength, type Unit } from "#/lib/units";
  * furniture move drag, which both get them from `snapPlacement`.
  */
 
-const GUIDE_COLOR = "#22d3ee";
+const GUIDE_COLOR = "#3a5bf0";
 /** Readout pill colors, from the mockup's "3.00 m" chips. */
 const PILL_CLASS =
-	"whitespace-nowrap rounded-[7px] bg-[#0F766E] px-2.5 py-[3px] font-mono text-[12.5px] text-white";
+	"whitespace-nowrap rounded-[7px] bg-[#3a5bf0] px-2.5 py-[3px] font-mono text-[12.5px] text-white";
 
 /** Stacked above the 3D floor top (0.001) and the rug (top ≈ 0.017). */
 const GUIDE_Y = 0.026;

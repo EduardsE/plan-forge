@@ -48,7 +48,7 @@ import {
  */
 
 const WALL_COLOR = "#16213e";
-const SNAP_COLOR = "#22d3ee";
+const SNAP_COLOR = "#3a5bf0";
 /** Snap radius in screen px, converted per-event to meters via camera zoom. */
 const SNAP_TOLERANCE_PX = 12;
 /** Clicking this close (px) to the start corner closes the outline instead. */
@@ -146,7 +146,7 @@ function SegmentLabel({
 	return (
 		<Html position={v3(at, LABEL_Y)} center style={{ pointerEvents: "none" }}>
 			{editing ? (
-				<div className="pointer-events-auto flex items-center gap-1 rounded-lg border-2 border-[#22D3EE] bg-white px-2 py-[3px] shadow-[0_0_0_4px_rgba(34,211,238,0.15),0_6px_16px_rgba(15,27,61,0.10)]">
+				<div className="pointer-events-auto flex items-center gap-1 rounded-lg border-2 border-[#3a5bf0] bg-white px-2 py-[3px] shadow-[0_0_0_4px_rgba(58,91,240,0.15),0_6px_16px_rgba(15,27,61,0.10)]">
 					<input
 						// biome-ignore lint/a11y/noAutofocus: the input replaces the label the user just clicked
 						autoFocus
@@ -214,7 +214,7 @@ function AlignmentGuide({
 				position={[mid.x, LABEL_Y, mid.y]}
 				style={{ pointerEvents: "none", transform: "translateY(-50%)" }}
 			>
-				<div className="ml-3 whitespace-nowrap rounded-lg border-[1.5px] border-dashed border-[rgba(34,211,238,0.7)] bg-[rgba(34,211,238,0.10)] px-[11px] py-1 font-mono text-[12px] text-[#0F766E]">
+				<div className="ml-3 whitespace-nowrap rounded-lg border-[1.5px] border-dashed border-[rgba(58,91,240,0.7)] bg-[rgba(58,91,240,0.10)] px-[11px] py-1 font-mono text-[12px] text-[#3a5bf0]">
 					{startAligned ? "snap · aligned with start" : "snap · aligned"}
 				</div>
 			</Html>
@@ -268,7 +268,7 @@ function AngleBadge({
 				center
 				style={{ pointerEvents: "none" }}
 			>
-				<span className="whitespace-nowrap rounded-md border border-[rgba(34,211,238,0.6)] bg-white px-2 py-[2px] font-mono text-[11.5px] text-[#0F766E]">
+				<span className="whitespace-nowrap rounded-md border border-[rgba(58,91,240,0.6)] bg-white px-2 py-[2px] font-mono text-[11.5px] text-[#3a5bf0]">
 					{angleDeg}°
 				</span>
 			</Html>
@@ -284,7 +284,7 @@ function CornerDot({ at, isStart }: { at: Point; isStart: boolean }) {
 				className="h-4 w-4 rounded-full border-[3px] border-[#16213E] bg-white"
 				style={{
 					boxShadow: isStart
-						? "0 0 0 6px rgba(34,211,238,0.25), 0 0 16px rgba(34,211,238,0.5)"
+						? "0 0 0 6px rgba(58,91,240,0.25), 0 0 16px rgba(58,91,240,0.5)"
 						: "0 2px 6px rgba(15,27,61,0.25)",
 				}}
 			/>
@@ -298,9 +298,9 @@ function DrawCursor({ at }: { at: Point }) {
 	return (
 		<Html position={v3(at, LABEL_Y)} center style={{ pointerEvents: "none" }}>
 			<div className="relative">
-				<div className="-translate-x-1/2 -translate-y-1/2 absolute left-0 top-0 h-[60px] w-[1.5px] bg-[rgba(34,211,238,0.7)]" />
-				<div className="-translate-x-1/2 -translate-y-1/2 absolute left-0 top-0 h-[1.5px] w-[60px] bg-[rgba(34,211,238,0.7)]" />
-				<div className="-translate-x-1/2 -translate-y-1/2 absolute left-0 top-0 h-3.5 w-3.5 rounded-full bg-[#22D3EE] shadow-[0_0_0_5px_rgba(34,211,238,0.25),0_0_18px_rgba(34,211,238,0.7)]" />
+				<div className="-translate-x-1/2 -translate-y-1/2 absolute left-0 top-0 h-[60px] w-[1.5px] bg-[rgba(58,91,240,0.7)]" />
+				<div className="-translate-x-1/2 -translate-y-1/2 absolute left-0 top-0 h-[1.5px] w-[60px] bg-[rgba(58,91,240,0.7)]" />
+				<div className="-translate-x-1/2 -translate-y-1/2 absolute left-0 top-0 h-3.5 w-3.5 rounded-full bg-[#3a5bf0] shadow-[0_0_0_5px_rgba(58,91,240,0.25),0_0_18px_rgba(58,91,240,0.7)]" />
 			</div>
 		</Html>
 	);
@@ -339,7 +339,7 @@ function RectPreview({ a, b, unit }: { a: Point; b: Point; unit: Unit }) {
 					center
 					style={{ pointerEvents: "none" }}
 				>
-					<span className="whitespace-nowrap rounded-lg border-[1.5px] border-[#22D3EE] bg-[rgba(34,211,238,0.10)] px-[11px] py-[3px] font-mono text-[13.5px] text-[#0F766E]">
+					<span className="whitespace-nowrap rounded-lg border-[1.5px] border-[#3a5bf0] bg-[rgba(58,91,240,0.10)] px-[11px] py-[3px] font-mono text-[13.5px] text-[#3a5bf0]">
 						{formatLength(width, unit)}
 					</span>
 				</Html>
@@ -350,7 +350,7 @@ function RectPreview({ a, b, unit }: { a: Point; b: Point; unit: Unit }) {
 					center
 					style={{ pointerEvents: "none" }}
 				>
-					<span className="whitespace-nowrap rounded-lg border-[1.5px] border-[#22D3EE] bg-[rgba(34,211,238,0.10)] px-[11px] py-[3px] font-mono text-[13.5px] text-[#0F766E]">
+					<span className="whitespace-nowrap rounded-lg border-[1.5px] border-[#3a5bf0] bg-[rgba(58,91,240,0.10)] px-[11px] py-[3px] font-mono text-[13.5px] text-[#3a5bf0]">
 						{formatLength(height, unit)}
 					</span>
 				</Html>
@@ -534,7 +534,7 @@ function CornerHandle({
 					className="h-4 w-4 rounded-full border-[3px] border-[#16213E] bg-white"
 					style={{
 						boxShadow: hovered
-							? "0 0 0 6px rgba(34,211,238,0.25), 0 0 16px rgba(34,211,238,0.5)"
+							? "0 0 0 6px rgba(58,91,240,0.25), 0 0 16px rgba(58,91,240,0.5)"
 							: "0 2px 6px rgba(15,27,61,0.25)",
 					}}
 				/>
@@ -649,7 +649,7 @@ function OutlineEditLayer({
 					center
 					style={{ pointerEvents: "none" }}
 				>
-					<div className="h-3.5 w-3.5 rounded-full border-2 border-[#22D3EE] bg-[rgba(34,211,238,0.35)] shadow-[0_0_0_5px_rgba(34,211,238,0.2)]" />
+					<div className="h-3.5 w-3.5 rounded-full border-2 border-[#3a5bf0] bg-[rgba(58,91,240,0.35)] shadow-[0_0_0_5px_rgba(58,91,240,0.2)]" />
 				</Html>
 			)}
 			{drag && (
@@ -861,7 +861,7 @@ export function DrawScene({
 						center
 						style={{ pointerEvents: "none" }}
 					>
-						<span className="whitespace-nowrap rounded-lg border-[1.5px] border-[#22D3EE] bg-[rgba(34,211,238,0.10)] px-[11px] py-[3px] font-mono text-[13.5px] text-[#0F766E]">
+						<span className="whitespace-nowrap rounded-lg border-[1.5px] border-[#3a5bf0] bg-[rgba(58,91,240,0.10)] px-[11px] py-[3px] font-mono text-[13.5px] text-[#3a5bf0]">
 							{formatLength(distance(last, preview.point), unit)}
 						</span>
 					</Html>

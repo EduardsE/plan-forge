@@ -102,12 +102,13 @@ const TRANSITION_FOV_DEG = 10;
 const TOP_DOWN_PHI = 0.01;
 
 /**
- * The CSS grid tokens are alpha layers over the canvas color; WebGL wants
- * opaque line colors, so these are --canvas-grid-minor / -major pre-blended
- * onto --canvas (#f3f6fa).
+ * Faint warm-ink drafting grid for the plan lenses. WebGL wants opaque line
+ * colors, so these are rgba(30,30,25,.05/.09) pre-blended onto the paper
+ * ground (--paper, #f1f1ed). The 3D lens has no in-scene grid at all — its
+ * ground is the CSS studio spotlight pool (screen 3d).
  */
-const GRID_MINOR_COLOR = "#e9eff7";
-const GRID_MAJOR_COLOR = "#dfe8f4";
+const GRID_MINOR_COLOR = "#e6e6e2";
+const GRID_MAJOR_COLOR = "#dededa";
 
 type OrbitControlsRef = ComponentRef<typeof OrbitControls>;
 
@@ -834,7 +835,10 @@ export function PlannerCanvas({
 					apiRef={cameraApiRef}
 					readoutStore={readoutStore}
 				/>
-				{gridVisible && (
+				{/* Drafting grid, plan lenses only — the 3D lens grounds the room on
+				    the CSS spotlight pool instead (it also stays out of transition
+				    flights, which start and end at the matched top-down pose). */}
+				{gridVisible && renderPlan && (
 					<Grid
 						infiniteGrid
 						followCamera={false}
@@ -844,8 +848,6 @@ export function PlannerCanvas({
 						sectionSize={2.5}
 						sectionThickness={1.4}
 						sectionColor={GRID_MAJOR_COLOR}
-						// One value for both lenses: a per-lens fade would pop while the
-						// transition camera is still ~40 m out at the top-down end.
 						fadeDistance={130}
 						fadeStrength={1}
 					/>

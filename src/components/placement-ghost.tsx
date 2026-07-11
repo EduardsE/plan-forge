@@ -21,7 +21,7 @@ import type { Unit } from "#/lib/units";
  * cancels (releases the ghost can't see are its job).
  */
 
-const GHOST_COLOR = "#22d3ee";
+const GHOST_COLOR = "#3a5bf0";
 /** Ghost corner rounding — the mockup's 12px at plan scale. */
 const CORNER_RADIUS = 0.11;
 

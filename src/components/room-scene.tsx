@@ -71,8 +71,8 @@ const WINDOW_FRAME_COLOR = "#e6dbc6";
 const WINDOW_FRAME_SIZE = 0.09;
 const PANE_COLORS = ["#fff6de", "#ffe9c2"] as const;
 
-/** Mockup's selection stroke: rgba(45,212,238,.7) on the desk chair faces. */
-const SELECTION_COLOR = "#2dd4ee";
+/** Mockup's selection stroke: rgba(58,91,240,.7) on the desk chair faces. */
+const SELECTION_COLOR = "#3a5bf0";
 /** Collision-warning tint mixed into a body that overlaps a neighbor. */
 const WARNING_COLOR = "#e0533a";
 const WARNING_MIX = 0.55;
@@ -246,12 +246,14 @@ function Platform({ outline }: { outline: Point[] }) {
 				<meshLambertMaterial attach="material-1" color={SLAB_SIDE_COLOR} />
 			</mesh>
 			<group position={[centerX, 0, centerZ]}>
+				{/* Studio contact shadow grounding the model in the spotlight pool
+				    (screen 3d: rgba(18,24,44,.30)). */}
 				<BlobShadow
 					width={bounds.width * 1.28}
 					depth={bounds.height * 1.18}
 					y={FLOOR_TOP - SLAB_THICKNESS - 0.004}
-					color="#0f1b3d"
-					opacity={0.22}
+					color="#12182c"
+					opacity={0.3}
 				/>
 			</group>
 		</group>

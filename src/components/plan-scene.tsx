@@ -57,8 +57,8 @@ import type { Unit } from "#/lib/units";
  * dimension lines and the room area card, so text stays crisp at any zoom.
  * Every color and proportion is lifted from `design/planforge-mockups.html`.
  * Footprints pick like the 3D lens's furniture: hover/selected strokes go
- * accent-cyan, selection adds a halo ring plus the shared chip, and dragging
- * a selected footprint moves it through the shared move-drag session.
+ * accent-blue, selection adds a halo ring plus the shared label chip, and
+ * dragging a selected footprint moves it through the shared move-drag session.
  *
  * Every stroke disables the line material's alpha-to-coverage: with it on,
  * some GPUs resolve a line's coverage-discarded fragments as opaque
@@ -133,9 +133,8 @@ const FOOTPRINT_FALLBACK: FootprintStyle = {
 };
 const PLANT_FILL = "#4f7d46";
 
-/** Hover/selection stroke on the white plan sheet — the accent gradient's
- * darker end (the 3D lens's #2dd4ee washes out against the pale floor). */
-const SELECTION_COLOR = "#0ea5e9";
+/** Hover/selection stroke on the white plan sheet — the Paper accent blue. */
+const SELECTION_COLOR = "#3a5bf0";
 /** Gap between a selected footprint's edge and its halo ring, meters. */
 const HALO_GAP = 0.06;
 /** Extra fill strength while an item is selected. */
@@ -865,7 +864,7 @@ export function PlanScene({
 					<span className="text-[15px] font-bold tracking-[0.14em] text-[#33415C]">
 						{(room.name ?? "Room").toUpperCase()}
 					</span>
-					<span className="font-mono text-[12.5px] text-[#0F766E]">
+					<span className="font-mono text-[12.5px] text-[#3a5bf0]">
 						{area.toFixed(2)} m² floor area
 					</span>
 				</div>
