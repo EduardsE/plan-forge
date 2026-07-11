@@ -18,6 +18,22 @@ describe("serialize / deserialize round trip", () => {
     expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
   });
 
+  it("round-trips a material colorway override", () => {
+    const base = createSampleRoom();
+    const state = {
+      room: {
+        ...base,
+        furniture: base.furniture.map((item, i) =>
+          i === 0 ? { ...item, colorway: "#6f7d6a" } : item,
+        ),
+      },
+      unit: "m" as const,
+      savedAt: 1,
+    };
+    const restored = deserializeSavedState(serializeSavedState(state));
+    expect(restored?.room.furniture[0].colorway).toBe("#6f7d6a");
+  });
+
   it("accepts an empty room (a new room awaiting its first draw)", () => {
     const state = {
       room: { name: "Untitled room", outline: [], openings: [], furniture: [] },
@@ -35,12 +51,18 @@ describe("deserializeSavedState rejection", () => {
     expect(deserializeSavedState('"a string"')).toBeNull();
   });
 
-  it("rejects the wrong version", () => {
+  it("rejects an unreadable version", () => {
     const json = serializeSavedState(sampleState()).replace(
-      '"version":1',
       '"version":2',
+      '"version":99',
     );
     expect(deserializeSavedState(json)).toBeNull();
+  });
+
+  it("still reads a legacy v1 save (colorway predates it, stays default)", () => {
+    const state = sampleState();
+    const v1 = serializeSavedState(state).replace('"version":2', '"version":1');
+    expect(deserializeSavedState(v1)).toEqual(state);
   });
 
   it("rejects a bad unit or savedAt", () => {

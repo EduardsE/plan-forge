@@ -330,6 +330,38 @@ export function addFurniture(room: Room, item: FurnitureItem): Room {
 }
 
 /**
+ * Set (or clear, with `null`) an item's material colorway — the inspector's
+ * MATERIAL swatches. A no-op (same value, or clearing an already-plain item)
+ * and unknown ids return the room unchanged so no empty history step lands.
+ */
+export function setFurnitureColorway(
+  room: Room,
+  id: string,
+  colorway: string | null,
+): Room {
+  const item = room.furniture.find((entry) => entry.id === id);
+  if (!item) return room;
+  if (colorway === null) {
+    if (item.colorway === undefined) return room;
+    return {
+      ...room,
+      furniture: room.furniture.map((entry) => {
+        if (entry.id !== id) return entry;
+        const { colorway: _dropped, ...plain } = entry;
+        return plain;
+      }),
+    };
+  }
+  if (item.colorway === colorway) return room;
+  return {
+    ...room,
+    furniture: room.furniture.map((entry) =>
+      entry.id === id ? { ...entry, colorway } : entry,
+    ),
+  };
+}
+
+/**
  * Plan positions of the rotated footprint's four corners. The rotation
  * matches the renderers' `rotation-y` (degrees about world up; plan y points
  * down, so a positive turn takes +x toward -y).

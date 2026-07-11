@@ -9,6 +9,7 @@ import {
   MIN_FOOTPRINT_SIZE,
   removeFurniture,
   rotateFurniture,
+  setFurnitureColorway,
   setFurnitureFootprint,
   setFurnitureRotation,
   setMountElevation,
@@ -43,6 +44,43 @@ describe("rotateFurniture", () => {
     expect(room.furniture.find((item) => item.id === "desk-1")?.rotation).toBe(
       0,
     );
+  });
+});
+
+describe("setFurnitureColorway", () => {
+  const of = (room: Room, id: string) =>
+    room.furniture.find((item) => item.id === id);
+
+  it("sets an explicit colorway on the target item only", () => {
+    const room = createSampleRoom();
+    const next = setFurnitureColorway(room, "desk-1", "#123456");
+    expect(of(next, "desk-1")?.colorway).toBe("#123456");
+    expect(of(next, "credenza-1")?.colorway).toBeUndefined();
+  });
+
+  it("clears the override back to the catalog default with null", () => {
+    const painted = setFurnitureColorway(
+      createSampleRoom(),
+      "desk-1",
+      "#123456",
+    );
+    const cleared = setFurnitureColorway(painted, "desk-1", null);
+    expect(of(cleared, "desk-1")?.colorway).toBeUndefined();
+    expect("colorway" in (of(cleared, "desk-1") as object)).toBe(false);
+  });
+
+  it("returns the same room for no-ops (unknown id, unchanged, clear-when-plain)", () => {
+    const room = createSampleRoom();
+    expect(setFurnitureColorway(room, "nope", "#123456")).toBe(room);
+    expect(setFurnitureColorway(room, "desk-1", null)).toBe(room);
+    const painted = setFurnitureColorway(room, "desk-1", "#123456");
+    expect(setFurnitureColorway(painted, "desk-1", "#123456")).toBe(painted);
+  });
+
+  it("does not mutate the input room", () => {
+    const room = createSampleRoom();
+    setFurnitureColorway(room, "desk-1", "#123456");
+    expect(of(room, "desk-1")?.colorway).toBeUndefined();
   });
 });
 

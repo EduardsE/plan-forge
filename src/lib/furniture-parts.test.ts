@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  colorwaysForCatalog,
   type FurniturePart,
+  furnitureBaseColor,
   furnitureParts,
   HULL_RIM,
   mixHex,
@@ -164,6 +166,31 @@ describe("part scales", () => {
     });
     expect(sx).toBeCloseTo(1.04, 9);
     expect(sy).toBeCloseTo(1.04 * 0.9, 9);
+  });
+});
+
+describe("material colorways", () => {
+  it("leads with the item's default tone, then category alternates", () => {
+    const colorways = colorwaysForCatalog("sofa-2");
+    expect(colorways[0]).toBe(furnitureBaseColor("sofa-2"));
+    expect(colorways.length).toBeGreaterThan(1);
+    // No duplicate default (the base isn't repeated in the alternates).
+    expect(new Set(colorways).size).toBe(colorways.length);
+  });
+
+  it("offers no swatches for categories whose body ignores the base color", () => {
+    // plantParts takes no color, so a material override would do nothing.
+    expect(colorwaysForCatalog("plant")).toHaveLength(0);
+    expect(colorwaysForCatalog("not-in-catalog")).toHaveLength(0);
+  });
+
+  it("tints the body from an explicit colorway override", () => {
+    const fp = catalogItemById("sofa-2")?.footprint;
+    if (!fp) throw new Error("missing sofa-2");
+    const [defaultBack] = furnitureParts("sofa-2", fp);
+    const [tintedBack] = furnitureParts("sofa-2", fp, "#123456");
+    expect(defaultBack.color).toBe(furnitureBaseColor("sofa-2"));
+    expect(tintedBack.color).toBe("#123456");
   });
 });
 

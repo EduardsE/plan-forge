@@ -515,8 +515,8 @@ function FurnitureMesh({
   // nearly flat on it, wall mounts hang centered at their elevation (and
   // cast no floor shadow), stacked riders stand on their host's top.
   const parts = useMemo(
-    () => furnitureParts(item.catalogId, item.footprint),
-    [item.catalogId, item.footprint],
+    () => furnitureParts(item.catalogId, item.footprint, item.colorway),
+    [item.catalogId, item.footprint, item.colorway],
   );
   const isRug = item.catalogId === "rug";
   const lift = item.mount

@@ -18,6 +18,7 @@ function renderInspector(props: Partial<Parameters<typeof Inspector>[0]>) {
       onRotateTo={() => {}}
       onElevate={() => {}}
       onMoveTo={() => {}}
+      onRecolor={() => {}}
       onRotate90={() => {}}
       onClone={() => {}}
       onDelete={() => {}}
@@ -101,6 +102,20 @@ describe("Inspector", () => {
     expect(onRotate90).toHaveBeenCalledOnce();
     expect(onClone).toHaveBeenCalledOnce();
     expect(onDelete).toHaveBeenCalledOnce();
+  });
+
+  it("recolors via a material swatch (and clears back to default)", () => {
+    const onRecolor = vi.fn();
+    renderInspector({ selectedItem: item, onRecolor });
+
+    expect(screen.getByText("MATERIAL")).toBeTruthy();
+    // A non-default swatch sets an explicit colorway...
+    const swatches = screen.getAllByRole("button", { name: /^Material / });
+    fireEvent.click(swatches[0]);
+    expect(onRecolor).toHaveBeenCalledWith(expect.stringMatching(/^#/));
+    // ...and the default swatch clears the override.
+    fireEvent.click(screen.getByRole("button", { name: "Default material" }));
+    expect(onRecolor).toHaveBeenCalledWith(null);
   });
 
   it("swaps rotation for elevation on wall-mounted items and hides rotate", () => {

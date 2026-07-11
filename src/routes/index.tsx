@@ -38,6 +38,7 @@ import {
   type Room,
   removeFurniture,
   rotateFurniture,
+  setFurnitureColorway,
   setFurnitureFootprint,
   setFurnitureRotation,
   setMountElevation,
@@ -178,6 +179,13 @@ function Planner() {
           selectedId,
         ),
       );
+    },
+    [selectedId, setRoom],
+  );
+  const recolorSelected = useCallback(
+    (colorway: string | null) => {
+      if (!selectedId) return;
+      setRoom((current) => setFurnitureColorway(current, selectedId, colorway));
     },
     [selectedId, setRoom],
   );
@@ -584,6 +592,7 @@ function Planner() {
           onRotateTo={rotateSelectedTo}
           onElevate={elevateSelected}
           onMoveTo={moveSelectedTo}
+          onRecolor={recolorSelected}
           onRotate90={rotateSelected90}
           onClone={cloneSelected}
           onDelete={deleteSelected}

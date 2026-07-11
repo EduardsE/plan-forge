@@ -11,7 +11,15 @@ import type { Unit } from "#/lib/units";
 export const STORAGE_KEY = "planforge.room";
 
 /** Bumped whenever the payload shape changes; older saves are discarded. */
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
+
+/**
+ * Versions this build can still read. v1 predates the optional
+ * `FurnitureItem.colorway`; since that field is purely additive, a v1 save
+ * validates unchanged (no colorway = catalog default), so it loads rather
+ * than being thrown away — the bump only marks the newer write shape.
+ */
+const READABLE_VERSIONS = new Set([1, STORAGE_VERSION]);
 
 export interface SavedState {
   room: Room;
@@ -96,7 +104,8 @@ function isFurnitureItem(
     isFiniteNumber(footprint.height) &&
     footprint.height > 0 &&
     (item.mount === undefined || isWallMount(item.mount, wallCount)) &&
-    (item.stack === undefined || (isStack(item.stack) && !item.mount))
+    (item.stack === undefined || (isStack(item.stack) && !item.mount)) &&
+    (item.colorway === undefined || typeof item.colorway === "string")
   );
 }
 
@@ -148,7 +157,11 @@ export function deserializeSavedState(json: string | null): SavedState | null {
   }
   if (typeof parsed !== "object" || parsed === null) return null;
   const state = parsed as Record<string, unknown>;
-  if (state.version !== STORAGE_VERSION) return null;
+  if (
+    typeof state.version !== "number" ||
+    !READABLE_VERSIONS.has(state.version)
+  )
+    return null;
   if (state.unit !== "cm" && state.unit !== "m") return null;
   if (!isFiniteNumber(state.savedAt)) return null;
   if (!isRoom(state.room)) return null;

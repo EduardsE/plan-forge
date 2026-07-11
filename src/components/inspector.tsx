@@ -1,6 +1,7 @@
 import { Copy, RotateCw, Trash2 } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { CatalogThumbnail } from "#/components/catalog-thumbnails";
+import { colorwaysForCatalog, furnitureBaseColor } from "#/lib/furniture-parts";
 import {
   CATALOG_CATEGORY_LABELS,
   catalogItemById,
@@ -121,6 +122,8 @@ interface SelectionSectionProps {
   onElevate: (elevation: number) => void;
   /** A committed center position, meters (floor items only). */
   onMoveTo: (position: Point) => void;
+  /** A committed material colorway; null clears the override to the default. */
+  onRecolor: (colorway: string | null) => void;
   onRotate90: () => void;
   onClone: () => void;
   onDelete: () => void;
@@ -134,11 +137,15 @@ function SelectionSection({
   onRotateTo,
   onElevate,
   onMoveTo,
+  onRecolor,
   onRotate90,
   onClone,
   onDelete,
 }: SelectionSectionProps) {
   const catalogItem = catalogItemById(item.catalogId);
+  const colorways = colorwaysForCatalog(item.catalogId);
+  const baseColor = furnitureBaseColor(item.catalogId);
+  const activeColor = item.colorway ?? baseColor;
 
   const commitSize = (dimension: keyof Footprint) => (text: string) => {
     const meters = parseLength(text, unit);
@@ -291,6 +298,36 @@ function SelectionSection({
         </div>
       </div>
 
+      {colorways.length > 0 && (
+        <div className="flex flex-col gap-2.5">
+          <SectionLabel>MATERIAL</SectionLabel>
+          <div className="flex flex-wrap gap-2">
+            {colorways.map((color) => {
+              const selected = color === activeColor;
+              const isDefault = color === baseColor;
+              return (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={
+                    isDefault ? "Default material" : `Material ${color}`
+                  }
+                  aria-pressed={selected}
+                  onClick={() => onRecolor(isDefault ? null : color)}
+                  style={{ backgroundColor: color }}
+                  className={cn(
+                    "h-7 w-7 rounded-full border",
+                    selected
+                      ? "border-[var(--blue)] ring-2 ring-[var(--blue)] ring-offset-1 ring-offset-[var(--panel)]"
+                      : "border-[var(--control-border)]",
+                  )}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2.5">
         <SectionLabel>ARRANGE</SectionLabel>
         <div className="grid grid-cols-3 gap-2">
@@ -333,6 +370,7 @@ export interface InspectorProps {
   onRotateTo: (deg: number) => void;
   onElevate: (elevation: number) => void;
   onMoveTo: (position: Point) => void;
+  onRecolor: (colorway: string | null) => void;
   onRotate90: () => void;
   onClone: () => void;
   onDelete: () => void;
@@ -349,6 +387,7 @@ export function Inspector({
   onRotateTo,
   onElevate,
   onMoveTo,
+  onRecolor,
   onRotate90,
   onClone,
   onDelete,
@@ -405,6 +444,7 @@ export function Inspector({
             onRotateTo={onRotateTo}
             onElevate={onElevate}
             onMoveTo={onMoveTo}
+            onRecolor={onRecolor}
             onRotate90={onRotate90}
             onClone={onClone}
             onDelete={onDelete}

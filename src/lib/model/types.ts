@@ -105,6 +105,12 @@ export interface FurnitureItem {
    * Never combined with `mount`.
    */
   stack?: Stack;
+  /**
+   * Optional material override: a `#rrggbb` colorway replacing the item's
+   * default body tone (the inspector's MATERIAL swatches). Absent = the
+   * catalog default. Only the 3D lens tints the body from it.
+   */
+  colorway?: string;
 }
 
 export interface Room {

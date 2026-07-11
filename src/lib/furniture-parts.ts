@@ -1,4 +1,4 @@
-import type { Footprint } from "#/lib/model";
+import type { CatalogCategory, Footprint } from "#/lib/model";
 import { catalogItemById } from "#/lib/model";
 
 /**
@@ -61,6 +61,43 @@ export const FURNITURE_COLORS: Record<string, string> = {
   "picture-frame": "#d8845c",
 };
 export const FURNITURE_FALLBACK_COLOR = "#b98a5f";
+
+/** An item's default body tone before any material override. */
+export function furnitureBaseColor(catalogId: string): string {
+  return FURNITURE_COLORS[catalogId] ?? FURNITURE_FALLBACK_COLOR;
+}
+
+/**
+ * Selectable material colorways per category (the inspector's MATERIAL row) —
+ * a small warm palette that stays inside the room's beige/wood/terracotta
+ * world, so an override never fights the Paper look. Categories whose bodies
+ * don't take a base color (plants — `plantParts` ignores it) are omitted, so
+ * the inspector shows no dead control for them.
+ */
+const CATEGORY_COLORWAYS: Partial<Record<CatalogCategory, string[]>> = {
+  seating: ["#ce7b52", "#c9805f", "#a87848", "#6f7d6a", "#8a8f9c"],
+  tables: ["#c8996b", "#b4824e", "#8c6b48", "#a87848"],
+  storage: ["#b4824e", "#c8996b", "#8c6b48", "#6f7d6a"],
+  beds: ["#c9805f", "#a87848", "#6f7d6a", "#8a8f9c"],
+  lighting: ["#d8a46b", "#c8996b", "#8c6b48", "#6f7d6a"],
+  decor: ["#c9805f", "#a87848", "#6f7d6a", "#8a8f9c"],
+  "wall-items": ["#d8845c", "#c8996b", "#8c6b48", "#6f7d6a"],
+};
+
+/**
+ * The material swatches offered for an item: its default tone first, then the
+ * category alternates (deduped). Empty when the category has no palette (the
+ * inspector then omits the MATERIAL row). The default swatch clears the
+ * override; the rest set an explicit colorway.
+ */
+export function colorwaysForCatalog(catalogId: string): string[] {
+  const category = catalogItemById(catalogId)?.category;
+  const alternates = category ? CATEGORY_COLORWAYS[category] : undefined;
+  if (!alternates) return [];
+  const base = furnitureBaseColor(catalogId);
+  return [base, ...alternates.filter((color) => color !== base)];
+}
+
 const PLANT_POT_COLOR = "#b4633e";
 const PLANT_FOLIAGE_COLOR = "#669758";
 const FABRIC_LIGHT = "#f6ead8";
@@ -504,8 +541,9 @@ function plantParts({ width: w, height: h }: Footprint) {
 export function furnitureParts(
   catalogId: string,
   footprint: Footprint,
+  colorway?: string,
 ): FurniturePart[] {
-  const color = FURNITURE_COLORS[catalogId] ?? FURNITURE_FALLBACK_COLOR;
+  const color = colorway ?? furnitureBaseColor(catalogId);
   switch (catalogId) {
     case "stool":
       return stoolParts(footprint, color);
