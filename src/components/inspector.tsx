@@ -2,15 +2,15 @@ import { Copy, RotateCw, Trash2 } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { CatalogThumbnail } from "#/components/catalog-thumbnails";
 import {
-	CATALOG_CATEGORY_LABELS,
-	catalogItemById,
-	type Footprint,
-	type FurnitureItem,
-	floorArea,
-	furnitureDisplayName,
-	type Point,
-	type Room,
-	wallLengths,
+  CATALOG_CATEGORY_LABELS,
+  catalogItemById,
+  type Footprint,
+  type FurnitureItem,
+  floorArea,
+  furnitureDisplayName,
+  type Point,
+  type Room,
+  wallLengths,
 } from "#/lib/model";
 import { WALL_HEIGHT } from "#/lib/room-scene";
 import { formatLengthValue, parseLength, type Unit } from "#/lib/units";
@@ -34,408 +34,408 @@ import type { ViewMode } from "#/lib/view-mode";
 const SAME_EPSILON = 1e-9;
 
 interface FieldProps {
-	label: string;
-	ariaLabel: string;
-	/** Unit hint rendered inside the field's right edge. */
-	suffix: string;
-	/** Canonical formatted value; the field re-seeds from it when it changes. */
-	value: string;
-	/** Parse + apply the typed text; invalid input is the parser's to drop. */
-	onCommit: (text: string) => void;
+  label: string;
+  ariaLabel: string;
+  /** Unit hint rendered inside the field's right edge. */
+  suffix: string;
+  /** Canonical formatted value; the field re-seeds from it when it changes. */
+  value: string;
+  /** Parse + apply the typed text; invalid input is the parser's to drop. */
+  onCommit: (text: string) => void;
 }
 
 /** One TRANSFORM value card: caps label over a mono editable value. */
 function Field({ label, ariaLabel, suffix, value, onCommit }: FieldProps) {
-	const [text, setText] = useState(value);
-	// Escape sets this so the blur it triggers reverts instead of committing.
-	const cancelledRef = useRef(false);
-	// External changes (a drag, the rotate button, containment) re-seed the
-	// field; it is never focused then, since those gestures blur it first.
-	useEffect(() => setText(value), [value]);
+  const [text, setText] = useState(value);
+  // Escape sets this so the blur it triggers reverts instead of committing.
+  const cancelledRef = useRef(false);
+  // External changes (a drag, the rotate button, containment) re-seed the
+  // field; it is never focused then, since those gestures blur it first.
+  useEffect(() => setText(value), [value]);
 
-	const handleBlur = () => {
-		if (!cancelledRef.current && text !== value) onCommit(text);
-		cancelledRef.current = false;
-		// Snap back to canonical: a successful commit re-seeds via the effect,
-		// an invalid or clamped-to-same one lands right here.
-		setText(value);
-	};
-	const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-		if (event.key === "Enter") {
-			event.currentTarget.blur();
-		} else if (event.key === "Escape") {
-			cancelledRef.current = true;
-			setText(value);
-			event.currentTarget.blur();
-		}
-	};
+  const handleBlur = () => {
+    if (!cancelledRef.current && text !== value) onCommit(text);
+    cancelledRef.current = false;
+    // Snap back to canonical: a successful commit re-seeds via the effect,
+    // an invalid or clamped-to-same one lands right here.
+    setText(value);
+  };
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.currentTarget.blur();
+    } else if (event.key === "Escape") {
+      cancelledRef.current = true;
+      setText(value);
+      event.currentTarget.blur();
+    }
+  };
 
-	return (
-		<label className="flex min-w-0 flex-col gap-[3px] rounded-[8px] border border-[var(--control-border)] bg-[var(--frame)] px-[11px] py-2 focus-within:border-[var(--blue)]">
-			<span className="text-[10px] text-[var(--ink-400)] tracking-[0.05em]">
-				{label}
-			</span>
-			<span className="flex items-baseline">
-				<input
-					type="text"
-					inputMode="decimal"
-					aria-label={ariaLabel}
-					value={text}
-					onChange={(event) => setText(event.target.value)}
-					onFocus={(event) => event.currentTarget.select()}
-					onBlur={handleBlur}
-					onKeyDown={handleKeyDown}
-					className="w-full min-w-0 bg-transparent font-mono text-[14px] text-[var(--ink-900)] outline-none"
-				/>
-				<span className="font-mono text-[11px] text-[var(--ink-300)]">
-					{suffix}
-				</span>
-			</span>
-		</label>
-	);
+  return (
+    <label className="flex min-w-0 flex-col gap-[3px] rounded-[8px] border border-[var(--control-border)] bg-[var(--frame)] px-[11px] py-2 focus-within:border-[var(--blue)]">
+      <span className="text-[10px] text-[var(--ink-400)] tracking-[0.05em]">
+        {label}
+      </span>
+      <span className="flex items-baseline">
+        <input
+          type="text"
+          inputMode="decimal"
+          aria-label={ariaLabel}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onFocus={(event) => event.currentTarget.select()}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          className="w-full min-w-0 bg-transparent font-mono text-[14px] text-[var(--ink-900)] outline-none"
+        />
+        <span className="font-mono text-[11px] text-[var(--ink-300)]">
+          {suffix}
+        </span>
+      </span>
+    </label>
+  );
 }
 
 /** Degrees for display: at most one decimal, no trailing zeros ("45", "22.5"). */
 function formatDegrees(deg: number): string {
-	return String(Math.round(deg * 10) / 10);
+  return String(Math.round(deg * 10) / 10);
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-	return (
-		<div className="font-semibold text-[11px] text-[var(--ink-400)] tracking-[0.11em]">
-			{children}
-		</div>
-	);
+  return (
+    <div className="font-semibold text-[11px] text-[var(--ink-400)] tracking-[0.11em]">
+      {children}
+    </div>
+  );
 }
 
 interface SelectionSectionProps {
-	item: FurnitureItem;
-	unit: Unit;
-	/** A committed size edit — the full footprint with one dimension changed. */
-	onResize: (footprint: Footprint) => void;
-	/** A committed exact angle, degrees CCW (floor items only). */
-	onRotateTo: (deg: number) => void;
-	/** A committed mount center elevation, meters (wall items only). */
-	onElevate: (elevation: number) => void;
-	/** A committed center position, meters (floor items only). */
-	onMoveTo: (position: Point) => void;
-	onRotate90: () => void;
-	onClone: () => void;
-	onDelete: () => void;
+  item: FurnitureItem;
+  unit: Unit;
+  /** A committed size edit — the full footprint with one dimension changed. */
+  onResize: (footprint: Footprint) => void;
+  /** A committed exact angle, degrees CCW (floor items only). */
+  onRotateTo: (deg: number) => void;
+  /** A committed mount center elevation, meters (wall items only). */
+  onElevate: (elevation: number) => void;
+  /** A committed center position, meters (floor items only). */
+  onMoveTo: (position: Point) => void;
+  onRotate90: () => void;
+  onClone: () => void;
+  onDelete: () => void;
 }
 
 function SelectionSection({
-	item,
-	unit,
-	onResize,
-	onRotateTo,
-	onElevate,
-	onMoveTo,
-	onRotate90,
-	onClone,
-	onDelete,
+  item,
+  unit,
+  onResize,
+  onRotateTo,
+  onElevate,
+  onMoveTo,
+  onRotate90,
+  onClone,
+  onDelete,
 }: SelectionSectionProps) {
-	const catalogItem = catalogItemById(item.catalogId);
+  const catalogItem = catalogItemById(item.catalogId);
 
-	const commitSize = (dimension: keyof Footprint) => (text: string) => {
-		const meters = parseLength(text, unit);
-		if (meters === null) return;
-		if (Math.abs(meters - item.footprint[dimension]) < SAME_EPSILON) return;
-		onResize({ ...item.footprint, [dimension]: meters });
-	};
-	const commitRotation = (text: string) => {
-		const deg = Number(text.trim().replace(",", "."));
-		if (!Number.isFinite(deg)) return;
-		const normalized = ((deg % 360) + 360) % 360;
-		if (Math.abs(normalized - item.rotation) < SAME_EPSILON) return;
-		onRotateTo(normalized);
-	};
-	const commitElevation = (text: string) => {
-		const mount = item.mount;
-		if (!mount) return;
-		const meters = parseLength(text, unit);
-		if (meters === null) return;
-		// Keep the body between floor and ceiling; the floor clamp also lives
-		// in the model, the wall height only the renderer knows.
-		const half = item.footprint.height / 2;
-		const clamped = Math.min(Math.max(meters, half), WALL_HEIGHT - half);
-		if (Math.abs(clamped - mount.elevation) < SAME_EPSILON) return;
-		onElevate(clamped);
-	};
-	const commitPosition = (axis: "x" | "y") => (text: string) => {
-		const meters = parseLength(text, unit);
-		if (meters === null) return;
-		if (Math.abs(meters - item.position[axis]) < SAME_EPSILON) return;
-		onMoveTo({ ...item.position, [axis]: meters });
-	};
+  const commitSize = (dimension: keyof Footprint) => (text: string) => {
+    const meters = parseLength(text, unit);
+    if (meters === null) return;
+    if (Math.abs(meters - item.footprint[dimension]) < SAME_EPSILON) return;
+    onResize({ ...item.footprint, [dimension]: meters });
+  };
+  const commitRotation = (text: string) => {
+    const deg = Number(text.trim().replace(",", "."));
+    if (!Number.isFinite(deg)) return;
+    const normalized = ((deg % 360) + 360) % 360;
+    if (Math.abs(normalized - item.rotation) < SAME_EPSILON) return;
+    onRotateTo(normalized);
+  };
+  const commitElevation = (text: string) => {
+    const mount = item.mount;
+    if (!mount) return;
+    const meters = parseLength(text, unit);
+    if (meters === null) return;
+    // Keep the body between floor and ceiling; the floor clamp also lives
+    // in the model, the wall height only the renderer knows.
+    const half = item.footprint.height / 2;
+    const clamped = Math.min(Math.max(meters, half), WALL_HEIGHT - half);
+    if (Math.abs(clamped - mount.elevation) < SAME_EPSILON) return;
+    onElevate(clamped);
+  };
+  const commitPosition = (axis: "x" | "y") => (text: string) => {
+    const meters = parseLength(text, unit);
+    if (meters === null) return;
+    if (Math.abs(meters - item.position[axis]) < SAME_EPSILON) return;
+    onMoveTo({ ...item.position, [axis]: meters });
+  };
 
-	const lengthField = (
-		label: string,
-		ariaLabel: string,
-		meters: number,
-		onCommit: (text: string) => void,
-	) => (
-		<Field
-			label={label}
-			ariaLabel={ariaLabel}
-			suffix={unit}
-			value={formatLengthValue(meters, unit)}
-			onCommit={onCommit}
-		/>
-	);
+  const lengthField = (
+    label: string,
+    ariaLabel: string,
+    meters: number,
+    onCommit: (text: string) => void,
+  ) => (
+    <Field
+      label={label}
+      ariaLabel={ariaLabel}
+      suffix={unit}
+      value={formatLengthValue(meters, unit)}
+      onCommit={onCommit}
+    />
+  );
 
-	const arrangeActions = [
-		...(item.mount
-			? []
-			: [
-					{
-						label: "Rotate",
-						ariaLabel: "Rotate 90°",
-						icon: RotateCw,
-						onClick: onRotate90,
-					},
-				]),
-		{ label: "Clone", ariaLabel: "Duplicate", icon: Copy, onClick: onClone },
-	];
+  const arrangeActions = [
+    ...(item.mount
+      ? []
+      : [
+          {
+            label: "Rotate",
+            ariaLabel: "Rotate 90°",
+            icon: RotateCw,
+            onClick: onRotate90,
+          },
+        ]),
+    { label: "Clone", ariaLabel: "Duplicate", icon: Copy, onClick: onClone },
+  ];
 
-	return (
-		<>
-			<div className="flex items-center gap-3">
-				<div className="h-12 w-12 shrink-0 overflow-hidden rounded-[10px] border border-[var(--control-border)] bg-[var(--well)]">
-					<div
-						aria-hidden
-						style={{
-							width: 92,
-							height: 92,
-							transform: "scale(0.5217)",
-							transformOrigin: "top left",
-						}}
-					>
-						<CatalogThumbnail
-							catalogId={item.catalogId}
-							className="bg-transparent"
-						/>
-					</div>
-				</div>
-				<div className="min-w-0">
-					<div
-						className="truncate font-semibold text-[15px] text-[var(--ink-900)]"
-						data-testid="inspector-item-name"
-					>
-						{furnitureDisplayName(item.catalogId)}
-					</div>
-					<div className="mt-[2px] truncate text-[12.5px] text-[var(--ink-400)]">
-						{catalogItem ? CATALOG_CATEGORY_LABELS[catalogItem.category] : "—"}
-						{item.mount ? " · Wall-mounted" : ""}
-					</div>
-				</div>
-			</div>
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[10px] border border-[var(--control-border)] bg-[var(--well)]">
+          <div
+            aria-hidden
+            style={{
+              width: 92,
+              height: 92,
+              transform: "scale(0.5217)",
+              transformOrigin: "top left",
+            }}
+          >
+            <CatalogThumbnail
+              catalogId={item.catalogId}
+              className="bg-transparent"
+            />
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div
+            className="truncate font-semibold text-[15px] text-[var(--ink-900)]"
+            data-testid="inspector-item-name"
+          >
+            {furnitureDisplayName(item.catalogId)}
+          </div>
+          <div className="mt-[2px] truncate text-[12.5px] text-[var(--ink-400)]">
+            {catalogItem ? CATALOG_CATEGORY_LABELS[catalogItem.category] : "—"}
+            {item.mount ? " · Wall-mounted" : ""}
+          </div>
+        </div>
+      </div>
 
-			<div className="flex flex-col gap-2.5">
-				<SectionLabel>TRANSFORM</SectionLabel>
-				<div className="grid grid-cols-2 gap-2">
-					{lengthField(
-						"WIDTH",
-						"Width",
-						item.footprint.width,
-						commitSize("width"),
-					)}
-					{lengthField(
-						"DEPTH",
-						"Depth",
-						item.footprint.depth,
-						commitSize("depth"),
-					)}
-					{lengthField(
-						"HEIGHT",
-						"Height",
-						item.footprint.height,
-						commitSize("height"),
-					)}
-					{item.mount ? (
-						lengthField(
-							"ELEVATION",
-							"Elevation",
-							item.mount.elevation,
-							commitElevation,
-						)
-					) : (
-						<Field
-							label="ROTATE"
-							ariaLabel="Rotation"
-							suffix="°"
-							value={formatDegrees(item.rotation)}
-							onCommit={commitRotation}
-						/>
-					)}
-					{!item.mount && (
-						<>
-							{lengthField(
-								"POS X",
-								"Position X",
-								item.position.x,
-								commitPosition("x"),
-							)}
-							{lengthField(
-								"POS Y",
-								"Position Y",
-								item.position.y,
-								commitPosition("y"),
-							)}
-						</>
-					)}
-				</div>
-			</div>
+      <div className="flex flex-col gap-2.5">
+        <SectionLabel>TRANSFORM</SectionLabel>
+        <div className="grid grid-cols-2 gap-2">
+          {lengthField(
+            "WIDTH",
+            "Width",
+            item.footprint.width,
+            commitSize("width"),
+          )}
+          {lengthField(
+            "DEPTH",
+            "Depth",
+            item.footprint.depth,
+            commitSize("depth"),
+          )}
+          {lengthField(
+            "HEIGHT",
+            "Height",
+            item.footprint.height,
+            commitSize("height"),
+          )}
+          {item.mount ? (
+            lengthField(
+              "ELEVATION",
+              "Elevation",
+              item.mount.elevation,
+              commitElevation,
+            )
+          ) : (
+            <Field
+              label="ROTATE"
+              ariaLabel="Rotation"
+              suffix="°"
+              value={formatDegrees(item.rotation)}
+              onCommit={commitRotation}
+            />
+          )}
+          {!item.mount && (
+            <>
+              {lengthField(
+                "POS X",
+                "Position X",
+                item.position.x,
+                commitPosition("x"),
+              )}
+              {lengthField(
+                "POS Y",
+                "Position Y",
+                item.position.y,
+                commitPosition("y"),
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
-			<div className="flex flex-col gap-2.5">
-				<SectionLabel>ARRANGE</SectionLabel>
-				<div className="grid grid-cols-3 gap-2">
-					{arrangeActions.map(({ label, ariaLabel, icon: Icon, onClick }) => (
-						<button
-							key={label}
-							type="button"
-							aria-label={ariaLabel}
-							onClick={onClick}
-							className="flex flex-col items-center gap-[5px] rounded-[8px] border border-[var(--control-border)] bg-[var(--frame)] py-[9px] text-[var(--ink-600)] hover:bg-[var(--well)]"
-						>
-							<Icon width={17} height={17} strokeWidth={1.6} />
-							<span className="text-[10px] text-[var(--ink-500)]">{label}</span>
-						</button>
-					))}
-					<button
-						type="button"
-						aria-label="Delete"
-						onClick={onDelete}
-						className="flex flex-col items-center gap-[5px] rounded-[8px] border border-[rgba(214,69,69,0.22)] bg-[rgba(214,69,69,0.05)] py-[9px] text-[var(--danger)] hover:bg-[rgba(214,69,69,0.1)]"
-					>
-						<Trash2 width={17} height={17} strokeWidth={1.6} />
-						<span className="text-[10px]">Delete</span>
-					</button>
-				</div>
-			</div>
-		</>
-	);
+      <div className="flex flex-col gap-2.5">
+        <SectionLabel>ARRANGE</SectionLabel>
+        <div className="grid grid-cols-3 gap-2">
+          {arrangeActions.map(({ label, ariaLabel, icon: Icon, onClick }) => (
+            <button
+              key={label}
+              type="button"
+              aria-label={ariaLabel}
+              onClick={onClick}
+              className="flex flex-col items-center gap-[5px] rounded-[8px] border border-[var(--control-border)] bg-[var(--frame)] py-[9px] text-[var(--ink-600)] hover:bg-[var(--well)]"
+            >
+              <Icon width={17} height={17} strokeWidth={1.6} />
+              <span className="text-[10px] text-[var(--ink-500)]">{label}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-label="Delete"
+            onClick={onDelete}
+            className="flex flex-col items-center gap-[5px] rounded-[8px] border border-[rgba(214,69,69,0.22)] bg-[rgba(214,69,69,0.05)] py-[9px] text-[var(--danger)] hover:bg-[rgba(214,69,69,0.1)]"
+          >
+            <Trash2 width={17} height={17} strokeWidth={1.6} />
+            <span className="text-[10px]">Delete</span>
+          </button>
+        </div>
+      </div>
+    </>
+  );
 }
 
 export interface InspectorProps {
-	room: Room;
-	unit: Unit;
-	mode: ViewMode;
-	selectedItem: FurnitureItem | null;
-	/** Draw-mode draft state, for the OUTLINE view. */
-	draftCornerCount?: number;
-	draftClosed?: boolean;
-	onResize: (footprint: Footprint) => void;
-	onRotateTo: (deg: number) => void;
-	onElevate: (elevation: number) => void;
-	onMoveTo: (position: Point) => void;
-	onRotate90: () => void;
-	onClone: () => void;
-	onDelete: () => void;
+  room: Room;
+  unit: Unit;
+  mode: ViewMode;
+  selectedItem: FurnitureItem | null;
+  /** Draw-mode draft state, for the OUTLINE view. */
+  draftCornerCount?: number;
+  draftClosed?: boolean;
+  onResize: (footprint: Footprint) => void;
+  onRotateTo: (deg: number) => void;
+  onElevate: (elevation: number) => void;
+  onMoveTo: (position: Point) => void;
+  onRotate90: () => void;
+  onClone: () => void;
+  onDelete: () => void;
 }
 
 export function Inspector({
-	room,
-	unit,
-	mode,
-	selectedItem,
-	draftCornerCount = 0,
-	draftClosed = false,
-	onResize,
-	onRotateTo,
-	onElevate,
-	onMoveTo,
-	onRotate90,
-	onClone,
-	onDelete,
+  room,
+  unit,
+  mode,
+  selectedItem,
+  draftCornerCount = 0,
+  draftClosed = false,
+  onResize,
+  onRotateTo,
+  onElevate,
+  onMoveTo,
+  onRotate90,
+  onClone,
+  onDelete,
 }: InspectorProps) {
-	const drawing = mode === "draw";
-	const showSelection = selectedItem !== null && !drawing;
-	const header = drawing ? "OUTLINE" : showSelection ? "SELECTION" : "ROOM";
+  const drawing = mode === "draw";
+  const showSelection = selectedItem !== null && !drawing;
+  const header = drawing ? "OUTLINE" : showSelection ? "SELECTION" : "ROOM";
 
-	const area = room.outline.length >= 3 ? floorArea(room.outline) : null;
-	const perimeter =
-		room.outline.length >= 3
-			? wallLengths(room.outline).reduce((sum, length) => sum + length, 0)
-			: null;
+  const area = room.outline.length >= 3 ? floorArea(room.outline) : null;
+  const perimeter =
+    room.outline.length >= 3
+      ? wallLengths(room.outline).reduce((sum, length) => sum + length, 0)
+      : null;
 
-	return (
-		<aside
-			aria-label="Inspector"
-			className="flex min-h-0 flex-col border-[var(--hairline)] border-l bg-[var(--panel)]"
-			style={{ gridArea: "inspector" }}
-		>
-			<div className="border-[var(--hairline)] border-b px-[18px] py-4">
-				<SectionLabel>{header}</SectionLabel>
-			</div>
+  return (
+    <aside
+      aria-label="Inspector"
+      className="flex min-h-0 flex-col border-[var(--hairline)] border-l bg-[var(--panel)]"
+      style={{ gridArea: "inspector" }}
+    >
+      <div className="border-[var(--hairline)] border-b px-[18px] py-4">
+        <SectionLabel>{header}</SectionLabel>
+      </div>
 
-			<div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto p-[18px]">
-				{drawing ? (
-					<div className="flex flex-col gap-2.5">
-						<div className="font-semibold text-[15px] text-[var(--ink-900)]">
-							{draftClosed ? "Editing the outline" : "Drawing the outline"}
-						</div>
-						<div className="text-[12.5px] text-[var(--ink-500)] leading-relaxed">
-							{draftCornerCount} corner{draftCornerCount === 1 ? "" : "s"}
-							{draftClosed ? " · closed" : ""}
-						</div>
-						<div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
-							Drag corners to reshape, click a wall to split it, or edit a
-							length label directly. ⏎ applies the outline, esc reverts it.
-						</div>
-					</div>
-				) : showSelection ? (
-					<SelectionSection
-						item={selectedItem}
-						unit={unit}
-						onResize={onResize}
-						onRotateTo={onRotateTo}
-						onElevate={onElevate}
-						onMoveTo={onMoveTo}
-						onRotate90={onRotate90}
-						onClone={onClone}
-						onDelete={onDelete}
-					/>
-				) : (
-					<div className="flex flex-col gap-2.5">
-						<div
-							className="font-semibold text-[15px] text-[var(--ink-900)]"
-							data-testid="inspector-room-name"
-						>
-							{room.name ?? "Untitled room"}
-						</div>
-						<div className="text-[12.5px] text-[var(--ink-500)]">
-							{room.furniture.length} object
-							{room.furniture.length === 1 ? "" : "s"} · {room.openings.length}{" "}
-							opening
-							{room.openings.length === 1 ? "" : "s"}
-						</div>
-						<div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
-							Select an item in either lens to edit its size, rotation and
-							position here.
-						</div>
-					</div>
-				)}
-			</div>
+      <div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto p-[18px]">
+        {drawing ? (
+          <div className="flex flex-col gap-2.5">
+            <div className="font-semibold text-[15px] text-[var(--ink-900)]">
+              {draftClosed ? "Editing the outline" : "Drawing the outline"}
+            </div>
+            <div className="text-[12.5px] text-[var(--ink-500)] leading-relaxed">
+              {draftCornerCount} corner{draftCornerCount === 1 ? "" : "s"}
+              {draftClosed ? " · closed" : ""}
+            </div>
+            <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
+              Drag corners to reshape, click a wall to split it, or edit a
+              length label directly. ⏎ applies the outline, esc reverts it.
+            </div>
+          </div>
+        ) : showSelection ? (
+          <SelectionSection
+            item={selectedItem}
+            unit={unit}
+            onResize={onResize}
+            onRotateTo={onRotateTo}
+            onElevate={onElevate}
+            onMoveTo={onMoveTo}
+            onRotate90={onRotate90}
+            onClone={onClone}
+            onDelete={onDelete}
+          />
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            <div
+              className="font-semibold text-[15px] text-[var(--ink-900)]"
+              data-testid="inspector-room-name"
+            >
+              {room.name ?? "Untitled room"}
+            </div>
+            <div className="text-[12.5px] text-[var(--ink-500)]">
+              {room.furniture.length} object
+              {room.furniture.length === 1 ? "" : "s"} · {room.openings.length}{" "}
+              opening
+              {room.openings.length === 1 ? "" : "s"}
+            </div>
+            <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
+              Select an item in either lens to edit its size, rotation and
+              position here.
+            </div>
+          </div>
+        )}
+      </div>
 
-			<div className="flex justify-between border-[var(--hairline)] border-t px-[18px] py-4 text-[12px]">
-				{[
-					["FLOOR", area === null ? "—" : `${area.toFixed(2)} m²`],
-					["PERIMETER", perimeter === null ? "—" : `${perimeter.toFixed(1)} m`],
-					["CEILING", `${WALL_HEIGHT.toFixed(2)} m`],
-				].map(([label, value]) => (
-					<div key={label} className="flex flex-col gap-[3px]">
-						<span
-							className={cn(
-								"text-[10px] text-[var(--ink-400)] tracking-[0.05em]",
-							)}
-						>
-							{label}
-						</span>
-						<span className="font-mono text-[var(--ink-700)]">{value}</span>
-					</div>
-				))}
-			</div>
-		</aside>
-	);
+      <div className="flex justify-between border-[var(--hairline)] border-t px-[18px] py-4 text-[12px]">
+        {[
+          ["FLOOR", area === null ? "—" : `${area.toFixed(2)} m²`],
+          ["PERIMETER", perimeter === null ? "—" : `${perimeter.toFixed(1)} m`],
+          ["CEILING", `${WALL_HEIGHT.toFixed(2)} m`],
+        ].map(([label, value]) => (
+          <div key={label} className="flex flex-col gap-[3px]">
+            <span
+              className={cn(
+                "text-[10px] text-[var(--ink-400)] tracking-[0.05em]",
+              )}
+            >
+              {label}
+            </span>
+            <span className="font-mono text-[var(--ink-700)]">{value}</span>
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
 }

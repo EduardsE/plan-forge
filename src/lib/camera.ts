@@ -6,29 +6,29 @@
 
 /** Live state of the orbiting perspective camera (3D lens). */
 export interface OrbitReadout {
-	kind: "orbit";
-	/** Horizontal orbit angle in degrees. */
-	azimuthDeg: number;
-	/** Angle from straight-above in degrees (0 = top-down). */
-	polarDeg: number;
-	/** Zoom relative to the fitted distance: 1.0 = fit-to-view. */
-	zoom: number;
+  kind: "orbit";
+  /** Horizontal orbit angle in degrees. */
+  azimuthDeg: number;
+  /** Angle from straight-above in degrees (0 = top-down). */
+  polarDeg: number;
+  /** Zoom relative to the fitted distance: 1.0 = fit-to-view. */
+  zoom: number;
 }
 
 /** Live state of the top-down orthographic camera (2D/draw lens). */
 export interface PlanReadout {
-	kind: "plan";
-	/** Orthographic zoom: how many CSS px one meter spans on screen. */
-	pxPerMeter: number;
+  kind: "plan";
+  /** Orthographic zoom: how many CSS px one meter spans on screen. */
+  pxPerMeter: number;
 }
 
 export type CameraReadout = OrbitReadout | PlanReadout;
 
 /** Imperative camera actions the floating toolbar drives. */
 export interface CameraApi {
-	zoomIn(): void;
-	zoomOut(): void;
-	zoomToFit(): void;
+  zoomIn(): void;
+  zoomOut(): void;
+  zoomToFit(): void;
 }
 
 const CSS_PX_PER_CM = 96 / 2.54;
@@ -38,20 +38,20 @@ const CSS_PX_PER_CM = 96 / 2.54;
  * pxPerMeter, treating CSS px at their nominal 96 dpi physical size.
  */
 export function scaleDenominator(pxPerMeter: number): number {
-	return Math.round((100 * CSS_PX_PER_CM) / pxPerMeter);
+  return Math.round((100 * CSS_PX_PER_CM) / pxPerMeter);
 }
 
 export function formatOrbitReadout(readout: OrbitReadout): string {
-	const azimuth = ((Math.round(readout.azimuthDeg) % 360) + 360) % 360;
-	const polar = Math.round(readout.polarDeg);
-	return `orbit ${azimuth}° / ${polar}° · zoom ${readout.zoom.toFixed(1)}×`;
+  const azimuth = ((Math.round(readout.azimuthDeg) % 360) + 360) % 360;
+  const polar = Math.round(readout.polarDeg);
+  return `orbit ${azimuth}° / ${polar}° · zoom ${readout.zoom.toFixed(1)}×`;
 }
 
 export function formatPlanReadout(
-	readout: PlanReadout,
-	gridMeters = 0.5,
+  readout: PlanReadout,
+  gridMeters = 0.5,
 ): string {
-	return `scale 1 : ${scaleDenominator(readout.pxPerMeter)} · grid ${gridMeters} m`;
+  return `scale 1 : ${scaleDenominator(readout.pxPerMeter)} · grid ${gridMeters} m`;
 }
 
 /**
@@ -59,13 +59,13 @@ export function formatPlanReadout(
  * into the viewport, filling at most `fill` of the smaller direction.
  */
 export function planFitZoom(
-	widthM: number,
-	heightM: number,
-	viewportW: number,
-	viewportH: number,
-	fill = 0.72,
+  widthM: number,
+  heightM: number,
+  viewportW: number,
+  viewportH: number,
+  fill = 0.72,
 ): number {
-	return Math.min(viewportW / widthM, viewportH / heightM) * fill;
+  return Math.min(viewportW / widthM, viewportH / heightM) * fill;
 }
 
 /**
@@ -74,35 +74,35 @@ export function planFitZoom(
  * extra breathing room (1 = sphere exactly touches the frustum).
  */
 export function perspectiveFitDistance(
-	radius: number,
-	fovYDeg: number,
-	aspect: number,
-	margin = 1.15,
+  radius: number,
+  fovYDeg: number,
+  aspect: number,
+  margin = 1.15,
 ): number {
-	const halfV = (fovYDeg * Math.PI) / 360;
-	const halfH = Math.atan(Math.tan(halfV) * aspect);
-	return (radius * margin) / Math.sin(Math.min(halfV, halfH));
+  const halfV = (fovYDeg * Math.PI) / 360;
+  const halfH = Math.atan(Math.tan(halfV) * aspect);
+  return (radius * margin) / Math.sin(Math.min(halfV, halfH));
 }
 
 /** Height of a perspective frustum at `distance`, given a vertical fov. */
 export function frustumHeight(distance: number, fovYDeg: number): number {
-	return 2 * distance * Math.tan((fovYDeg * Math.PI) / 360);
+  return 2 * distance * Math.tan((fovYDeg * Math.PI) / 360);
 }
 
 /** Inverse of `frustumHeight`: distance at which the frustum is `height` tall. */
 export function frustumDistance(height: number, fovYDeg: number): number {
-	return height / (2 * Math.tan((fovYDeg * Math.PI) / 360));
+  return height / (2 * Math.tan((fovYDeg * Math.PI) / 360));
 }
 
 /** Wrap an angle into [-π, π] so pose interpolation takes the short way. */
 export function wrapAngle(rad: number): number {
-	const tau = 2 * Math.PI;
-	return ((((rad + Math.PI) % tau) + tau) % tau) - Math.PI;
+  const tau = 2 * Math.PI;
+  return ((((rad + Math.PI) % tau) + tau) % tau) - Math.PI;
 }
 
 /** Standard ease-in-out cubic on t ∈ [0, 1]. */
 export function easeInOutCubic(t: number): number {
-	return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }
 
 /**
@@ -111,23 +111,23 @@ export function easeInOutCubic(t: number): number {
  * per-frame camera state through route-level React state.
  */
 export interface CameraReadoutStore {
-	subscribe(listener: () => void): () => void;
-	getSnapshot(): CameraReadout | null;
-	publish(readout: CameraReadout): void;
+  subscribe(listener: () => void): () => void;
+  getSnapshot(): CameraReadout | null;
+  publish(readout: CameraReadout): void;
 }
 
 export function createCameraReadoutStore(): CameraReadoutStore {
-	let snapshot: CameraReadout | null = null;
-	const listeners = new Set<() => void>();
-	return {
-		subscribe(listener) {
-			listeners.add(listener);
-			return () => listeners.delete(listener);
-		},
-		getSnapshot: () => snapshot,
-		publish(readout) {
-			snapshot = readout;
-			for (const listener of listeners) listener();
-		},
-	};
+  let snapshot: CameraReadout | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getSnapshot: () => snapshot,
+    publish(readout) {
+      snapshot = readout;
+      for (const listener of listeners) listener();
+    },
+  };
 }

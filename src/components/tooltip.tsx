@@ -4,21 +4,21 @@ import { cn } from "#/lib/utils";
 type TooltipSide = "top" | "bottom" | "left" | "right";
 
 interface TooltipProps {
-	/** The pill text — pass the trigger's existing aria-label so the two can't
-	 * drift (this component never sets aria itself; the button keeps that). */
-	label: string;
-	/** Which edge of the trigger the pill hangs off. */
-	side?: TooltipSide;
-	/** Extra classes on the wrapper span (it participates in flex layouts). */
-	className?: string;
-	children: ReactNode;
+  /** The pill text — pass the trigger's existing aria-label so the two can't
+   * drift (this component never sets aria itself; the button keeps that). */
+  label: string;
+  /** Which edge of the trigger the pill hangs off. */
+  side?: TooltipSide;
+  /** Extra classes on the wrapper span (it participates in flex layouts). */
+  className?: string;
+  children: ReactNode;
 }
 
 const SIDE_CLASS: Record<TooltipSide, string> = {
-	top: "bottom-full left-1/2 mb-2 -translate-x-1/2",
-	bottom: "top-full left-1/2 mt-2 -translate-x-1/2",
-	left: "right-full top-1/2 mr-2 -translate-y-1/2",
-	right: "left-full top-1/2 ml-2 -translate-y-1/2",
+  top: "bottom-full left-1/2 mb-2 -translate-x-1/2",
+  bottom: "top-full left-1/2 mt-2 -translate-x-1/2",
+  left: "right-full top-1/2 mr-2 -translate-y-1/2",
+  right: "left-full top-1/2 ml-2 -translate-y-1/2",
 };
 
 /**
@@ -29,25 +29,25 @@ const SIDE_CLASS: Record<TooltipSide, string> = {
  * aria-label; the trigger keeps the aria-label, this just shows it on hover.
  */
 export function Tooltip({
-	label,
-	side = "top",
-	className,
-	children,
+  label,
+  side = "top",
+  className,
+  children,
 }: TooltipProps) {
-	return (
-		<span className={cn("group/tt relative inline-flex", className)}>
-			{children}
-			<span
-				role="tooltip"
-				className={cn(
-					"pointer-events-none absolute z-50 whitespace-nowrap rounded-[7px] px-2 py-1 font-medium text-[11px] text-white opacity-0 shadow-[0_8px_20px_rgba(15,27,61,0.25)] transition-opacity duration-100",
-					"group-hover/tt:opacity-100 group-focus-within/tt:opacity-100",
-					SIDE_CLASS[side],
-				)}
-				style={{ background: "var(--ink-900)" }}
-			>
-				{label}
-			</span>
-		</span>
-	);
+  return (
+    <span className={cn("group/tt relative inline-flex", className)}>
+      {children}
+      <span
+        role="tooltip"
+        className={cn(
+          "pointer-events-none absolute z-50 whitespace-nowrap rounded-[7px] px-2 py-1 font-medium text-[11px] text-white opacity-0 shadow-[0_8px_20px_rgba(15,27,61,0.25)] transition-opacity duration-100",
+          "group-hover/tt:opacity-100 group-focus-within/tt:opacity-100",
+          SIDE_CLASS[side],
+        )}
+        style={{ background: "var(--ink-900)" }}
+      >
+        {label}
+      </span>
+    </span>
+  );
 }

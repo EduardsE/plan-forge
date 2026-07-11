@@ -22,23 +22,23 @@ export const DRAW_GRID_STEP = 0.05;
 
 /** An axis alignment between the cursor and an earlier corner. */
 export interface AlignmentSnap {
-	cornerIndex: number;
-	/** Matched coordinate: "x" draws a vertical guide, "y" a horizontal one. */
-	axis: "x" | "y";
+  cornerIndex: number;
+  /** Matched coordinate: "x" draws a vertical guide, "y" a horizontal one. */
+  axis: "x" | "y";
 }
 
 export interface DraftSnap {
-	point: Point;
-	/** True when the preview segment locked horizontal/vertical from the last corner. */
-	axisSnapped: boolean;
-	/**
-	 * Turn angle between the previous segment and the preview segment
-	 * (degrees, 0 = straight on, 90 = right angle). Only reported while
-	 * axis-snapped with at least two corners placed.
-	 */
-	turnAngleDeg: number | null;
-	/** Guide-line alignment with an earlier corner, if any. */
-	alignment: AlignmentSnap | null;
+  point: Point;
+  /** True when the preview segment locked horizontal/vertical from the last corner. */
+  axisSnapped: boolean;
+  /**
+   * Turn angle between the previous segment and the preview segment
+   * (degrees, 0 = straight on, 90 = right angle). Only reported while
+   * axis-snapped with at least two corners placed.
+   */
+  turnAngleDeg: number | null;
+  /** Guide-line alignment with an earlier corner, if any. */
+  alignment: AlignmentSnap | null;
 }
 
 /**
@@ -47,7 +47,7 @@ export interface DraftSnap {
  * (4.800000000000001) straight into labels.
  */
 export function quantizeToStep(value: number, step: number): number {
-	return Math.round(Math.round(value / step) * step * 1e4) / 1e4;
+  return Math.round(Math.round(value / step) * step * 1e4) / 1e4;
 }
 
 const quantize = quantizeToStep;
@@ -62,89 +62,89 @@ const quantize = quantizeToStep;
  * no axis lock, no alignment, no quantize — for free-hand corner placement.
  */
 export function snapDraftPoint(
-	corners: Point[],
-	cursor: Point,
-	tolerance: number,
-	snap = true,
+  corners: Point[],
+  cursor: Point,
+  tolerance: number,
+  snap = true,
 ): DraftSnap {
-	if (!snap) {
-		return {
-			point: { x: cursor.x, y: cursor.y },
-			axisSnapped: false,
-			turnAngleDeg: null,
-			alignment: null,
-		};
-	}
-	let x = cursor.x;
-	let y = cursor.y;
-	let axisSnapped = false;
-	/** Which coordinates are already exact and must not be re-quantized. */
-	let xLocked = false;
-	let yLocked = false;
+  if (!snap) {
+    return {
+      point: { x: cursor.x, y: cursor.y },
+      axisSnapped: false,
+      turnAngleDeg: null,
+      alignment: null,
+    };
+  }
+  let x = cursor.x;
+  let y = cursor.y;
+  let axisSnapped = false;
+  /** Which coordinates are already exact and must not be re-quantized. */
+  let xLocked = false;
+  let yLocked = false;
 
-	const last = corners.at(-1);
-	if (last) {
-		const dx = Math.abs(x - last.x);
-		const dy = Math.abs(y - last.y);
-		if (dy <= dx && dy < tolerance) {
-			y = last.y;
-			axisSnapped = true;
-			yLocked = true;
-		} else if (dx < tolerance) {
-			x = last.x;
-			axisSnapped = true;
-			xLocked = true;
-		}
-	}
+  const last = corners.at(-1);
+  if (last) {
+    const dx = Math.abs(x - last.x);
+    const dy = Math.abs(y - last.y);
+    if (dy <= dx && dy < tolerance) {
+      y = last.y;
+      axisSnapped = true;
+      yLocked = true;
+    } else if (dx < tolerance) {
+      x = last.x;
+      axisSnapped = true;
+      xLocked = true;
+    }
+  }
 
-	// Alignment with earlier corners (the last corner's alignments are the
-	// axis snap above). One guide at most: the closest match on a free axis.
-	let alignment: AlignmentSnap | null = null;
-	let bestDistance = tolerance;
-	for (let i = 0; i < corners.length - 1; i++) {
-		const corner = corners[i];
-		if (!xLocked) {
-			const d = Math.abs(x - corner.x);
-			if (d < bestDistance) {
-				bestDistance = d;
-				alignment = { cornerIndex: i, axis: "x" };
-			}
-		}
-		if (!yLocked) {
-			const d = Math.abs(y - corner.y);
-			if (d < bestDistance) {
-				bestDistance = d;
-				alignment = { cornerIndex: i, axis: "y" };
-			}
-		}
-	}
-	if (alignment) {
-		const corner = corners[alignment.cornerIndex];
-		if (alignment.axis === "x") {
-			x = corner.x;
-			xLocked = true;
-		} else {
-			y = corner.y;
-			yLocked = true;
-		}
-	}
+  // Alignment with earlier corners (the last corner's alignments are the
+  // axis snap above). One guide at most: the closest match on a free axis.
+  let alignment: AlignmentSnap | null = null;
+  let bestDistance = tolerance;
+  for (let i = 0; i < corners.length - 1; i++) {
+    const corner = corners[i];
+    if (!xLocked) {
+      const d = Math.abs(x - corner.x);
+      if (d < bestDistance) {
+        bestDistance = d;
+        alignment = { cornerIndex: i, axis: "x" };
+      }
+    }
+    if (!yLocked) {
+      const d = Math.abs(y - corner.y);
+      if (d < bestDistance) {
+        bestDistance = d;
+        alignment = { cornerIndex: i, axis: "y" };
+      }
+    }
+  }
+  if (alignment) {
+    const corner = corners[alignment.cornerIndex];
+    if (alignment.axis === "x") {
+      x = corner.x;
+      xLocked = true;
+    } else {
+      y = corner.y;
+      yLocked = true;
+    }
+  }
 
-	if (!xLocked) x = quantize(x, DRAW_GRID_STEP);
-	if (!yLocked) y = quantize(y, DRAW_GRID_STEP);
+  if (!xLocked) x = quantize(x, DRAW_GRID_STEP);
+  if (!yLocked) y = quantize(y, DRAW_GRID_STEP);
 
-	let turnAngleDeg: number | null = null;
-	if (axisSnapped && corners.length >= 2 && last) {
-		const prev = corners[corners.length - 2];
-		const previous = Math.atan2(last.y - prev.y, last.x - prev.x);
-		const next = Math.atan2(y - last.y, x - last.x);
-		if (x !== last.x || y !== last.y) {
-			let delta = Math.abs(next - previous);
-			if (delta > Math.PI) delta = 2 * Math.PI - delta;
-			turnAngleDeg = Math.round((delta * 180) / Math.PI);
-		}
-	}
+  let turnAngleDeg: number | null = null;
+  if (axisSnapped && corners.length >= 2 && last) {
+    const prev = corners[corners.length - 2];
+    const previous = Math.atan2(last.y - prev.y, last.x - prev.x);
+    const next = Math.atan2(y - last.y, x - last.x);
+    if (x !== last.x || y !== last.y) {
+      let delta = Math.abs(next - previous);
+      if (delta > Math.PI) delta = 2 * Math.PI - delta;
+      turnAngleDeg = Math.round((delta * 180) / Math.PI);
+    }
+  }
 
-	return { point: { x, y }, axisSnapped, turnAngleDeg, alignment };
+  return { point: { x, y }, axisSnapped, turnAngleDeg, alignment };
 }
 
 /** A rectangle side thinner than this (meters) is degenerate — no room. */
@@ -156,11 +156,11 @@ const MIN_RECT_SIDE = 0.01;
  * independently). Raw cursor through when `snap` is off.
  */
 export function snapRectPoint(cursor: Point, snap = true): Point {
-	if (!snap) return { x: cursor.x, y: cursor.y };
-	return {
-		x: quantize(cursor.x, DRAW_GRID_STEP),
-		y: quantize(cursor.y, DRAW_GRID_STEP),
-	};
+  if (!snap) return { x: cursor.x, y: cursor.y };
+  return {
+    x: quantize(cursor.x, DRAW_GRID_STEP),
+    y: quantize(cursor.y, DRAW_GRID_STEP),
+  };
 }
 
 /**
@@ -171,17 +171,17 @@ export function snapRectPoint(cursor: Point, snap = true): Point {
  * column) — the caller ignores such a second click.
  */
 export function rectangleOutline(a: Point, b: Point): Point[] | null {
-	const minX = Math.min(a.x, b.x);
-	const maxX = Math.max(a.x, b.x);
-	const minY = Math.min(a.y, b.y);
-	const maxY = Math.max(a.y, b.y);
-	if (maxX - minX < MIN_RECT_SIDE || maxY - minY < MIN_RECT_SIDE) return null;
-	return [
-		{ x: minX, y: minY },
-		{ x: maxX, y: minY },
-		{ x: maxX, y: maxY },
-		{ x: minX, y: maxY },
-	];
+  const minX = Math.min(a.x, b.x);
+  const maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxY = Math.max(a.y, b.y);
+  if (maxX - minX < MIN_RECT_SIDE || maxY - minY < MIN_RECT_SIDE) return null;
+  return [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
 }
 
 /**
@@ -192,24 +192,24 @@ export function rectangleOutline(a: Point, b: Point): Point[] | null {
  * non-positive lengths, or a degenerate (zero-length) segment.
  */
 export function setSegmentLength(
-	corners: Point[],
-	segmentIndex: number,
-	length: number,
+  corners: Point[],
+  segmentIndex: number,
+  length: number,
 ): Point[] {
-	if (segmentIndex < 0 || segmentIndex >= corners.length - 1) return corners;
-	if (!Number.isFinite(length) || length <= 0) return corners;
-	const start = corners[segmentIndex];
-	const end = corners[segmentIndex + 1];
-	const current = Math.hypot(end.x - start.x, end.y - start.y);
-	if (current === 0) return corners;
-	const scale = length / current;
-	const delta = {
-		x: start.x + (end.x - start.x) * scale - end.x,
-		y: start.y + (end.y - start.y) * scale - end.y,
-	};
-	return corners.map((corner, i) =>
-		i <= segmentIndex
-			? corner
-			: { x: corner.x + delta.x, y: corner.y + delta.y },
-	);
+  if (segmentIndex < 0 || segmentIndex >= corners.length - 1) return corners;
+  if (!Number.isFinite(length) || length <= 0) return corners;
+  const start = corners[segmentIndex];
+  const end = corners[segmentIndex + 1];
+  const current = Math.hypot(end.x - start.x, end.y - start.y);
+  if (current === 0) return corners;
+  const scale = length / current;
+  const delta = {
+    x: start.x + (end.x - start.x) * scale - end.x,
+    y: start.y + (end.y - start.y) * scale - end.y,
+  };
+  return corners.map((corner, i) =>
+    i <= segmentIndex
+      ? corner
+      : { x: corner.x + delta.x, y: corner.y + delta.y },
+  );
 }

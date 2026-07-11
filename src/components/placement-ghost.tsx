@@ -34,164 +34,164 @@ const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 const noRaycast = () => null;
 
 function v3(p: Point, y: number): [number, number, number] {
-	return [p.x, y, p.y];
+  return [p.x, y, p.y];
 }
 
 /** Centered rounded-rect as a three Shape (plan y mirrored to world z). */
 function ghostShape(points: Point[]): Shape {
-	const shape = new Shape();
-	for (const [i, p] of points.entries()) {
-		if (i === 0) shape.moveTo(p.x, -p.y);
-		else shape.lineTo(p.x, -p.y);
-	}
-	shape.closePath();
-	return shape;
+  const shape = new Shape();
+  for (const [i, p] of points.entries()) {
+    if (i === 0) shape.moveTo(p.x, -p.y);
+    else shape.lineTo(p.x, -p.y);
+  }
+  shape.closePath();
+  return shape;
 }
 
 export interface PlacementGhostProps {
-	outline: Point[];
-	/** Placed items the ghost snaps flush against, alongside the walls. */
-	obstacles: Obstacle[];
-	item: CatalogItem;
-	unit: Unit;
-	/** Snap toggle: off means free placement (contained, no flush/quantize). */
-	snapEnabled: boolean;
-	onPlace: (center: Point) => void;
-	onCancel: () => void;
+  outline: Point[];
+  /** Placed items the ghost snaps flush against, alongside the walls. */
+  obstacles: Obstacle[];
+  item: CatalogItem;
+  unit: Unit;
+  /** Snap toggle: off means free placement (contained, no flush/quantize). */
+  snapEnabled: boolean;
+  onPlace: (center: Point) => void;
+  onCancel: () => void;
 }
 
 export function PlacementGhost({
-	outline,
-	obstacles,
-	item,
-	unit,
-	snapEnabled,
-	onPlace,
-	onCancel,
+  outline,
+  obstacles,
+  item,
+  unit,
+  snapEnabled,
+  onPlace,
+  onCancel,
 }: PlacementGhostProps) {
-	const camera = useThree((state) => state.camera);
-	const gl = useThree((state) => state.gl);
-	const [snap, setSnap] = useState<PlacementSnap | null>(null);
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  const [snap, setSnap] = useState<PlacementSnap | null>(null);
 
-	useEffect(() => {
-		const raycaster = new Raycaster();
-		const hit = new Vector3();
-		/** Floor point under the pointer, or null off-canvas / past the horizon. */
-		const toFloor = (event: PointerEvent): Point | null => {
-			if (event.target !== gl.domElement) return null;
-			const rect = gl.domElement.getBoundingClientRect();
-			if (rect.width === 0 || rect.height === 0) return null;
-			const ndc = new Vector2(
-				((event.clientX - rect.left) / rect.width) * 2 - 1,
-				-(((event.clientY - rect.top) / rect.height) * 2 - 1),
-			);
-			raycaster.setFromCamera(ndc, camera);
-			return raycaster.ray.intersectPlane(FLOOR_PLANE, hit)
-				? { x: hit.x, y: hit.z }
-				: null;
-		};
-		const handleMove = (event: PointerEvent) => {
-			const point = toFloor(event);
-			setSnap(
-				point
-					? snapPlacement(
-							outline,
-							item.footprint,
-							point,
-							obstacles,
-							undefined,
-							undefined,
-							snapEnabled,
-						)
-					: null,
-			);
-		};
-		const handleUp = (event: PointerEvent) => {
-			// Off-canvas releases belong to the drag layer.
-			if (!(event.target instanceof HTMLCanvasElement)) return;
-			const point = toFloor(event);
-			if (point)
-				onPlace(
-					snapPlacement(
-						outline,
-						item.footprint,
-						point,
-						obstacles,
-						undefined,
-						undefined,
-						snapEnabled,
-					).center,
-				);
-			else onCancel();
-		};
-		window.addEventListener("pointermove", handleMove);
-		window.addEventListener("pointerup", handleUp);
-		return () => {
-			window.removeEventListener("pointermove", handleMove);
-			window.removeEventListener("pointerup", handleUp);
-		};
-	}, [outline, obstacles, item, snapEnabled, camera, gl, onPlace, onCancel]);
+  useEffect(() => {
+    const raycaster = new Raycaster();
+    const hit = new Vector3();
+    /** Floor point under the pointer, or null off-canvas / past the horizon. */
+    const toFloor = (event: PointerEvent): Point | null => {
+      if (event.target !== gl.domElement) return null;
+      const rect = gl.domElement.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return null;
+      const ndc = new Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -(((event.clientY - rect.top) / rect.height) * 2 - 1),
+      );
+      raycaster.setFromCamera(ndc, camera);
+      return raycaster.ray.intersectPlane(FLOOR_PLANE, hit)
+        ? { x: hit.x, y: hit.z }
+        : null;
+    };
+    const handleMove = (event: PointerEvent) => {
+      const point = toFloor(event);
+      setSnap(
+        point
+          ? snapPlacement(
+              outline,
+              item.footprint,
+              point,
+              obstacles,
+              undefined,
+              undefined,
+              snapEnabled,
+            )
+          : null,
+      );
+    };
+    const handleUp = (event: PointerEvent) => {
+      // Off-canvas releases belong to the drag layer.
+      if (!(event.target instanceof HTMLCanvasElement)) return;
+      const point = toFloor(event);
+      if (point)
+        onPlace(
+          snapPlacement(
+            outline,
+            item.footprint,
+            point,
+            obstacles,
+            undefined,
+            undefined,
+            snapEnabled,
+          ).center,
+        );
+      else onCancel();
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [outline, obstacles, item, snapEnabled, camera, gl, onPlace, onCancel]);
 
-	const rect = useMemo(
-		() =>
-			roundedRectPoints(
-				item.footprint.width,
-				item.footprint.depth,
-				CORNER_RADIUS,
-			),
-		[item],
-	);
-	const rectLoop = useMemo(() => [...rect, rect[0]], [rect]);
-	const floorDashes = useMemo(
-		() => dashedPolyline(rectLoop, 0.14, 0.09),
-		[rectLoop],
-	);
-	const shape = useMemo(() => ghostShape(rect), [rect]);
+  const rect = useMemo(
+    () =>
+      roundedRectPoints(
+        item.footprint.width,
+        item.footprint.depth,
+        CORNER_RADIUS,
+      ),
+    [item],
+  );
+  const rectLoop = useMemo(() => [...rect, rect[0]], [rect]);
+  const floorDashes = useMemo(
+    () => dashedPolyline(rectLoop, 0.14, 0.09),
+    [rectLoop],
+  );
+  const shape = useMemo(() => ghostShape(rect), [rect]);
 
-	if (!snap) return null;
-	const { center } = snap;
-	const height = item.footprint.height;
+  if (!snap) return null;
+  const { center } = snap;
+  const height = item.footprint.height;
 
-	return (
-		<group>
-			<group position={[center.x, 0, center.y]}>
-				{/* Floor footprint: translucent fill + bright dashed outline. */}
-				<mesh
-					rotation-x={-Math.PI / 2}
-					position-y={FILL_Y}
-					renderOrder={2}
-					raycast={noRaycast}
-				>
-					<shapeGeometry args={[shape]} />
-					<meshBasicMaterial
-						color={GHOST_COLOR}
-						transparent
-						opacity={0.1}
-						depthWrite={false}
-					/>
-				</mesh>
-				<Line
-					segments
-					points={floorDashes.map((p) => v3(p, OUTLINE_Y))}
-					color={GHOST_COLOR}
-					lineWidth={3}
-					alphaToCoverage={false}
-				/>
-				{/* The same outline floating at the item's height (mockup's
+  return (
+    <group>
+      <group position={[center.x, 0, center.y]}>
+        {/* Floor footprint: translucent fill + bright dashed outline. */}
+        <mesh
+          rotation-x={-Math.PI / 2}
+          position-y={FILL_Y}
+          renderOrder={2}
+          raycast={noRaycast}
+        >
+          <shapeGeometry args={[shape]} />
+          <meshBasicMaterial
+            color={GHOST_COLOR}
+            transparent
+            opacity={0.1}
+            depthWrite={false}
+          />
+        </mesh>
+        <Line
+          segments
+          points={floorDashes.map((p) => v3(p, OUTLINE_Y))}
+          color={GHOST_COLOR}
+          lineWidth={3}
+          alphaToCoverage={false}
+        />
+        {/* The same outline floating at the item's height (mockup's
 				    elevated dashed box hinting the volume). */}
-				{height > 0.05 && (
-					<Line
-						segments
-						points={floorDashes.map((p) => v3(p, height))}
-						color={GHOST_COLOR}
-						lineWidth={1.5}
-						transparent
-						opacity={0.5}
-						alphaToCoverage={false}
-					/>
-				)}
-			</group>
-			<SnapGuides guides={snap.guides} unit={unit} />
-		</group>
-	);
+        {height > 0.05 && (
+          <Line
+            segments
+            points={floorDashes.map((p) => v3(p, height))}
+            color={GHOST_COLOR}
+            lineWidth={1.5}
+            transparent
+            opacity={0.5}
+            alphaToCoverage={false}
+          />
+        )}
+      </group>
+      <SnapGuides guides={snap.guides} unit={unit} />
+    </group>
+  );
 }
