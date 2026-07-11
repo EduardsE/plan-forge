@@ -19,7 +19,7 @@ import { StatusBar } from "#/components/status-bar";
 import { WorkspaceHeader } from "#/components/workspace-header";
 import { ZoomPill } from "#/components/zoom-pill";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
-import { containRoomFurniture } from "#/lib/collision";
+import { containRoomFurniture, nudgeFurniture } from "#/lib/collision";
 import { rectangleOutline, setSegmentLength } from "#/lib/draw";
 import {
   commitHistory,
@@ -60,8 +60,12 @@ import {
   STORAGE_KEY,
   serializeSavedState,
 } from "#/lib/persistence";
+import { PLACEMENT_GRID } from "#/lib/place";
 import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
+
+/** Shift-arrow nudge step, meters — the "fine" 1 cm move. */
+const FINE_NUDGE_STEP = 0.01;
 
 // Loaded lazily after mount: the three.js scene is client-only, so keep it
 // out of the SSR pass entirely.
@@ -191,6 +195,34 @@ function Planner() {
       setRoom((current) => setFurnitureColorway(current, selectedId, colorway));
     },
     [selectedId, setRoom],
+  );
+  // A live pointer drag in either lens (furniture move, rotate handle,
+  // opening slide). Settling on end folds the drag's previews into one
+  // history step; while one runs the keyboard editing below stands down —
+  // the drag owns the keys (its esc restores, not deselects).
+  const [sceneDragActive, setSceneDragActive] = useState(false);
+  const handleRoomDragActive = useCallback(
+    (active: boolean) => {
+      setSceneDragActive(active);
+      if (!active) settleRoom();
+    },
+    [settleRoom],
+  );
+  // An arrow-key nudge: a preview (like a drag's pointermoves), read through
+  // the functional update so a key-repeat burst never works from a stale
+  // room. `nudgeFurniture` owns the semantics: containment inside the
+  // outline, mounts pass through, riders re-anchor on their host.
+  const nudgeSelected = useCallback(
+    (dx: number, dy: number) => {
+      if (!selectedId) return;
+      setRoomHistory((history) => {
+        const next = nudgeFurniture(history.current, selectedId, dx, dy);
+        return next === history.current
+          ? history
+          : previewHistory(history, next);
+      });
+    },
+    [selectedId],
   );
   // The Settings rail button's popover: room name + ceiling height, each
   // commit one history step through the pure room setters (no-ops return the
@@ -477,6 +509,83 @@ function Planner() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [historyActive, undoRoom, redoRoom]);
 
+  // Keyboard editing on the selection (every lens but draw, which has no
+  // furniture selection): arrows nudge by the placement grid step (shift =
+  // fine 1 cm) — a key-repeat burst previews and folds into one history step
+  // when the key lifts — R spins 90°, delete/backspace deletes, esc
+  // deselects. Window listeners that skip inputs, exactly like the undo
+  // keys; a live pointer drag suspends the whole effect (it owns the keys).
+  const selectedMounted = Boolean(selectedItem?.mount);
+  useEffect(() => {
+    if (!selectedId || viewMode === "draw" || sceneDragActive) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest("input, textarea, [contenteditable]")
+      ) {
+        return;
+      }
+      const step = event.shiftKey ? FINE_NUDGE_STEP : PLACEMENT_GRID;
+      switch (event.key) {
+        // Plan y points down, so screen-up is -y (matches the 2D lens; the
+        // 3D lens keeps the same plan axes regardless of orbit).
+        case "ArrowUp":
+          event.preventDefault();
+          nudgeSelected(0, -step);
+          break;
+        case "ArrowDown":
+          event.preventDefault();
+          nudgeSelected(0, step);
+          break;
+        case "ArrowLeft":
+          event.preventDefault();
+          nudgeSelected(-step, 0);
+          break;
+        case "ArrowRight":
+          event.preventDefault();
+          nudgeSelected(step, 0);
+          break;
+        case "r":
+        case "R":
+          // A mounted item's rotation is derived from its wall — no keyboard
+          // spin, matching the inspector (it hides Rotate for mounts).
+          if (!selectedMounted) rotateSelected90();
+          break;
+        case "Delete":
+        case "Backspace":
+          event.preventDefault();
+          deleteSelected();
+          break;
+        case "Escape":
+          // The settings popover's own esc handler wins while it's open.
+          if (!settingsOpen) setSelectedId(null);
+          break;
+      }
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key.startsWith("Arrow")) settleRoom();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      // Deselecting or switching lenses mid-burst still settles the previews.
+      settleRoom();
+    };
+  }, [
+    selectedId,
+    selectedMounted,
+    viewMode,
+    sceneDragActive,
+    settingsOpen,
+    nudgeSelected,
+    rotateSelected90,
+    deleteSelected,
+    settleRoom,
+  ]);
+
   // Screen 2d: in objects mode the library docks as its own column between
   // rail and canvas, and the inspector yields the right edge to give the
   // canvas room (the header spans across instead).
@@ -543,7 +652,7 @@ function Planner() {
               room={room}
               onRoomChange={setRoom}
               onRoomPreview={previewRoom}
-              onRoomGestureEnd={settleRoom}
+              onRoomDragActiveChange={handleRoomDragActive}
               viewMode={viewMode}
               selectedId={selectedId}
               onSelectedIdChange={setSelectedId}

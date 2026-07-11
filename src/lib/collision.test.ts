@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   containFurniture,
   containRoomFurniture,
+  nudgeFurniture,
   overlappingFurnitureIds,
 } from "./collision";
 import type { FurnitureItem, Room } from "./model";
@@ -139,6 +140,64 @@ describe("overlappingFurnitureIds", () => {
       footprint: { width: 0.5, depth: 0.5, height: 1 },
     });
     expect(overlappingFurnitureIds([a, b]).size).toBe(2);
+  });
+});
+
+describe("nudgeFurniture", () => {
+  function roomWith(...furniture: FurnitureItem[]): Room {
+    return { outline: RECT, openings: [], furniture };
+  }
+
+  it("shifts a floor item by the given delta", () => {
+    const next = nudgeFurniture(roomWith(item({})), "x", 0.05, -0.05);
+    expect(next.furniture[0].position.x).toBeCloseTo(3.05, 10);
+    expect(next.furniture[0].position.y).toBeCloseTo(2.95, 10);
+  });
+
+  it("clamps a nudge at the wall instead of escaping", () => {
+    // Half a metre wide: flush against the right wall at x = 5.9.
+    const flush = item({ position: { x: 5.9, y: 3 } });
+    const next = nudgeFurniture(roomWith(flush), "x", 0.05, 0);
+    expect(next.furniture[0].position.x).toBeCloseTo(5.9, 10);
+  });
+
+  it("leaves wall-mounted items unchanged (same reference)", () => {
+    const frame = item({
+      catalogId: "picture-frame",
+      position: { x: 0.03, y: 1.6 },
+      rotation: 90,
+      footprint: { width: 0.9, depth: 0.06, height: 0.7 },
+      mount: { wallIndex: 3, offset: 3.15, elevation: 1.5 },
+    });
+    const room = roomWith(frame);
+    expect(nudgeFurniture(room, "x", 0.05, 0)).toBe(room);
+  });
+
+  it("returns the room unchanged for unknown ids", () => {
+    const room = roomWith(item({}));
+    expect(nudgeFurniture(room, "nope", 0.05, 0)).toBe(room);
+  });
+
+  it("keeps a stacked rider anchored on its host's top", () => {
+    const host = item({
+      id: "table-1",
+      catalogId: "dining-table",
+      position: { x: 2, y: 3 },
+      footprint: { width: 1.6, depth: 0.9, height: 0.75 },
+    });
+    const rider = item({
+      id: "lamp-1",
+      catalogId: "table-lamp",
+      position: { x: 2.4, y: 3.1 },
+      footprint: { width: 0.22, depth: 0.22, height: 0.48 },
+      stack: { hostId: "table-1", dx: 0.4, dy: 0.1 },
+    });
+    const next = nudgeFurniture(roomWith(host, rider), "lamp-1", 0.05, 0);
+    expect(next.furniture[1].stack?.dx).toBeCloseTo(0.45, 10);
+    expect(next.furniture[1].position.x).toBeCloseTo(2.45, 10);
+    // A nudge past the edge clamps to the top instead of unstacking.
+    const clamped = nudgeFurniture(roomWith(host, rider), "lamp-1", 5, 0);
+    expect(clamped.furniture[1].stack?.dx).toBeCloseTo(0.69, 10);
   });
 });
 

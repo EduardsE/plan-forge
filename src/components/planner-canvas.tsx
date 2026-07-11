@@ -559,8 +559,9 @@ export interface PlannerCanvasProps {
   onRoomChange: (room: Room) => void;
   /** A mid-drag state: applied live but not a history step of its own. */
   onRoomPreview: (room: Room) => void;
-  /** A drag ended (however) — the route folds its previews into one step. */
-  onRoomGestureEnd: () => void;
+  /** A room drag began/ended (however) — the route settles the previews
+   * into one step on end, and stands its keyboard editing down meanwhile. */
+  onRoomDragActiveChange: (active: boolean) => void;
   viewMode: ViewMode;
   /** Furniture selection — owned by the route, shared with the inspector. */
   selectedId: string | null;
@@ -597,7 +598,7 @@ export function PlannerCanvas({
   room,
   onRoomChange,
   onRoomPreview,
-  onRoomGestureEnd,
+  onRoomDragActiveChange,
   viewMode,
   selectedId,
   onSelectedIdChange: setSelectedId,
@@ -640,17 +641,18 @@ export function PlannerCanvas({
   // A furniture or opening drag in either lens; camera controls pause for it.
   const [sceneDragActive, setSceneDragActive] = useState(false);
   // Every room drag (furniture move, opening slide) reports through here —
-  // releasing the controls is also the moment its previews become one
-  // history step. Ends however the drag does: pointerup, esc (the restore
-  // preview lands first, so settling finds nothing to fold), or unmount on
-  // a lens switch. DrawScene keeps plain `setSceneDragActive` — corner
-  // drags edit the draft, not the room.
+  // the route mirrors it: releasing the controls is also the moment its
+  // previews become one history step, and keyboard editing stands down
+  // while a drag runs. Ends however the drag does: pointerup, esc (the
+  // restore preview lands first, so settling finds nothing to fold), or
+  // unmount on a lens switch. DrawScene keeps plain `setSceneDragActive` —
+  // corner drags edit the draft, not the room.
   const handleRoomDragActive = useCallback(
     (active: boolean) => {
       setSceneDragActive(active);
-      if (!active) onRoomGestureEnd();
+      onRoomDragActiveChange(active);
     },
-    [onRoomGestureEnd],
+    [onRoomDragActiveChange],
   );
   // Placed items the placement ghost snaps flush against (a fresh drop isn't
   // in the room yet, so every item is a neighbor — except stacked riders,

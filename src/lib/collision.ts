@@ -4,6 +4,7 @@ import {
   type Point,
   type Room,
   syncStackedRiders,
+  updateFurniture,
 } from "#/lib/model";
 import {
   PLACEMENT_GRID,
@@ -76,6 +77,30 @@ export function containRoomFurniture(room: Room, id: string): Room {
   };
   // Containment that slid a host back inside carries its riders with it.
   return syncStackedRiders(next, id);
+}
+
+/**
+ * Shift a floor item by a keyboard nudge (plan-coord delta), then contain it
+ * back inside the outline. Wall-mounted items pass through unchanged — their
+ * position is derived from the wall, matching the inspector hiding POS for
+ * them; a stacked rider re-anchors onto its host through the position update
+ * (clamped to the host's top, like the POS X/Y fields). Unknown ids return
+ * the room unchanged.
+ */
+export function nudgeFurniture(
+  room: Room,
+  id: string,
+  dx: number,
+  dy: number,
+): Room {
+  const item = room.furniture.find((entry) => entry.id === id);
+  if (!item || item.mount) return room;
+  return containRoomFurniture(
+    updateFurniture(room, id, {
+      position: { x: item.position.x + dx, y: item.position.y + dy },
+    }),
+    id,
+  );
 }
 
 /** Whether an item's footprint takes part in overlap warnings. Stacked
