@@ -16,6 +16,7 @@ import {
   useMoveDrag,
 } from "#/components/move-drag";
 import { PlanOpenings } from "#/components/plan-openings";
+import { RotateHandle } from "#/components/rotate-handle";
 import { SelectionChip } from "#/components/selection-chip";
 import { overlappingFurnitureIds } from "#/lib/collision";
 import type {
@@ -831,6 +832,15 @@ export function PlanScene({
           }
         </PickableFootprint>
       ))}
+      {selectedItem && !selectedItem.mount && !drag && (
+        <RotateHandle
+          item={selectedItem}
+          outline={room.outline}
+          snapEnabled={snapEnabled}
+          onRotate={(update) => onMoveItem(selectedItem.id, update)}
+          onActiveChange={onMoveActiveChange}
+        />
+      )}
       {selectedItem && (
         <SelectionChip
           item={selectedItem}
