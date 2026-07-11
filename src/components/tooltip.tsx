@@ -9,6 +9,8 @@ interface TooltipProps {
 	label: string;
 	/** Which edge of the trigger the pill hangs off. */
 	side?: TooltipSide;
+	/** Extra classes on the wrapper span (it participates in flex layouts). */
+	className?: string;
 	children: ReactNode;
 }
 
@@ -20,27 +22,29 @@ const SIDE_CLASS: Record<TooltipSide, string> = {
 };
 
 /**
- * A lightweight hover/focus tooltip: a small navy pill matching the chrome,
- * driven entirely by CSS group state so it needs no portal — which is why the
- * same component works inside the drei `<Html>` selection chips, where a Radix
- * portal can't reach. Wrap an icon-only button and pass its aria-label; the
- * trigger keeps the aria-label, this just shows it on hover.
+ * A lightweight hover/focus tooltip: a small dark-ink pill on the Paper
+ * chrome, driven entirely by CSS group state so it needs no portal — which is
+ * why the same component works inside the drei `<Html>` selection chips, where
+ * a Radix portal can't reach. Wrap an icon-only button and pass its
+ * aria-label; the trigger keeps the aria-label, this just shows it on hover.
  */
-export function Tooltip({ label, side = "top", children }: TooltipProps) {
+export function Tooltip({
+	label,
+	side = "top",
+	className,
+	children,
+}: TooltipProps) {
 	return (
-		<span className="group/tt relative inline-flex">
+		<span className={cn("group/tt relative inline-flex", className)}>
 			{children}
 			<span
 				role="tooltip"
 				className={cn(
-					"pointer-events-none absolute z-50 whitespace-nowrap rounded-md px-2 py-1 font-medium text-[11px] text-[var(--navy-50)] opacity-0 shadow-[0_8px_20px_rgba(12,20,48,0.35)] transition-opacity duration-100",
+					"pointer-events-none absolute z-50 whitespace-nowrap rounded-[7px] px-2 py-1 font-medium text-[11px] text-white opacity-0 shadow-[0_8px_20px_rgba(15,27,61,0.25)] transition-opacity duration-100",
 					"group-hover/tt:opacity-100 group-focus-within/tt:opacity-100",
 					SIDE_CLASS[side],
 				)}
-				style={{
-					background: "var(--navy-900)",
-					border: "1px solid rgba(94, 234, 212, 0.22)",
-				}}
+				style={{ background: "var(--ink-900)" }}
 			>
 				{label}
 			</span>

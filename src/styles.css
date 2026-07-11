@@ -5,52 +5,47 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * PlanForge design tokens.
- * Source of truth: design/planforge-mockups.html (+ "Visual language" in CLAUDE.md).
- * Two palettes on purpose: navy/accent tokens are the cool chrome (rail, panels,
- * toolbars, text); room tokens are the warm room being planned (floor/walls/furniture).
- * Phase 2 (canvas rendering) will likely add more one-off shading values for the
- * isometric 3D scene -- treat these as the reusable base, not the full render palette.
+ * PlanForge design tokens — the "Paper" language (Phase 6 redesign; spec
+ * digest in PROGRESS.md, references design/screen-2b/2d/3d-*.png).
+ * Two palettes on purpose: the ink/paper tokens are the cool precise chrome
+ * (rail, header, inspector, status bar); room tokens are the warm room being
+ * planned (floor/walls/furniture). No gradients, glows, or glass in the
+ * chrome — the logo tile's gradient is the only exception.
  */
 :root {
   --font-family-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-family-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  /* Navy chrome scale, dark -> light */
-  --navy-950: #0c1430;
-  --navy-900: #0f1b3d;
-  --navy-800: #101e42;
-  --navy-700: #16213e;
-  --navy-600: #22304f;
-  --navy-500: #33415c;
-  --navy-400: #5b6b8c;
-  --navy-300: #6b7a99;
-  --navy-200: #7e93be;
-  --navy-100: #b6c2d9;
-  --navy-50: #c7d4ee;
+  /* Warm-grey ink scale, dark -> light */
+  --ink-900: #1a1a17;
+  --ink-700: #3a3a34;
+  --ink-600: #4a4a44;
+  --ink-500: #6b6b64;
+  --ink-400: #9a9a92;
+  --ink-300: #b8b8b0;
+  --ink-250: #c4c4bc;
+  --ink-200: #d4d4cc;
 
-  /* Workspace canvas + surfaces */
-  --canvas: #f3f6fa;
-  --canvas-grid-major: rgba(48, 106, 190, 0.1);
-  --canvas-grid-minor: rgba(48, 106, 190, 0.05);
-  --surface: #ffffff;
-  --surface-alt: #f1f5f9;
-  --surface-glass: rgba(255, 255, 255, 0.78);
-  --surface-glass-strong: rgba(255, 255, 255, 0.9);
-  --border-subtle: rgba(15, 27, 61, 0.08);
-  --border-hairline: rgba(15, 27, 61, 0.07);
+  /* Paper surfaces + hairlines */
+  --frame: #ffffff;
+  --panel: #fbfbfa;
+  --well: #f1f1ee; /* inset tracks: search field, segmented track, thumb wells */
+  --paper: #f1f1ed; /* 2D/draw canvas */
+  --paper-dot: rgba(30, 30, 25, 0.055);
+  --studio: #ededea; /* 3D canvas behind the spotlight pool */
+  --hairline: #ecece8; /* panel seams */
+  --control-border: #e7e7e2; /* inputs, chips, small controls */
+  --button-border: #e0e0da; /* standalone buttons */
 
-  /* Teal / cyan accent */
-  --accent-from: #5eead4;
-  --accent-to: #0ea5e9;
-  --accent-teal: #14b8a6;
-  --accent-teal-deep: #0f766e;
-  --accent-cyan: #22d3ee;
-  --accent-bright: #4be3dc;
-  --accent-ink: #062b33;
+  /* Blue accent */
+  --blue: #3a5bf0;
+  --blue-tint: rgba(58, 91, 240, 0.1);
+  --logo-from: #5b78f5;
+  --logo-to: #3247d9;
 
   /* Status */
-  --status-success: #34d399;
+  --saved-green: #1e9e6a;
+  --danger: #d64545;
 
   /* Warm room palette */
   --room-floor: #e6dbc6;
@@ -60,49 +55,78 @@
   --room-terracotta-deep: #96683c;
   --room-shadow: rgba(100, 70, 40, 0.25);
 
-  /* Radii — --radius is the base shadcn scales sm/md/lg/xl off of below;
-     these extras cover the mockup's own outliers (chips, floating panels) */
-  --radius: 14px;
+  /* Radii: controls 7-9, cards 12 (the shadcn sm/md/lg scale derives off
+     --radius below); pills for chips that stay round */
+  --radius: 12px;
   --radius-xs: 4px;
-  --radius-2xl: 22px;
   --radius-pill: 999px;
 
-  /* Shadows */
-  --shadow-sm: 0 6px 16px rgba(15, 27, 61, 0.08);
-  --shadow-md: 0 14px 34px rgba(15, 27, 61, 0.1);
+  /* Shadows — small and quiet; nothing floats far off the paper */
+  --shadow-control: 0 1px 2px rgba(15, 27, 61, 0.1), 0 0 0 1px rgba(15, 27, 61, 0.04);
+  --shadow-card: 0 1px 2px rgba(15, 27, 61, 0.04);
+  --shadow-sm: 0 4px 14px rgba(15, 27, 61, 0.06);
+  --shadow-md: 0 14px 34px rgba(15, 27, 61, 0.14);
+  --shadow-drag: 0 34px 70px rgba(15, 27, 61, 0.28);
+
+  /*
+   * LEGACY navy/teal tokens — still referenced by not-yet-redesigned scene
+   * components (selection chips, snap guides, draw pills, objects panel).
+   * Phase 6 tasks R2-R5 retire these; delete the block when the last
+   * reference goes.
+   */
+  --navy-950: #0c1430;
+  --navy-900: #0f1b3d;
+  --navy-500: #33415c;
+  --navy-400: #5b6b8c;
+  --navy-300: #6b7a99;
+  --navy-100: #b6c2d9;
+  --navy-50: #c7d4ee;
+  --canvas: var(--paper);
+  --surface: #ffffff;
+  --surface-alt: #f1f5f9;
+  --surface-glass: rgba(255, 255, 255, 0.78);
+  --surface-glass-strong: rgba(255, 255, 255, 0.9);
+  --border-subtle: rgba(15, 27, 61, 0.08);
+  --border-hairline: rgba(15, 27, 61, 0.07);
+  --accent-from: #5eead4;
+  --accent-to: #0ea5e9;
+  --accent-teal: #14b8a6;
+  --accent-teal-deep: #0f766e;
+  --accent-cyan: #22d3ee;
+  --accent-bright: #4be3dc;
+  --accent-ink: #062b33;
+  --status-success: #34d399;
   --shadow-lg: 0 30px 80px rgba(15, 27, 61, 0.16);
-  --shadow-rail: 1px 0 0 rgba(78, 225, 215, 0.16), 10px 0 34px rgba(12, 20, 48, 0.12);
-  --shadow-glow-accent: 0 0 22px rgba(94, 234, 212, 0.45);
-  --shadow-glow-nav-active: 0 0 0 1px rgba(75, 227, 220, 0.28), 0 0 20px rgba(75, 227, 220, 0.18);
+  /* end LEGACY */
 
   /* shadcn/ui theme mapping */
-  --background: var(--surface);
-  --foreground: var(--navy-900);
-  --card: var(--surface);
-  --card-foreground: var(--navy-900);
-  --popover: var(--surface);
-  --popover-foreground: var(--navy-900);
-  --primary: var(--navy-900);
-  --primary-foreground: var(--surface);
-  --secondary: var(--surface-alt);
-  --secondary-foreground: var(--navy-900);
-  --muted: var(--surface-alt);
-  --muted-foreground: var(--navy-300);
-  --accent: color-mix(in oklab, var(--accent-from) 16%, white);
-  --accent-foreground: var(--navy-900);
-  --destructive: #dc2626;
-  --destructive-foreground: #dc2626;
-  --border: var(--border-subtle);
-  --input: var(--border-subtle);
-  --ring: var(--accent-cyan);
-  --sidebar: var(--navy-900);
-  --sidebar-foreground: var(--navy-100);
-  --sidebar-primary: var(--accent-teal);
-  --sidebar-primary-foreground: var(--navy-950);
-  --sidebar-accent: rgba(75, 227, 220, 0.1);
-  --sidebar-accent-foreground: var(--accent-bright);
-  --sidebar-border: rgba(78, 225, 215, 0.16);
-  --sidebar-ring: var(--accent-cyan);
+  --background: var(--frame);
+  --foreground: var(--ink-900);
+  --card: var(--frame);
+  --card-foreground: var(--ink-900);
+  --popover: var(--frame);
+  --popover-foreground: var(--ink-900);
+  --primary: var(--ink-900);
+  --primary-foreground: var(--frame);
+  --secondary: var(--well);
+  --secondary-foreground: var(--ink-900);
+  --muted: var(--well);
+  --muted-foreground: var(--ink-500);
+  --accent: var(--blue-tint);
+  --accent-foreground: var(--blue);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger);
+  --border: var(--hairline);
+  --input: var(--control-border);
+  --ring: var(--blue);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--ink-400);
+  --sidebar-primary: var(--blue);
+  --sidebar-primary-foreground: var(--frame);
+  --sidebar-accent: var(--blue-tint);
+  --sidebar-accent-foreground: var(--blue);
+  --sidebar-border: var(--hairline);
+  --sidebar-ring: var(--blue);
 }
 
 @theme inline {
@@ -173,16 +197,37 @@ body {
 }
 
 /*
- * The blueprint grid moved in-scene (drei <Grid> in planner-canvas.tsx) so it
- * pans/zooms with the camera; only the base color + radial highlight remain
- * here, showing through the transparent WebGL canvas. The --canvas-grid-*
- * tokens above are the source values for the in-scene grid line colors.
+ * The canvas ground shows through the transparent WebGL canvas. Default is
+ * the 2D/draw paper: warm off-white, a soft white radial lift, and a faint
+ * 26px dot lattice (screens 2b/2d). The panning reference grid itself lives
+ * in-scene (drei <Grid> in planner-canvas.tsx).
  */
 .workspace-canvas {
   height: 100%;
   width: 100%;
-  background-color: var(--canvas);
-  background-image: radial-gradient(1000px 760px at 55% 46%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 72%);
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(900px 680px at 50% 42%, rgba(255, 255, 255, 0.85), transparent 74%),
+    radial-gradient(circle, var(--paper-dot) 1px, transparent 1.4px);
+  background-size:
+    100% 100%,
+    26px 26px;
+}
+
+/*
+ * 3D lens: the studio spotlight pool (screen 3d) — plain studio grey with a
+ * soft light pool behind the model, no dot grid. The room's contact shadow
+ * is in-scene (see room-scene).
+ */
+.workspace-canvas[data-view-mode='3d'] {
+  background-color: var(--studio);
+  background-image: radial-gradient(
+    max(54vw, 540px) max(56vh, 400px) at 47% 44%,
+    rgba(255, 255, 255, 0.95),
+    rgba(214, 216, 222, 0.55) 62%,
+    rgba(120, 126, 146, 0.3) 100%
+  );
+  background-size: 100% 100%;
 }
 
 @layer base {

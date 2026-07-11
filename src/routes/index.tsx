@@ -9,15 +9,13 @@ import {
 } from "react";
 import { DrawHintBar } from "#/components/draw-hint-bar";
 import { type DrawTool, DrawToolStack } from "#/components/draw-tool-stack";
-import { FloatingToolbar } from "#/components/floating-toolbar";
 import { NavRail } from "#/components/nav-rail";
 import { ObjectsPanel } from "#/components/objects-panel";
 import { OpeningToolStack } from "#/components/opening-tool-stack";
 import { PlacementDragLayer } from "#/components/placement-drag-layer";
-import { ReadoutChip } from "#/components/readout-chip";
-import { UnitsToggle } from "#/components/units-toggle";
-import { ViewControls } from "#/components/view-controls";
+import { StatusBar } from "#/components/status-bar";
 import { WorkspaceHeader } from "#/components/workspace-header";
+import { ZoomPill } from "#/components/zoom-pill";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
 import { rectangleOutline, setSegmentLength } from "#/lib/draw";
 import {
@@ -363,16 +361,40 @@ function Planner() {
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [historyActive, undoRoom, redoRoom]);
 
-	// Screen 1d: the objects panel overlays the top-left chrome, which all
-	// moves right (mockup: left 404px) while the panel is open.
+	// Screen 2d: the objects library docks as its own column (R4); until then
+	// the panel still overlays the canvas cell.
 	const objectsOpen = viewMode === "objects";
 
 	return (
-		<div className="flex h-screen w-screen overflow-hidden">
+		<div
+			className="grid h-screen w-screen overflow-hidden bg-[var(--frame)]"
+			style={{
+				gridTemplateColumns: "64px 1fr 320px",
+				gridTemplateRows: "56px 1fr 38px",
+				gridTemplateAreas:
+					"'rail header inspector' 'rail canvas inspector' 'rail status inspector'",
+			}}
+		>
 			<NavRail activeMode={viewMode} onSelectMode={setViewMode} />
+			<WorkspaceHeader
+				mode={viewMode}
+				roomName={room.name ?? "Untitled room"}
+				savedAt={savedAt}
+				onNewRoom={startNewRoom}
+				onSelectMode={setViewMode}
+				onUndo={undoRoom}
+				onRedo={redoRoom}
+				canUndo={canUndo}
+				canRedo={canRedo}
+				onFullscreen={toggleFullscreen}
+				draftClosed={draft.closed}
+				placingName={placing?.item.name ?? null}
+				openingTool={openingTool}
+			/>
 			<div
 				ref={workspaceRef}
-				className="workspace-canvas relative flex-1"
+				className="workspace-canvas relative min-h-0 min-w-0"
+				style={{ gridArea: "canvas" }}
 				data-view-mode={viewMode}
 			>
 				{canvasReady && (
@@ -404,27 +426,6 @@ function Planner() {
 						/>
 					</Suspense>
 				)}
-				<WorkspaceHeader
-					mode={viewMode}
-					roomName={room.name ?? "Untitled room"}
-					savedAt={savedAt}
-					onNewRoom={startNewRoom}
-					draftCornerCount={draft.corners.length}
-					draftClosed={draft.closed}
-					placingName={placing?.item.name ?? null}
-					openingTool={openingTool}
-					shifted={objectsOpen}
-				/>
-				<FloatingToolbar
-					onUndo={undoRoom}
-					onRedo={redoRoom}
-					canUndo={canUndo}
-					canRedo={canRedo}
-					onZoomIn={() => cameraApiRef.current?.zoomIn()}
-					onZoomOut={() => cameraApiRef.current?.zoomOut()}
-					onZoomToFit={() => cameraApiRef.current?.zoomToFit()}
-					shifted={objectsOpen}
-				/>
 				{viewMode === "draw" && (
 					<>
 						<DrawToolStack tool={drawTool} onToolChange={setDrawTool} />
@@ -441,20 +442,12 @@ function Planner() {
 						onClose={() => setViewMode("3d")}
 					/>
 				)}
-				<ViewControls
-					viewMode={viewMode}
-					onSelectMode={setViewMode}
-					shifted={objectsOpen}
-					gridVisible={gridVisible}
-					onToggleGrid={() => setGridVisible((on) => !on)}
-					snapEnabled={snapEnabled}
-					onToggleSnap={() => setSnapEnabled((on) => !on)}
-					onFullscreen={toggleFullscreen}
+				<ZoomPill
+					cameraReadout={readoutStore}
+					onZoomIn={() => cameraApiRef.current?.zoomIn()}
+					onZoomOut={() => cameraApiRef.current?.zoomOut()}
+					onZoomToFit={() => cameraApiRef.current?.zoomToFit()}
 				/>
-				<ReadoutChip mode={viewMode} cameraReadout={readoutStore} unit={unit} />
-				{viewMode === "draw" && (
-					<UnitsToggle unit={unit} onUnitChange={setUnit} />
-				)}
 				{placing && (
 					<PlacementDragLayer
 						item={placing.item}
@@ -463,6 +456,27 @@ function Planner() {
 					/>
 				)}
 			</div>
+			<StatusBar
+				mode={viewMode}
+				room={room}
+				cameraReadout={readoutStore}
+				unit={unit}
+				onUnitChange={setUnit}
+				gridVisible={gridVisible}
+				onToggleGrid={() => setGridVisible((on) => !on)}
+				snapEnabled={snapEnabled}
+				onToggleSnap={() => setSnapEnabled((on) => !on)}
+				draftCornerCount={draft.corners.length}
+				draftClosed={draft.closed}
+				placingName={placing?.item.name ?? null}
+				openingTool={openingTool}
+			/>
+			{/* Inspector column — populated by Phase 6 R2. */}
+			<aside
+				aria-label="Inspector"
+				className="border-[var(--hairline)] border-l bg-[var(--panel)]"
+				style={{ gridArea: "inspector" }}
+			/>
 		</div>
 	);
 }

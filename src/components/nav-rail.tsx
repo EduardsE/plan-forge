@@ -1,4 +1,5 @@
 import { Box, Eye, Pencil, SlidersHorizontal, Sofa } from "lucide-react";
+import { Tooltip } from "#/components/tooltip";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -21,28 +22,33 @@ const NAV_ITEMS: NavItemDef[] = [
 	{ label: "Settings", icon: SlidersHorizontal, mode: null },
 ];
 
+/**
+ * The 64px icon rail (screen 2b): logo tile up top (the one gradient the
+ * Paper chrome allows), 40px icon-only buttons — active gets the blue tint
+ * plus a 3px notch bar at the rail's left edge — settings pinned to the
+ * bottom above the avatar dot.
+ */
 export function NavRail({ activeMode, onSelectMode }: NavRailProps) {
 	return (
 		<nav
 			aria-label="Primary"
-			className="flex w-24 flex-col items-center gap-2 bg-sidebar py-[22px]"
-			style={{ boxShadow: "var(--shadow-rail)" }}
+			className="flex flex-col items-center gap-1 border-[var(--hairline)] border-r bg-[var(--panel)] pt-3.5 pb-4"
+			style={{ gridArea: "rail" }}
 		>
 			<div
-				className="mb-4 flex h-11 w-11 items-center justify-center rounded-[13px]"
+				className="mb-3 flex h-[34px] w-[34px] items-center justify-center rounded-[9px]"
 				style={{
 					background:
-						"linear-gradient(135deg, var(--accent-from), var(--accent-to))",
-					boxShadow: "var(--shadow-glow-accent)",
+						"linear-gradient(140deg, var(--logo-from), var(--logo-to))",
 				}}
 			>
 				<svg
-					width="24"
-					height="24"
+					width="19"
+					height="19"
 					viewBox="0 0 20 20"
 					fill="none"
-					stroke="var(--accent-ink)"
-					strokeWidth="1.6"
+					stroke="#fff"
+					strokeWidth="1.7"
 					strokeLinecap="round"
 					strokeLinejoin="round"
 					aria-hidden="true"
@@ -55,33 +61,41 @@ export function NavRail({ activeMode, onSelectMode }: NavRailProps) {
 			{NAV_ITEMS.map(({ label, icon: Icon, mode }) => {
 				const isActive = mode !== null && mode === activeMode;
 				return (
-					<button
+					<Tooltip
 						key={label}
-						type="button"
-						aria-current={isActive ? "page" : undefined}
-						onClick={mode === null ? undefined : () => onSelectMode(mode)}
-						style={
-							isActive
-								? { boxShadow: "var(--shadow-glow-nav-active)" }
-								: undefined
-						}
-						className={cn(
-							"flex w-[78px] flex-col items-center gap-1.5 rounded-xl py-[11px] text-[10px] tracking-wide text-sidebar-foreground",
-							isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
-							label === "Settings" && "mt-auto",
-						)}
+						label={label}
+						side="right"
+						className={label === "Settings" ? "mt-auto" : undefined}
 					>
-						<Icon width={22} height={22} strokeWidth={1.5} />
-						<span>{label}</span>
-					</button>
+						<button
+							type="button"
+							aria-label={label}
+							aria-current={isActive ? "page" : undefined}
+							onClick={mode === null ? undefined : () => onSelectMode(mode)}
+							className={cn(
+								"relative flex h-10 w-10 items-center justify-center rounded-[10px]",
+								isActive
+									? "bg-[var(--blue-tint)] text-[var(--blue)]"
+									: "text-[var(--ink-400)] hover:text-[var(--ink-600)]",
+							)}
+						>
+							{isActive && (
+								<span
+									aria-hidden="true"
+									className="absolute top-[9px] left-[-12px] h-[22px] w-[3px] rounded-[2px] bg-[var(--blue)]"
+								/>
+							)}
+							<Icon width={19} height={19} strokeWidth={1.6} />
+						</button>
+					</Tooltip>
 				);
 			})}
 
 			<div
-				className="mt-3 h-[38px] w-[38px] rounded-full"
+				className="mt-2.5 h-[30px] w-[30px] rounded-full"
 				style={{
-					background: "linear-gradient(135deg, #e8b48a, #b4633e)",
-					boxShadow: "0 0 0 2px rgba(126, 147, 190, 0.35)",
+					background: "linear-gradient(140deg, #e8b48a, #b4633e)",
+					boxShadow: "0 0 0 1px rgba(15, 27, 61, 0.1)",
 				}}
 			/>
 		</nav>
