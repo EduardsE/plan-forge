@@ -4,18 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What we're building: PlanForge
 
-A web-based room planner with a split personality by design: cool, futuristic chrome around a warm, cozy room. The UI shell is dark navy + near-white with a cyan/teal accent, frosted-glass floating panels, thin line icons, and a faint blueprint grid on the workspace. The room itself is deliberately the opposite — beige plank floor, warm-white walls, wood/terracotta furniture, soft window light — so the user's content always feels inviting against the precise tooling.
+A web-based room planner in the **"Paper" design language** (2026-07-11 redesign, mockups 2b/2d + ground treatment 3d): a light, Stripe/Apple-style shell — white and warm-off-white surfaces (`#FFFFFF`/`#FBFBFA`), hairline borders (`#ECECE8`/`#E7E7E2`), warm-grey ink text (`#1A1A17`→`#9A9A92`), one restrained blue accent `#3A5BF0`, 8-pt spacing, refined small shadows. **No gradients, glows, or frosted glass** (the only gradient allowed is the logo tile). The room being planned stays deliberately warm — beige plank floor, warm-white walls, wood/terracotta furniture, soft window light — so the user's content feels inviting against the precise tooling.
 
-It's one room, three lenses, all inside the same shell (navy icon rail, floating undo/zoom toolbar, 2D|3D pill, status chips). Mockup screen numbers in parentheses:
+The shell is a fixed three-zone grid, not floating panels: 64px icon rail (left) · 56px header (breadcrumb + saved chip, centered 2D|3D flat segmented switch, undo/redo, Present) · 320px inspector (right; selection transform/material/arrange at high density, room stats footer) · 38px status bar (area, snap/grid state, camera readout). One room, three lenses inside that shell:
 
 - **Draw (1c)** is where a room is born — you click corners on the grid, walls get live editable length labels, snapping keeps everything at 90°. Output: a dimensioned outline.
 - **2D plan (1b)** is the analytical lens on that outline — architectural wall strokes, labeled furniture footprints, dimension lines, floor area. Best for precise arranging.
-- **3D dollhouse (1a)** is the experiential lens — same room, orbitable, furnished, with in-scene selection (chip with rotate/duplicate/delete + size readout).
-- **Objects (1d)** is the furnishing flow that works over either lens — catalog panel slides out from the rail, cards drag onto the floor, ghost footprint + alignment guides show snap distances to walls before you drop.
+- **3D dollhouse (1a)** is the experiential lens — same room, orbitable, furnished. The canvas under it is a **studio spotlight pool** (mockup 3d): plain `#EDEDEA`, a soft radial light pool behind the model, a dark contact shadow grounding the room — no grid. The 2D/draw canvas is paper `#F1F1ED` with a faint dot grid instead.
+- **Objects (2d)** is the furnishing flow — a 306px library column docks between rail and canvas (inspector yields), cards drag onto the floor, blue dashed ghost footprint + guide lines with distance pills show snaps before you drop.
 
-The 2D|3D pill is the hinge of the whole product: one model, instant lens switch, identical chrome so nothing about the tooling changes when the view does.
+The 2D|3D switch is the hinge of the whole product: one model, instant lens switch, identical chrome so nothing about the tooling changes when the view does.
 
-**Before starting any implementation work, read `PROGRESS.md`** — it holds the task breakdown and what's done so far. Work on one task at a time and check it off there. The source mockups live at `design/planforge-mockups.html` (screenshots: `design/screen-*.png`).
+**Before starting any implementation work, read `PROGRESS.md`** — it holds the task breakdown and what's done so far. Work on one task at a time and check it off there. The source mockups live at `design/planforge-mockups.html` (redesign references: `design/screen-2b-paper-light.png`, `design/screen-2d-paper-objects.png`, `design/screen-3d-studio-pool.png`; the older screen-1* shots still define the *flows*, not the look).
 
 ## Commands
 
