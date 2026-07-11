@@ -116,6 +116,12 @@ export interface FurnitureItem {
 export interface Room {
   /** Display name, e.g. "Living room". */
   name?: string;
+  /**
+   * Wall/ceiling height in meters; absent means the default (see
+   * `DEFAULT_WALL_HEIGHT` in `model/room.ts`). Kept within
+   * [MIN_WALL_HEIGHT, MAX_WALL_HEIGHT] by `setRoomWallHeight`.
+   */
+  wallHeight?: number;
   /** Ordered corners of the closed room outline. */
   outline: Point[];
   openings: Opening[];

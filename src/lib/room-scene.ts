@@ -1,5 +1,5 @@
 import type { OpeningKind, Point, Room } from "#/lib/model";
-import { wallsOf } from "#/lib/model";
+import { DEFAULT_WALL_HEIGHT, wallHeightOf, wallsOf } from "#/lib/model";
 
 /**
  * Pure scene-preparation math for the 3D lens: turns the plain room model
@@ -12,7 +12,8 @@ import { wallsOf } from "#/lib/model";
  * (walls 250 px = 2.5 m at 100 px/m, window at top:56/height:158 px).
  */
 
-export const WALL_HEIGHT = 2.5;
+/** Default wall height; rooms can override it (`Room.wallHeight`). */
+export const WALL_HEIGHT = DEFAULT_WALL_HEIGHT;
 export const WALL_THICKNESS = 0.1;
 /** Thickness of the dollhouse floor platform (mockup slab edge: 18 px). */
 export const SLAB_THICKNESS = 0.18;
@@ -83,7 +84,7 @@ const MIN_HOLE_SIZE = 1e-6;
  */
 export function buildWallSolids(
   room: Room,
-  wallHeight = WALL_HEIGHT,
+  wallHeight = wallHeightOf(room),
 ): WallSolid[] {
   const { outline, openings } = room;
   if (outline.length < 3) return [];

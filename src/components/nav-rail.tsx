@@ -6,11 +6,15 @@ import type { ViewMode } from "#/lib/view-mode";
 interface NavRailProps {
   activeMode: ViewMode;
   onSelectMode: (mode: ViewMode) => void;
+  /** The Settings popover is open — the Settings button lights up like a mode. */
+  settingsOpen: boolean;
+  onToggleSettings: () => void;
 }
 
 interface NavItemDef {
   label: string;
   icon: typeof Pencil;
+  /** null = the Settings toggle, which opens the popover instead of a lens. */
   mode: ViewMode | null;
 }
 
@@ -28,7 +32,12 @@ const NAV_ITEMS: NavItemDef[] = [
  * plus a 3px notch bar at the rail's left edge — settings pinned to the
  * bottom above the avatar dot.
  */
-export function NavRail({ activeMode, onSelectMode }: NavRailProps) {
+export function NavRail({
+  activeMode,
+  onSelectMode,
+  settingsOpen,
+  onToggleSettings,
+}: NavRailProps) {
   return (
     <nav
       aria-label="Primary"
@@ -59,19 +68,22 @@ export function NavRail({ activeMode, onSelectMode }: NavRailProps) {
       </div>
 
       {NAV_ITEMS.map(({ label, icon: Icon, mode }) => {
-        const isActive = mode !== null && mode === activeMode;
+        const isSettings = mode === null;
+        const isActive = isSettings ? settingsOpen : mode === activeMode;
         return (
           <Tooltip
             key={label}
             label={label}
             side="right"
-            className={label === "Settings" ? "mt-auto" : undefined}
+            className={isSettings ? "mt-auto" : undefined}
           >
             <button
               type="button"
               aria-label={label}
-              aria-current={isActive ? "page" : undefined}
-              onClick={mode === null ? undefined : () => onSelectMode(mode)}
+              aria-current={!isSettings && isActive ? "page" : undefined}
+              aria-expanded={isSettings ? settingsOpen : undefined}
+              data-settings-anchor={isSettings ? "" : undefined}
+              onClick={isSettings ? onToggleSettings : () => onSelectMode(mode)}
               className={cn(
                 "relative flex h-10 w-10 items-center justify-center rounded-[10px]",
                 isActive

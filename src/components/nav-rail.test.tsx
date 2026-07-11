@@ -2,9 +2,21 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NavRail } from "./nav-rail";
 
+function renderRail(props: Partial<Parameters<typeof NavRail>[0]> = {}) {
+  return render(
+    <NavRail
+      activeMode="3d"
+      onSelectMode={() => {}}
+      settingsOpen={false}
+      onToggleSettings={() => {}}
+      {...props}
+    />,
+  );
+}
+
 describe("NavRail", () => {
   it("marks the nav item mapped to the active view mode as current", () => {
-    render(<NavRail activeMode="draw" onSelectMode={() => {}} />);
+    renderRail({ activeMode: "draw" });
 
     expect(
       screen.getByRole("button", { name: "Draw" }).getAttribute("aria-current"),
@@ -18,7 +30,7 @@ describe("NavRail", () => {
 
   it("calls onSelectMode with the mapped mode when a mode-mapped item is clicked", () => {
     const onSelectMode = vi.fn();
-    render(<NavRail activeMode="3d" onSelectMode={onSelectMode} />);
+    renderRail({ onSelectMode });
 
     fireEvent.click(screen.getByRole("button", { name: "Objects" }));
 
@@ -26,17 +38,29 @@ describe("NavRail", () => {
   });
 
   it("does not render the dropped Dashboard button", () => {
-    render(<NavRail activeMode="3d" onSelectMode={() => {}} />);
+    renderRail();
 
     expect(screen.queryByRole("button", { name: "Dashboard" })).toBeNull();
   });
 
-  it("does not call onSelectMode when an unmapped item like Settings is clicked", () => {
+  it("toggles the settings popover instead of selecting a mode", () => {
     const onSelectMode = vi.fn();
-    render(<NavRail activeMode="3d" onSelectMode={onSelectMode} />);
+    const onToggleSettings = vi.fn();
+    renderRail({ onSelectMode, onToggleSettings });
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
+    expect(onToggleSettings).toHaveBeenCalledOnce();
     expect(onSelectMode).not.toHaveBeenCalled();
+  });
+
+  it("lights the Settings button while the popover is open", () => {
+    renderRail({ settingsOpen: true });
+
+    expect(
+      screen
+        .getByRole("button", { name: "Settings" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
   });
 });

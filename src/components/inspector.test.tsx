@@ -46,6 +46,12 @@ describe("Inspector", () => {
     expect(screen.getByText("2.50 m")).toBeTruthy();
   });
 
+  it("shows the room's own ceiling height when set", () => {
+    renderInspector({ room: { ...room, wallHeight: 3.1 } });
+
+    expect(screen.getByText("3.10 m")).toBeTruthy();
+  });
+
   it("shows the selected item with editable transform fields", () => {
     renderInspector({ selectedItem: item });
 

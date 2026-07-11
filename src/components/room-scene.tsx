@@ -33,13 +33,17 @@ import {
   partScale,
 } from "#/lib/furniture-parts";
 import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
-import { canHostStack, outlineBounds, stackSurfaceHeight } from "#/lib/model";
+import {
+  canHostStack,
+  outlineBounds,
+  stackSurfaceHeight,
+  wallHeightOf,
+} from "#/lib/model";
 import { furnitureObstacle } from "#/lib/place";
 import {
   buildWallSolids,
   cornerPosts,
   SLAB_THICKNESS,
-  WALL_HEIGHT,
   WALL_THICKNESS,
   type WallSolid,
 } from "#/lib/room-scene";
@@ -114,10 +118,36 @@ function makeTexture(
  */
 let textureCache: {
   plank: CanvasTexture;
-  wall: CanvasTexture;
   pane: CanvasTexture;
   blob: CanvasTexture;
 } | null = null;
+
+/**
+ * Wall-face texture for a given wall height, cached per height: the baseboard
+ * band must stay a fixed 0.12 m regardless of how tall the gradient above it
+ * runs, so the texture bakes the height in (one vertical tile = one wall).
+ */
+const wallTextureCache = new Map<number, CanvasTexture>();
+
+function wallTexture(wallHeight: number): CanvasTexture {
+  const cached = wallTextureCache.get(wallHeight);
+  if (cached) return cached;
+  // Wall face, floor to ceiling: baseboard band, then a soft warm gradient.
+  // flipY puts canvas-bottom at v=0, which the repeat maps to wall-bottom.
+  const wall = makeTexture(4, 512, (ctx) => {
+    const baseboardPx = Math.round((BASEBOARD_HEIGHT / wallHeight) * 512);
+    const gradient = ctx.createLinearGradient(0, 0, 0, 512 - baseboardPx);
+    gradient.addColorStop(0, WALL_TOP_COLOR);
+    gradient.addColorStop(1, WALL_BOTTOM_COLOR);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 4, 512);
+    ctx.fillStyle = BASEBOARD_COLOR;
+    ctx.fillRect(0, 512 - baseboardPx, 4, baseboardPx);
+  });
+  wall.repeat.set(1, 1 / wallHeight);
+  wallTextureCache.set(wallHeight, wall);
+  return wall;
+}
 
 function sharedTextures() {
   if (textureCache) return textureCache;
@@ -134,20 +164,6 @@ function sharedTextures() {
   plank.wrapS = RepeatWrapping;
   plank.wrapT = RepeatWrapping;
   plank.repeat.set(1 / PLANK_PERIOD, 1 / PLANK_PERIOD);
-
-  // Wall face, floor to ceiling: baseboard band, then a soft warm gradient.
-  // flipY puts canvas-bottom at v=0, which the repeat maps to wall-bottom.
-  const wall = makeTexture(4, 512, (ctx) => {
-    const baseboardPx = Math.round((BASEBOARD_HEIGHT / WALL_HEIGHT) * 512);
-    const gradient = ctx.createLinearGradient(0, 0, 0, 512 - baseboardPx);
-    gradient.addColorStop(0, WALL_TOP_COLOR);
-    gradient.addColorStop(1, WALL_BOTTOM_COLOR);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 4, 512);
-    ctx.fillStyle = BASEBOARD_COLOR;
-    ctx.fillRect(0, 512 - baseboardPx, 4, baseboardPx);
-  });
-  wall.repeat.set(1, 1 / WALL_HEIGHT);
 
   // Daylight glow for window panes.
   const pane = makeTexture(4, 128, (ctx) => {
@@ -168,7 +184,7 @@ function sharedTextures() {
     ctx.fillRect(0, 0, 256, 256);
   });
 
-  textureCache = { plank, wall, pane, blob };
+  textureCache = { plank, pane, blob };
   return textureCache;
 }
 
@@ -320,18 +336,20 @@ function WindowDressing({
 
 function WallMesh({
   solid,
+  wallHeight,
   groupRef,
 }: {
   solid: WallSolid;
+  wallHeight: number;
   groupRef: (group: Group | null) => void;
 }) {
-  const { wall } = sharedTextures();
+  const wall = wallTexture(wallHeight);
   const geometry = useMemo(() => {
     const shape = new Shape();
     shape.moveTo(0, 0);
     shape.lineTo(solid.length, 0);
-    shape.lineTo(solid.length, WALL_HEIGHT);
-    shape.lineTo(0, WALL_HEIGHT);
+    shape.lineTo(solid.length, wallHeight);
+    shape.lineTo(0, wallHeight);
     shape.closePath();
     for (const hole of solid.holes) {
       const path = new Path();
@@ -346,7 +364,7 @@ function WallMesh({
       depth: WALL_THICKNESS,
       bevelEnabled: false,
     });
-  }, [solid]);
+  }, [solid, wallHeight]);
 
   // rotation-y mapping local +X onto the wall direction sends local +Z to
   // plan (-dir.y, dir.x); when that lands inward, shift the extrusion so the
@@ -377,6 +395,7 @@ function WallMesh({
 
 /** Walls + corner posts with the per-frame dollhouse cutaway. */
 function Walls({ room }: { room: Room }) {
+  const wallHeight = wallHeightOf(room);
   const solids = useMemo(() => buildWallSolids(room), [room]);
   const posts = useMemo(() => cornerPosts(solids), [solids]);
   /** Wall index → position in `solids` (zero-length walls are skipped). */
@@ -394,7 +413,7 @@ function Walls({ room }: { room: Room }) {
       const midX = solid.start.x + (solid.dir.x * solid.length) / 2;
       const midZ = solid.start.y + (solid.dir.y * solid.length) / 2;
       const toCamX = camera.position.x - midX;
-      const toCamY = camera.position.y - WALL_HEIGHT / 2;
+      const toCamY = camera.position.y - wallHeight / 2;
       const toCamZ = camera.position.z - midZ;
       const distance = Math.hypot(toCamX, toCamY, toCamZ) || 1;
       const facing =
@@ -422,6 +441,7 @@ function Walls({ room }: { room: Room }) {
         <WallMesh
           key={solid.index}
           solid={solid}
+          wallHeight={wallHeight}
           groupRef={(group) => {
             wallRefs.current[i] = group;
           }}
@@ -433,10 +453,10 @@ function Walls({ room }: { room: Room }) {
           ref={(mesh) => {
             postRefs.current[i] = mesh;
           }}
-          position={[post.center.x, WALL_HEIGHT / 2, post.center.y]}
+          position={[post.center.x, wallHeight / 2, post.center.y]}
           raycast={noRaycast}
         >
-          <boxGeometry args={[WALL_THICKNESS, WALL_HEIGHT, WALL_THICKNESS]} />
+          <boxGeometry args={[WALL_THICKNESS, wallHeight, WALL_THICKNESS]} />
           <meshLambertMaterial color={WALL_EDGE_COLOR} />
         </mesh>
       ))}

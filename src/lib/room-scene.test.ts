@@ -100,6 +100,17 @@ describe("buildWallSolids", () => {
   it("uses the full wall height for door tops by default", () => {
     expect(DOOR_HEIGHT).toBeLessThan(WALL_HEIGHT);
   });
+
+  it("defaults the wall height to the room's own setting", () => {
+    const room = { ...createSampleRoom(), wallHeight: 2.2 };
+    // Both hole tops stay untouched: door 2.05 and window head 1.94 fit
+    // under the lowest legal ceiling — that's what MIN_WALL_HEIGHT protects.
+    const solids = buildWallSolids(room);
+    expect(solids[0].holes[0].top).toBe(WINDOW_HEAD);
+    expect(solids[1].holes[0].top).toBe(DOOR_HEIGHT);
+    // An explicit argument still wins over the room's setting.
+    expect(buildWallSolids(room, 2)[1].holes[0].top).toBe(2);
+  });
 });
 
 describe("cornerPosts", () => {

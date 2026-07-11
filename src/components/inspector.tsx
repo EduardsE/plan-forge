@@ -11,9 +11,9 @@ import {
   furnitureDisplayName,
   type Point,
   type Room,
+  wallHeightOf,
   wallLengths,
 } from "#/lib/model";
-import { WALL_HEIGHT } from "#/lib/room-scene";
 import { formatLengthValue, parseLength, type Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -113,6 +113,8 @@ interface SelectionSectionProps {
   item: FurnitureItem;
   /** Display name of the furniture the item stands on, if stacked. */
   hostName: string | null;
+  /** The room's wall height — the ceiling clamp for mounted elevations. */
+  wallHeight: number;
   unit: Unit;
   /** A committed size edit — the full footprint with one dimension changed. */
   onResize: (footprint: Footprint) => void;
@@ -132,6 +134,7 @@ interface SelectionSectionProps {
 function SelectionSection({
   item,
   hostName,
+  wallHeight,
   unit,
   onResize,
   onRotateTo,
@@ -166,9 +169,9 @@ function SelectionSection({
     const meters = parseLength(text, unit);
     if (meters === null) return;
     // Keep the body between floor and ceiling; the floor clamp also lives
-    // in the model, the wall height only the renderer knows.
+    // in the model, the ceiling clamp is this card's.
     const half = item.footprint.height / 2;
-    const clamped = Math.min(Math.max(meters, half), WALL_HEIGHT - half);
+    const clamped = Math.min(Math.max(meters, half), wallHeight - half);
     if (Math.abs(clamped - mount.elevation) < SAME_EPSILON) return;
     onElevate(clamped);
   };
@@ -430,6 +433,7 @@ export function Inspector({
         ) : showSelection ? (
           <SelectionSection
             item={selectedItem}
+            wallHeight={wallHeightOf(room)}
             hostName={
               selectedItem.stack
                 ? furnitureDisplayName(
@@ -475,7 +479,7 @@ export function Inspector({
         {[
           ["FLOOR", area === null ? "—" : `${area.toFixed(2)} m²`],
           ["PERIMETER", perimeter === null ? "—" : `${perimeter.toFixed(1)} m`],
-          ["CEILING", `${WALL_HEIGHT.toFixed(2)} m`],
+          ["CEILING", `${wallHeightOf(room).toFixed(2)} m`],
         ].map(([label, value]) => (
           <div key={label} className="flex flex-col gap-[3px]">
             <span

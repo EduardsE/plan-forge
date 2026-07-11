@@ -2,6 +2,7 @@ export * from "./catalog";
 export * from "./furniture";
 export * from "./geometry";
 export * from "./openings";
+export * from "./room";
 export * from "./sample-room";
 export * from "./stack";
 export * from "./types";

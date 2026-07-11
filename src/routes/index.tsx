@@ -14,6 +14,7 @@ import { NavRail } from "#/components/nav-rail";
 import { ObjectsPanel } from "#/components/objects-panel";
 import { OpeningToolStack } from "#/components/opening-tool-stack";
 import { PlacementDragLayer } from "#/components/placement-drag-layer";
+import { SettingsPopover } from "#/components/settings-popover";
 import { StatusBar } from "#/components/status-bar";
 import { WorkspaceHeader } from "#/components/workspace-header";
 import { ZoomPill } from "#/components/zoom-pill";
@@ -42,6 +43,8 @@ import {
   setFurnitureFootprint,
   setFurnitureRotation,
   setMountElevation,
+  setRoomName,
+  setRoomWallHeight,
   updateFurniture,
 } from "#/lib/model";
 import {
@@ -188,6 +191,21 @@ function Planner() {
       setRoom((current) => setFurnitureColorway(current, selectedId, colorway));
     },
     [selectedId, setRoom],
+  );
+  // The Settings rail button's popover: room name + ceiling height, each
+  // commit one history step through the pure room setters (no-ops return the
+  // same reference and land nowhere).
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const toggleSettings = useCallback(() => setSettingsOpen((on) => !on), []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const renameRoom = useCallback(
+    (name: string) => setRoom((current) => setRoomName(current, name)),
+    [setRoom],
+  );
+  const setCeilingHeight = useCallback(
+    (meters: number) =>
+      setRoom((current) => setRoomWallHeight(current, meters)),
+    [setRoom],
   );
   // Bottom-left view toggles. Grid shows the in-scene reference grid; snap
   // gates draw/placement quantize + flush snapping. Both default on, matching
@@ -483,7 +501,21 @@ function Planner() {
             }
       }
     >
-      <NavRail activeMode={viewMode} onSelectMode={setViewMode} />
+      <NavRail
+        activeMode={viewMode}
+        onSelectMode={setViewMode}
+        settingsOpen={settingsOpen}
+        onToggleSettings={toggleSettings}
+      />
+      {settingsOpen && (
+        <SettingsPopover
+          room={room}
+          unit={unit}
+          onRename={renameRoom}
+          onWallHeightChange={setCeilingHeight}
+          onClose={closeSettings}
+        />
+      )}
       <WorkspaceHeader
         mode={viewMode}
         roomName={room.name ?? "Untitled room"}

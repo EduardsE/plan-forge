@@ -1,4 +1,5 @@
 import type { FurnitureItem, Opening, Point, Room } from "#/lib/model";
+import { MAX_WALL_HEIGHT, MIN_WALL_HEIGHT } from "#/lib/model";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -11,15 +12,16 @@ import type { Unit } from "#/lib/units";
 export const STORAGE_KEY = "planforge.room";
 
 /** Bumped whenever the payload shape changes; older saves are discarded. */
-const STORAGE_VERSION = 2;
+const STORAGE_VERSION = 3;
 
 /**
  * Versions this build can still read. v1 predates the optional
- * `FurnitureItem.colorway`; since that field is purely additive, a v1 save
- * validates unchanged (no colorway = catalog default), so it loads rather
- * than being thrown away — the bump only marks the newer write shape.
+ * `FurnitureItem.colorway`, v2 the optional `Room.wallHeight`; both fields
+ * are purely additive, so older saves validate unchanged (absent field =
+ * default) and load rather than being thrown away — the bumps only mark the
+ * newer write shapes.
  */
-const READABLE_VERSIONS = new Set([1, STORAGE_VERSION]);
+const READABLE_VERSIONS = new Set([1, 2, STORAGE_VERSION]);
 
 export interface SavedState {
   room: Room;
@@ -127,6 +129,16 @@ function isRoom(value: unknown): value is Room {
   if (typeof value !== "object" || value === null) return false;
   const room = value as Record<string, unknown>;
   if (room.name !== undefined && typeof room.name !== "string") return false;
+  // The setter keeps wallHeight inside the clamp range; a hand-edited value
+  // outside it fails the whole save, like any other broken invariant.
+  if (
+    room.wallHeight !== undefined &&
+    (!isFiniteNumber(room.wallHeight) ||
+      room.wallHeight < MIN_WALL_HEIGHT ||
+      room.wallHeight > MAX_WALL_HEIGHT)
+  ) {
+    return false;
+  }
   if (!Array.isArray(room.outline) || !room.outline.every(isPoint)) {
     return false;
   }

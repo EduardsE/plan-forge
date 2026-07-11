@@ -34,6 +34,19 @@ describe("serialize / deserialize round trip", () => {
     expect(restored?.room.furniture[0].colorway).toBe("#6f7d6a");
   });
 
+  it("round-trips a custom wall height and rejects out-of-range ones", () => {
+    const state = {
+      ...sampleState(),
+      room: { ...createSampleRoom(), wallHeight: 3.1 },
+    };
+    expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
+
+    for (const wallHeight of [1.9, 12, Number.NaN]) {
+      const bad = { ...state, room: { ...state.room, wallHeight } };
+      expect(deserializeSavedState(serializeSavedState(bad))).toBeNull();
+    }
+  });
+
   it("accepts an empty room (a new room awaiting its first draw)", () => {
     const state = {
       room: { name: "Untitled room", outline: [], openings: [], furniture: [] },
@@ -53,16 +66,21 @@ describe("deserializeSavedState rejection", () => {
 
   it("rejects an unreadable version", () => {
     const json = serializeSavedState(sampleState()).replace(
-      '"version":2',
+      '"version":3',
       '"version":99',
     );
     expect(deserializeSavedState(json)).toBeNull();
   });
 
-  it("still reads a legacy v1 save (colorway predates it, stays default)", () => {
+  it("still reads legacy v1 and v2 saves (colorway and wallHeight postdate them)", () => {
     const state = sampleState();
-    const v1 = serializeSavedState(state).replace('"version":2', '"version":1');
-    expect(deserializeSavedState(v1)).toEqual(state);
+    for (const version of [1, 2]) {
+      const legacy = serializeSavedState(state).replace(
+        '"version":3',
+        `"version":${version}`,
+      );
+      expect(deserializeSavedState(legacy)).toEqual(state);
+    }
   });
 
   it("rejects a bad unit or savedAt", () => {
