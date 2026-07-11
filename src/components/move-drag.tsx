@@ -1,14 +1,16 @@
 import { useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Camera, Plane, Raycaster, Vector2, Vector3 } from "three";
+import { HostHighlight } from "#/components/host-highlight";
 import { SnapGuides } from "#/components/snap-guides";
 import type {
   FurnitureItem,
   FurnitureUpdate,
   Point,
+  Stack,
   WallMount,
 } from "#/lib/model";
-import { wallFrames } from "#/lib/model";
+import { isStackRider, wallFrames } from "#/lib/model";
 import { mountAt } from "#/lib/mount-place";
 import {
   type Obstacle,
@@ -16,6 +18,7 @@ import {
   rotatedFootprintSize,
   snapPlacement,
 } from "#/lib/place";
+import { stackAt } from "#/lib/stack-place";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -56,6 +59,16 @@ export interface MoveDrag {
     elevation: number;
     footprint: { width: number; depth: number };
     original: WallMount;
+  };
+  /**
+   * Present when the item can stand on other furniture (a rider-category
+   * catalog item): its raw footprint for the host-top fit, and the anchor to
+   * restore on esc (null for an item grabbed off the floor). While set, the
+   * drag snaps onto hovered hosts and floor-places everywhere else.
+   */
+  rider?: {
+    footprint: { width: number; depth: number };
+    original: Stack | null;
   };
 }
 
@@ -154,6 +167,16 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
               original: item.mount,
             }
           : undefined,
+        rider:
+          !item.mount && isStackRider(item.catalogId)
+            ? {
+                footprint: {
+                  width: item.footprint.width,
+                  depth: item.footprint.depth,
+                },
+                original: item.stack ?? null,
+              }
+            : undefined,
       });
       begin();
     },
@@ -176,6 +199,7 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
 export function MoveDragSession({
   outline,
   obstacles,
+  hosts = [],
   drag,
   unit,
   snapEnabled,
@@ -185,6 +209,8 @@ export function MoveDragSession({
   outline: Point[];
   /** Other placed items to snap flush against (excludes the dragged one). */
   obstacles: Obstacle[];
+  /** Stackable furniture a rider drag may land on (excludes the dragged one). */
+  hosts?: FurnitureItem[];
   drag: MoveDrag;
   unit: Unit;
   /** Snap toggle: off means free move (contained, but no flush/quantize). */
@@ -197,6 +223,8 @@ export function MoveDragSession({
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const [guides, setGuides] = useState<PlacementGuide[]>([]);
+  // The host the rider currently hovers, for the top-surface highlight.
+  const [armedHost, setArmedHost] = useState<FurnitureItem | null>(null);
   // Wall frames for a mounted drag; empty for a floor drag. Memoised on the
   // outline so the per-move room churn doesn't rebuild them.
   const frames = useMemo(
@@ -215,6 +243,8 @@ export function MoveDragSession({
   snapRef.current = snapEnabled;
   const framesRef = useRef(frames);
   framesRef.current = frames;
+  const hostsRef = useRef(hosts);
+  hostsRef.current = hosts;
 
   useEffect(() => {
     const toFloor = floorProjector(gl, camera);
@@ -255,6 +285,25 @@ export function MoveDragSession({
         setGuides(result.guides);
         return;
       }
+      if (drag.rider) {
+        // Rider over a host: anchor onto its top (hit-test the cursor, so
+        // grabbing a lamp by its edge still stacks where the hand points).
+        const stacked = stackAt(
+          hostsRef.current,
+          point,
+          drag.rider.footprint,
+          drag.originalRotation,
+          snapRef.current,
+          target,
+        );
+        if (stacked) {
+          moveRef.current({ position: stacked.position, stack: stacked.stack });
+          setGuides([]);
+          setArmedHost(stacked.host);
+          return;
+        }
+        setArmedHost(null);
+      }
       const snap = snapPlacement(
         outline,
         drag.size,
@@ -264,7 +313,11 @@ export function MoveDragSession({
         undefined,
         snapRef.current,
       );
-      moveRef.current({ position: snap.center });
+      moveRef.current({
+        position: snap.center,
+        // A rider dropped anywhere but a host floor-places (clears anchor).
+        ...(drag.rider ? { stack: null } : {}),
+      });
       setGuides(snap.guides);
     };
     const handleUp = () => endRef.current();
@@ -277,7 +330,10 @@ export function MoveDragSession({
               rotation: drag.originalRotation,
               mount: drag.mount.original,
             }
-          : { position: drag.original },
+          : {
+              position: drag.original,
+              ...(drag.rider ? { stack: drag.rider.original } : {}),
+            },
       );
       endRef.current();
     };
@@ -291,5 +347,10 @@ export function MoveDragSession({
     };
   }, [outline, drag, camera, gl]);
 
-  return <SnapGuides guides={guides} unit={unit} />;
+  return (
+    <group>
+      <SnapGuides guides={guides} unit={unit} />
+      {armedHost && <HostHighlight host={armedHost} />}
+    </group>
+  );
 }

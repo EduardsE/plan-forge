@@ -110,6 +110,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 interface SelectionSectionProps {
   item: FurnitureItem;
+  /** Display name of the furniture the item stands on, if stacked. */
+  hostName: string | null;
   unit: Unit;
   /** A committed size edit — the full footprint with one dimension changed. */
   onResize: (footprint: Footprint) => void;
@@ -126,6 +128,7 @@ interface SelectionSectionProps {
 
 function SelectionSection({
   item,
+  hostName,
   unit,
   onResize,
   onRotateTo,
@@ -227,6 +230,7 @@ function SelectionSection({
           <div className="mt-[2px] truncate text-[12.5px] text-[var(--ink-400)]">
             {catalogItem ? CATALOG_CATEGORY_LABELS[catalogItem.category] : "—"}
             {item.mount ? " · Wall-mounted" : ""}
+            {hostName ? ` · On ${hostName}` : ""}
           </div>
         </div>
       </div>
@@ -387,6 +391,15 @@ export function Inspector({
         ) : showSelection ? (
           <SelectionSection
             item={selectedItem}
+            hostName={
+              selectedItem.stack
+                ? furnitureDisplayName(
+                    room.furniture.find(
+                      (entry) => entry.id === selectedItem.stack?.hostId,
+                    )?.catalogId ?? "",
+                  )
+                : null
+            }
             unit={unit}
             onResize={onResize}
             onRotateTo={onRotateTo}

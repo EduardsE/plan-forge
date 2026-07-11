@@ -67,6 +67,24 @@ export interface WallMount {
   elevation: number;
 }
 
+/**
+ * A stacked item's anchor (table lamp on a desk, plant on the credenza): the
+ * hosting item's id plus the rider's center offset from the host's center, in
+ * the host's *unrotated* local frame. When present on a `FurnitureItem`, the
+ * item's `position` is derived from the host (kept in sync by
+ * `deriveStackPosition`), and renderers lift the body onto the host's top
+ * surface. Hosts are floor-standing flat-topped items — a host is never
+ * itself stacked or mounted, so stacks are one level deep.
+ */
+export interface Stack {
+  /** Id of the hosting `FurnitureItem`. */
+  hostId: string;
+  /** Rider-center offset from the host center along the host's width axis. */
+  dx: number;
+  /** Rider-center offset from the host center along the host's depth axis. */
+  dy: number;
+}
+
 export interface FurnitureItem {
   id: string;
   /** Reference into the furniture catalog (name, thumbnail, etc. live there). */
@@ -81,6 +99,12 @@ export interface FurnitureItem {
    * When set, `position`/`rotation` are derived from it and the wall.
    */
   mount?: WallMount;
+  /**
+   * Host anchor for items standing on top of other furniture; absent for
+   * floor-standing items. When set, `position` is derived from the host.
+   * Never combined with `mount`.
+   */
+  stack?: Stack;
 }
 
 export interface Room {

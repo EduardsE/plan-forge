@@ -1,5 +1,18 @@
 import { catalogItemById } from "./catalog";
-import type { Footprint, FurnitureItem, Point, Room, WallMount } from "./types";
+import {
+  clampStackOffset,
+  deriveStackPosition,
+  stackOffsetOf,
+  syncStackedRiders,
+} from "./stack";
+import type {
+  Footprint,
+  FurnitureItem,
+  Point,
+  Room,
+  Stack,
+  WallMount,
+} from "./types";
 import { deriveMountTransform, wallFrames } from "./wall-mount";
 
 /**
@@ -15,19 +28,41 @@ function normalizeDeg(deg: number): number {
   return ((deg % 360) + 360) % 360;
 }
 
+/** Re-fit a stacked rider onto its host after the rider itself changed (its
+ * rotation, size, or an asked-for position): the anchor offsets re-derive
+ * from the rider's plan position and clamp back inside the host's top. */
+function restackRider(room: Room, item: FurnitureItem): FurnitureItem {
+  if (!item.stack) return item;
+  const host = room.furniture.find((entry) => entry.id === item.stack?.hostId);
+  if (!host) return item;
+  const offset = clampStackOffset(
+    host,
+    stackOffsetOf(host, item.position),
+    item.footprint,
+    item.rotation,
+  );
+  const stack: Stack = { ...item.stack, dx: offset.x, dy: offset.y };
+  return { ...item, stack, position: deriveStackPosition(host, stack) };
+}
+
 export function rotateFurniture(
   room: Room,
   id: string,
   deltaDeg: number,
 ): Room {
-  return {
+  const next = {
     ...room,
     furniture: room.furniture.map((item) =>
       item.id === id
-        ? { ...item, rotation: normalizeDeg(item.rotation + deltaDeg) }
+        ? restackRider(room, {
+            ...item,
+            rotation: normalizeDeg(item.rotation + deltaDeg),
+          })
         : item,
     ),
   };
+  // A spun host carries its riders around with it.
+  return syncStackedRiders(next, id, deltaDeg);
 }
 
 export function duplicateFurniture(
@@ -64,6 +99,32 @@ export function duplicateFurniture(
       return { ...room, furniture: [...room.furniture, mounted] };
     }
   }
+  // A stacked copy shifts along the host's top (staying stacked) instead of
+  // floating out into the room like a floor copy.
+  if (source.stack) {
+    const host = room.furniture.find(
+      (entry) => entry.id === source.stack?.hostId,
+    );
+    if (host) {
+      const offset = clampStackOffset(
+        host,
+        {
+          x: source.stack.dx + DUPLICATE_OFFSET,
+          y: source.stack.dy + DUPLICATE_OFFSET,
+        },
+        source.footprint,
+        source.rotation,
+      );
+      const stack: Stack = { ...source.stack, dx: offset.x, dy: offset.y };
+      const stacked: FurnitureItem = {
+        ...source,
+        id: newId,
+        stack,
+        position: deriveStackPosition(host, stack),
+      };
+      return { ...room, furniture: [...room.furniture, stacked] };
+    }
+  }
   const copy: FurnitureItem = {
     ...source,
     id: newId,
@@ -76,11 +137,14 @@ export function duplicateFurniture(
 }
 
 /** A move-drag update: the snapped center, plus (for a wall item) the new
- * derived rotation and mount. `mount` absent leaves the item's mount as-is. */
+ * derived rotation and mount. `mount` absent leaves the item's mount as-is;
+ * `stack` set re-anchors the rider (null unstacks it to the floor), absent
+ * re-fits an existing anchor around the new position. */
 export interface FurnitureUpdate {
   position: Point;
   rotation?: number;
   mount?: WallMount;
+  stack?: Stack | null;
 }
 
 /** Apply a move-drag update to one item (absolute reposition, plan coords). */
@@ -89,19 +153,35 @@ export function updateFurniture(
   id: string,
   update: FurnitureUpdate,
 ): Room {
-  return {
+  const next = {
     ...room,
-    furniture: room.furniture.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            position: update.position,
-            rotation: update.rotation ?? item.rotation,
-            ...(update.mount !== undefined ? { mount: update.mount } : {}),
-          }
-        : item,
-    ),
+    furniture: room.furniture.map((item) => {
+      if (item.id !== id) return item;
+      const moved: FurnitureItem = {
+        ...item,
+        position: update.position,
+        rotation: update.rotation ?? item.rotation,
+        ...(update.mount !== undefined ? { mount: update.mount } : {}),
+      };
+      if (update.stack === null) {
+        delete moved.stack;
+        return moved;
+      }
+      if (update.stack !== undefined) return { ...moved, stack: update.stack };
+      // A stacked item repositioned without an explicit anchor (the
+      // inspector's POS fields) stays on its host: the offsets re-derive
+      // from the asked-for position, clamped onto the top.
+      return restackRider(room, moved);
+    }),
   };
+  const source = room.furniture.find((item) => item.id === id);
+  if (!source) return next;
+  // A moved (or re-derived) host carries its riders with it.
+  return syncStackedRiders(
+    next,
+    id,
+    (update.rotation ?? source.rotation) - source.rotation,
+  );
 }
 
 /** Smallest editable footprint dimension (meters) — the properties card's floor. */
@@ -165,9 +245,19 @@ export function setFurnitureFootprint(
       };
     }
   }
-  return {
+  // A resized rider re-fits onto its host's top.
+  next = restackRider(room, next);
+  const updated = {
     ...room,
     furniture: room.furniture.map((entry) => (entry.id === id ? next : entry)),
+  };
+  // A resized host re-fits its riders into the new top (they ride at the new
+  // height for free — render elevation derives from the host's footprint).
+  return {
+    ...updated,
+    furniture: updated.furniture.map((entry) =>
+      entry.stack?.hostId === id ? restackRider(updated, entry) : entry,
+    ),
   };
 }
 
@@ -185,12 +275,14 @@ export function setFurnitureRotation(
   if (!item || item.mount || !Number.isFinite(deg)) return room;
   const rotation = normalizeDeg(deg);
   if (rotation === item.rotation) return room;
-  return {
+  const next = {
     ...room,
     furniture: room.furniture.map((entry) =>
-      entry.id === id ? { ...entry, rotation } : entry,
+      entry.id === id ? restackRider(room, { ...entry, rotation }) : entry,
     ),
   };
+  // A spun host carries its riders around with it.
+  return syncStackedRiders(next, id, rotation - item.rotation);
 }
 
 /**
@@ -220,7 +312,15 @@ export function setMountElevation(
 export function removeFurniture(room: Room, id: string): Room {
   return {
     ...room,
-    furniture: room.furniture.filter((item) => item.id !== id),
+    // A deleted host drops its riders to the floor where they stand: the
+    // anchor goes, the (already derived) world position stays.
+    furniture: room.furniture
+      .filter((item) => item.id !== id)
+      .map((item) => {
+        if (item.stack?.hostId !== id) return item;
+        const { stack: _dropped, ...floored } = item;
+        return floored;
+      }),
   };
 }
 

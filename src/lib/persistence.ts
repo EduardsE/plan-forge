@@ -65,6 +65,16 @@ function isWallMount(value: unknown, wallCount: number): boolean {
   );
 }
 
+function isStack(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const stack = value as Record<string, unknown>;
+  return (
+    typeof stack.hostId === "string" &&
+    isFiniteNumber(stack.dx) &&
+    isFiniteNumber(stack.dy)
+  );
+}
+
 function isFurnitureItem(
   value: unknown,
   wallCount: number,
@@ -85,8 +95,23 @@ function isFurnitureItem(
     footprint.depth > 0 &&
     isFiniteNumber(footprint.height) &&
     footprint.height > 0 &&
-    (item.mount === undefined || isWallMount(item.mount, wallCount))
+    (item.mount === undefined || isWallMount(item.mount, wallCount)) &&
+    (item.stack === undefined || (isStack(item.stack) && !item.mount))
   );
+}
+
+/** Every stack anchor must point at a real, floor-standing host — a missing
+ * host would render at a stale position forever, and a stacked/mounted one
+ * would make the derivation recursive. */
+function stacksResolve(furniture: FurnitureItem[]): boolean {
+  const byId = new Map(furniture.map((item) => [item.id, item]));
+  return furniture.every((item) => {
+    if (!item.stack) return true;
+    const host = byId.get(item.stack.hostId);
+    return (
+      host !== undefined && host.id !== item.id && !host.stack && !host.mount
+    );
+  });
 }
 
 function isRoom(value: unknown): value is Room {
@@ -103,7 +128,8 @@ function isRoom(value: unknown): value is Room {
     Array.isArray(room.openings) &&
     room.openings.every((opening) => isOpening(opening, wallCount)) &&
     Array.isArray(room.furniture) &&
-    room.furniture.every((item) => isFurnitureItem(item, wallCount))
+    room.furniture.every((item) => isFurnitureItem(item, wallCount)) &&
+    stacksResolve(room.furniture as FurnitureItem[])
   );
 }
 

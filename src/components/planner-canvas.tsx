@@ -41,6 +41,7 @@ import {
   addFurniture,
   addOpening,
   type CatalogItem,
+  canHostStack,
   type FurnitureUpdate,
   flipDoorHinge,
   isWallItem,
@@ -51,6 +52,7 @@ import {
   type Point,
   type Room,
   removeOpening,
+  type Stack,
   updateFurniture,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
@@ -651,9 +653,15 @@ export function PlannerCanvas({
     [onRoomGestureEnd],
   );
   // Placed items the placement ghost snaps flush against (a fresh drop isn't
-  // in the room yet, so every item is a neighbor).
+  // in the room yet, so every item is a neighbor — except stacked riders,
+  // which sit above the floor).
   const placementObstacles = useMemo(
-    () => room.furniture.map(furnitureObstacle),
+    () => room.furniture.filter((item) => !item.stack).map(furnitureObstacle),
+    [room.furniture],
+  );
+  // Furniture a dragged rider-category catalog item may land on.
+  const placementHosts = useMemo(
+    () => room.furniture.filter(canHostStack),
     [room.furniture],
   );
 
@@ -738,7 +746,7 @@ export function PlannerCanvas({
   }, [openingTool, setSelectedId]);
 
   const placeDraggedItem = useCallback(
-    (center: Point) => {
+    (center: Point, stack?: Stack) => {
       if (!placingItem) return;
       const id = crypto.randomUUID();
       onRoomChange(
@@ -748,6 +756,8 @@ export function PlannerCanvas({
           position: center,
           rotation: 0,
           footprint: placingItem.footprint,
+          // Dropped on a host's top: the item lands stacked.
+          ...(stack ? { stack } : {}),
         }),
       );
       // Selection follows the drop, same as duplicate.
@@ -913,6 +923,7 @@ export function PlannerCanvas({
                 <PlacementGhost
                   outline={room.outline}
                   obstacles={placementObstacles}
+                  hosts={placementHosts}
                   item={placingItem}
                   unit={unit}
                   snapEnabled={snapEnabled}

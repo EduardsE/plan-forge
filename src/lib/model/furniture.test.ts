@@ -15,6 +15,7 @@ import {
   updateFurniture,
 } from "./furniture";
 import { createSampleRoom } from "./sample-room";
+import type { FurnitureItem, Room } from "./types";
 import { deriveMountTransform, wallFrames } from "./wall-mount";
 
 describe("rotateFurniture", () => {
@@ -380,5 +381,135 @@ describe("footprintCorners", () => {
     const ys = corners.map((c) => c.y);
     expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(1);
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(2);
+  });
+});
+
+describe("stacked riders through the mutations", () => {
+  const table = (): FurnitureItem => ({
+    id: "table-1",
+    catalogId: "dining-table",
+    position: { x: 3, y: 2 },
+    rotation: 0,
+    footprint: { width: 1.6, depth: 0.9, height: 0.75 },
+  });
+  const lamp = (): FurnitureItem => ({
+    id: "lamp-1",
+    catalogId: "table-lamp",
+    position: { x: 3.4, y: 2.1 },
+    rotation: 0,
+    footprint: { width: 0.22, depth: 0.22, height: 0.48 },
+    stack: { hostId: "table-1", dx: 0.4, dy: 0.1 },
+  });
+  const stackedRoom = (): Room => ({
+    outline: [
+      { x: 0, y: 0 },
+      { x: 8, y: 0 },
+      { x: 8, y: 6 },
+      { x: 0, y: 6 },
+    ],
+    openings: [],
+    furniture: [table(), lamp()],
+  });
+
+  it("updateFurniture sets a stack anchor and clears it with null", () => {
+    const room = stackedRoom();
+    const anchored = updateFurniture(room, "lamp-1", {
+      position: { x: 2.8, y: 2 },
+      stack: { hostId: "table-1", dx: -0.2, dy: 0 },
+    });
+    expect(anchored.furniture[1].stack).toEqual({
+      hostId: "table-1",
+      dx: -0.2,
+      dy: 0,
+    });
+    const floored = updateFurniture(room, "lamp-1", {
+      position: { x: 6, y: 5 },
+      stack: null,
+    });
+    expect(floored.furniture[1].stack).toBeUndefined();
+    expect(floored.furniture[1].position).toEqual({ x: 6, y: 5 });
+  });
+
+  it("updateFurniture re-fits a rider repositioned without an anchor", () => {
+    const room = stackedRoom();
+    // Asked for a point past the table edge: the anchor clamps back in.
+    const next = updateFurniture(room, "lamp-1", {
+      position: { x: 4.5, y: 2 },
+    });
+    const rider = next.furniture[1];
+    expect(rider.stack?.dx).toBeCloseTo((1.6 - 0.22) / 2);
+    expect(rider.position.x).toBeCloseTo(3 + (1.6 - 0.22) / 2);
+  });
+
+  it("updateFurniture carries riders when the host moves", () => {
+    const next = updateFurniture(stackedRoom(), "table-1", {
+      position: { x: 5, y: 4 },
+    });
+    expect(next.furniture[1].position).toEqual({ x: 5.4, y: 4.1 });
+    expect(next.furniture[1].stack).toEqual({
+      hostId: "table-1",
+      dx: 0.4,
+      dy: 0.1,
+    });
+  });
+
+  it("rotateFurniture on the host orbits and spins its riders", () => {
+    const next = rotateFurniture(stackedRoom(), "table-1", 90);
+    const rider = next.furniture[1];
+    // Offset (0.4, 0.1) at +90°: +x toward -y, +y toward +x.
+    expect(rider.position.x).toBeCloseTo(3.1);
+    expect(rider.position.y).toBeCloseTo(1.6);
+    expect(rider.rotation).toBe(90);
+    expect(rider.stack).toEqual({ hostId: "table-1", dx: 0.4, dy: 0.1 });
+  });
+
+  it("duplicateFurniture keeps a rider copy on the host", () => {
+    const next = duplicateFurniture(stackedRoom(), "lamp-1", "lamp-2");
+    const copy = next.furniture.at(-1);
+    expect(copy?.stack?.hostId).toBe("table-1");
+    // dx + 0.4 clamps to the table's freedom (1.6 - 0.22)/2 = 0.69.
+    expect(copy?.stack?.dx).toBeCloseTo(0.69);
+    expect(copy?.stack?.dy).toBeCloseTo(0.34);
+    expect(copy?.position.x).toBeCloseTo(3.69);
+  });
+
+  it("removeFurniture drops riders to the floor where they stand", () => {
+    const next = removeFurniture(stackedRoom(), "table-1");
+    expect(next.furniture).toHaveLength(1);
+    const rider = next.furniture[0];
+    expect(rider.stack).toBeUndefined();
+    expect(rider.position).toEqual({ x: 3.4, y: 2.1 });
+  });
+
+  it("setFurnitureFootprint on the host re-fits its riders", () => {
+    const next = setFurnitureFootprint(stackedRoom(), "table-1", {
+      width: 0.9,
+      depth: 0.9,
+      height: 0.75,
+    });
+    const rider = next.furniture[1];
+    expect(rider.stack?.dx).toBeCloseTo((0.9 - 0.22) / 2);
+    expect(rider.position.x).toBeCloseTo(3 + (0.9 - 0.22) / 2);
+  });
+
+  it("setFurnitureRotation re-fits the spun rider on its host", () => {
+    const room = stackedRoom();
+    // Park the lamp against the table's near edge, then stretch it: at 90°
+    // the hull swaps axes and the anchor must pull back in.
+    const wide = setFurnitureFootprint(room, "lamp-1", {
+      width: 0.22,
+      depth: 0.8,
+      height: 0.48,
+    });
+    const parked = updateFurniture(wide, "lamp-1", {
+      position: { x: 3, y: 2.35 },
+    });
+    expect(parked.furniture[1].stack?.dy).toBeCloseTo(0.05);
+    const spun = setFurnitureRotation(parked, "lamp-1", 90);
+    const rider = spun.furniture[1];
+    expect(rider.rotation).toBe(90);
+    // Rotated hull: 0.8 wide along x → freedom (1.6 - 0.8)/2 = 0.4.
+    expect(rider.stack?.dy).toBeCloseTo(0.05);
+    expect(Math.abs(rider.stack?.dx ?? 0)).toBeLessThanOrEqual(0.4);
   });
 });

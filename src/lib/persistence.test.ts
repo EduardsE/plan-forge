@@ -84,6 +84,48 @@ describe("deserializeSavedState rejection", () => {
     room.openings[0].wallIndex = room.outline.length;
     expect(deserializeSavedState(serializeSavedState(state))).toBeNull();
   });
+
+  it("round-trips a stacked rider and rejects broken stack anchors", () => {
+    const stacked = () => {
+      const state = sampleState();
+      state.room.furniture.push({
+        id: "lamp-1",
+        catalogId: "table-lamp",
+        position: { x: 4, y: 1 },
+        rotation: 0,
+        footprint: { width: 0.22, depth: 0.22, height: 0.48 },
+        stack: { hostId: "desk-1", dx: 0.4, dy: 0.1 },
+      });
+      return state;
+    };
+    expect(deserializeSavedState(serializeSavedState(stacked()))).toEqual(
+      stacked(),
+    );
+
+    // Anchor pointing at a missing host.
+    const orphaned = stacked();
+    const orphanRider = orphaned.room.furniture.at(-1);
+    if (orphanRider?.stack) orphanRider.stack.hostId = "gone";
+    expect(deserializeSavedState(serializeSavedState(orphaned))).toBeNull();
+
+    // Anchor pointing at another rider (stacks are one level deep).
+    const chained = stacked();
+    chained.room.furniture.push({
+      id: "lamp-2",
+      catalogId: "table-lamp",
+      position: { x: 4, y: 1 },
+      rotation: 0,
+      footprint: { width: 0.22, depth: 0.22, height: 0.48 },
+      stack: { hostId: "lamp-1", dx: 0, dy: 0 },
+    });
+    expect(deserializeSavedState(serializeSavedState(chained))).toBeNull();
+
+    // Non-finite offsets.
+    const bent = stacked();
+    const bentRider = bent.room.furniture.at(-1);
+    if (bentRider?.stack) bentRider.stack.dx = Number.NaN;
+    expect(deserializeSavedState(serializeSavedState(bent))).toBeNull();
+  });
 });
 
 describe("formatSavedStatus", () => {

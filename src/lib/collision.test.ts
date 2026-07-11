@@ -141,3 +141,46 @@ describe("overlappingFurnitureIds", () => {
     expect(overlappingFurnitureIds([a, b]).size).toBe(2);
   });
 });
+
+describe("stacked riders", () => {
+  const host = item({
+    id: "table-1",
+    catalogId: "dining-table",
+    // Pokes 0.3 m past the left wall: containment slides it to x = 0.8.
+    position: { x: 0.5, y: 3 },
+    footprint: { width: 1.6, depth: 0.9, height: 0.75 },
+  });
+  const rider = item({
+    id: "lamp-1",
+    catalogId: "table-lamp",
+    position: { x: 0.9, y: 3.1 },
+    footprint: { width: 0.22, depth: 0.22, height: 0.48 },
+    stack: { hostId: "table-1", dx: 0.4, dy: 0.1 },
+  });
+
+  it("containFurniture passes a rider through untouched", () => {
+    const outside = item({
+      id: "lamp-1",
+      position: { x: -2, y: -2 },
+      stack: { hostId: "table-1", dx: 0, dy: 0 },
+    });
+    expect(containFurniture(RECT, outside)).toBe(outside);
+  });
+
+  it("containRoomFurniture carries riders with a slid host", () => {
+    const room: Room = {
+      outline: RECT,
+      openings: [],
+      furniture: [host, rider],
+    };
+    const next = containRoomFurniture(room, "table-1");
+    expect(next.furniture[0].position.x).toBeCloseTo(0.8);
+    expect(next.furniture[1].position.x).toBeCloseTo(1.2);
+    expect(next.furniture[1].position.y).toBeCloseTo(3.1);
+  });
+
+  it("overlap warnings exempt riders (they stand above the floor)", () => {
+    const ids = overlappingFurnitureIds([host, rider]);
+    expect(ids.size).toBe(0);
+  });
+});

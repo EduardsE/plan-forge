@@ -33,7 +33,7 @@ import {
   partScale,
 } from "#/lib/furniture-parts";
 import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
-import { outlineBounds } from "#/lib/model";
+import { canHostStack, outlineBounds, stackSurfaceHeight } from "#/lib/model";
 import { furnitureObstacle } from "#/lib/place";
 import {
   buildWallSolids,
@@ -462,12 +462,15 @@ function PartGeometry({ shape }: { shape: PartShape }) {
 
 function FurnitureMesh({
   item,
+  stackTop,
   selected,
   warning,
   onSelect,
   onDragStart,
 }: {
   item: FurnitureItem;
+  /** Present for a stacked rider: its host's top-surface height. */
+  stackTop?: number;
   selected: boolean;
   /** Footprint overlaps a neighbor: tint the body as a soft warning. */
   warning: boolean;
@@ -500,7 +503,8 @@ function FurnitureMesh({
     <BlobShadow
       width={width * 1.5}
       depth={depth * 1.5}
-      y={FLOOR_TOP + 0.015}
+      // A rider's shadow falls on its host's top, not the floor.
+      y={stackTop !== undefined ? stackTop + 0.004 : FLOOR_TOP + 0.015}
       color="#462d14"
       opacity={0.35}
     />
@@ -509,7 +513,7 @@ function FurnitureMesh({
   // Composed-primitive body (src/lib/furniture-parts.ts), positioned in
   // bottom-relative part space: floor items rest on the platform, rugs lie
   // nearly flat on it, wall mounts hang centered at their elevation (and
-  // cast no floor shadow).
+  // cast no floor shadow), stacked riders stand on their host's top.
   const parts = useMemo(
     () => furnitureParts(item.catalogId, item.footprint),
     [item.catalogId, item.footprint],
@@ -517,7 +521,9 @@ function FurnitureMesh({
   const isRug = item.catalogId === "rug";
   const lift = item.mount
     ? item.mount.elevation - height / 2
-    : FLOOR_TOP + (isRug ? 0.001 : 0.017);
+    : stackTop !== undefined
+      ? stackTop + 0.002
+      : FLOOR_TOP + (isRug ? 0.001 : 0.017);
   const body = (
     <>
       {!item.mount && !isRug && shadow}
@@ -642,14 +648,34 @@ export function RoomScene({
     () => overlappingFurnitureIds(room.furniture),
     [room.furniture],
   );
+  // Host top-surface height per stacked rider (riders render lifted onto it).
+  const stackTops = useMemo(() => {
+    const byId = new Map(room.furniture.map((item) => [item.id, item]));
+    const tops = new Map<string, number>();
+    for (const item of room.furniture) {
+      if (!item.stack) continue;
+      const host = byId.get(item.stack.hostId);
+      if (host) tops.set(item.id, stackSurfaceHeight(host));
+    }
+    return tops;
+  }, [room.furniture]);
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
-  // Every placed item except the one being dragged is a snap neighbor.
+  // Every placed item except the one being dragged is a snap neighbor —
+  // stacked riders sit above the floor and don't block it.
   const moveObstacles = useMemo(
     () =>
       room.furniture
-        .filter((item) => item.id !== drag?.id)
+        .filter((item) => item.id !== drag?.id && !item.stack)
         .map(furnitureObstacle),
+    [room.furniture, drag?.id],
+  );
+  // Furniture a dragged rider may land on.
+  const stackHosts = useMemo(
+    () =>
+      room.furniture.filter(
+        (item) => item.id !== drag?.id && canHostStack(item),
+      ),
     [room.furniture, drag?.id],
   );
   return (
@@ -668,6 +694,7 @@ export function RoomScene({
         <FurnitureMesh
           key={item.id}
           item={item}
+          stackTop={stackTops.get(item.id)}
           selected={item.id === selectedId}
           warning={warnings.has(item.id)}
           onSelect={onSelectItem}
@@ -677,8 +704,9 @@ export function RoomScene({
       {selectedItem && (
         <SelectionChip
           item={selectedItem}
-          // Mounted items hang up the wall; anchor the chip above the body
-          // at its elevation instead of the default floor-relative top.
+          // Mounted items hang up the wall and riders stand on furniture;
+          // anchor the chip above the elevated body instead of the default
+          // floor-relative top.
           anchor={
             selectedItem.mount
               ? [
@@ -688,7 +716,15 @@ export function RoomScene({
                     0.14,
                   selectedItem.position.y,
                 ]
-              : undefined
+              : stackTops.has(selectedItem.id)
+                ? [
+                    selectedItem.position.x,
+                    (stackTops.get(selectedItem.id) ?? 0) +
+                      selectedItem.footprint.height +
+                      0.14,
+                    selectedItem.position.y,
+                  ]
+                : undefined
           }
         />
       )}
@@ -696,6 +732,7 @@ export function RoomScene({
         <MoveDragSession
           outline={room.outline}
           obstacles={moveObstacles}
+          hosts={stackHosts}
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}

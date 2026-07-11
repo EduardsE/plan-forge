@@ -2,10 +2,13 @@ import { Line } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useState } from "react";
 import { Plane, Raycaster, Shape, Vector2, Vector3 } from "three";
+import { HostHighlight } from "#/components/host-highlight";
 import { SnapGuides } from "#/components/snap-guides";
-import type { CatalogItem, Point } from "#/lib/model";
-import { type Obstacle, type PlacementSnap, snapPlacement } from "#/lib/place";
+import type { CatalogItem, FurnitureItem, Point, Stack } from "#/lib/model";
+import { isStackRider, stackSurfaceHeight } from "#/lib/model";
+import { type Obstacle, type PlacementGuide, snapPlacement } from "#/lib/place";
 import { dashedPolyline, roundedRectPoints } from "#/lib/plan-scene";
+import { stackAt } from "#/lib/stack-place";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -48,21 +51,33 @@ function ghostShape(points: Point[]): Shape {
   return shape;
 }
 
+/** Where the ghost currently sits: on the floor, or anchored on a host. */
+interface GhostSnap {
+  center: Point;
+  guides: PlacementGuide[];
+  /** Present while hovering a host: the anchor a release would place with. */
+  stack?: Stack;
+  host?: FurnitureItem;
+}
+
 export interface PlacementGhostProps {
   outline: Point[];
   /** Placed items the ghost snaps flush against, alongside the walls. */
   obstacles: Obstacle[];
+  /** Stackable furniture a rider-category item may land on. */
+  hosts: FurnitureItem[];
   item: CatalogItem;
   unit: Unit;
   /** Snap toggle: off means free placement (contained, no flush/quantize). */
   snapEnabled: boolean;
-  onPlace: (center: Point) => void;
+  onPlace: (center: Point, stack?: Stack) => void;
   onCancel: () => void;
 }
 
 export function PlacementGhost({
   outline,
   obstacles,
+  hosts,
   item,
   unit,
   snapEnabled,
@@ -71,7 +86,7 @@ export function PlacementGhost({
 }: PlacementGhostProps) {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
-  const [snap, setSnap] = useState<PlacementSnap | null>(null);
+  const [snap, setSnap] = useState<GhostSnap | null>(null);
 
   useEffect(() => {
     const raycaster = new Raycaster();
@@ -90,39 +105,43 @@ export function PlacementGhost({
         ? { x: hit.x, y: hit.z }
         : null;
     };
+    const rider = isStackRider(item.id);
+    /** The ghost placement under the cursor: a hovered host's top for a
+     * rider-category item (a fresh drop is unrotated), the floor otherwise. */
+    const resolve = (point: Point): GhostSnap => {
+      if (rider) {
+        const stacked = stackAt(hosts, point, item.footprint, 0, snapEnabled);
+        if (stacked) {
+          return {
+            center: stacked.position,
+            guides: [],
+            stack: stacked.stack,
+            host: stacked.host,
+          };
+        }
+      }
+      return snapPlacement(
+        outline,
+        item.footprint,
+        point,
+        obstacles,
+        undefined,
+        undefined,
+        snapEnabled,
+      );
+    };
     const handleMove = (event: PointerEvent) => {
       const point = toFloor(event);
-      setSnap(
-        point
-          ? snapPlacement(
-              outline,
-              item.footprint,
-              point,
-              obstacles,
-              undefined,
-              undefined,
-              snapEnabled,
-            )
-          : null,
-      );
+      setSnap(point ? resolve(point) : null);
     };
     const handleUp = (event: PointerEvent) => {
       // Off-canvas releases belong to the drag layer.
       if (!(event.target instanceof HTMLCanvasElement)) return;
       const point = toFloor(event);
-      if (point)
-        onPlace(
-          snapPlacement(
-            outline,
-            item.footprint,
-            point,
-            obstacles,
-            undefined,
-            undefined,
-            snapEnabled,
-          ).center,
-        );
-      else onCancel();
+      if (point) {
+        const placed = resolve(point);
+        onPlace(placed.center, placed.stack);
+      } else onCancel();
     };
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp);
@@ -130,7 +149,17 @@ export function PlacementGhost({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [outline, obstacles, item, snapEnabled, camera, gl, onPlace, onCancel]);
+  }, [
+    outline,
+    obstacles,
+    hosts,
+    item,
+    snapEnabled,
+    camera,
+    gl,
+    onPlace,
+    onCancel,
+  ]);
 
   const rect = useMemo(
     () =>
@@ -151,11 +180,14 @@ export function PlacementGhost({
   if (!snap) return null;
   const { center } = snap;
   const height = item.footprint.height;
+  // Anchored on a host, the whole ghost rides at its top surface.
+  const base = snap.host ? stackSurfaceHeight(snap.host) : 0;
 
   return (
     <group>
-      <group position={[center.x, 0, center.y]}>
-        {/* Floor footprint: translucent fill + bright dashed outline. */}
+      <group position={[center.x, base, center.y]}>
+        {/* Footprint on the landing surface: translucent fill + bright
+				    dashed outline. */}
         <mesh
           rotation-x={-Math.PI / 2}
           position-y={FILL_Y}
@@ -191,6 +223,7 @@ export function PlacementGhost({
           />
         )}
       </group>
+      {snap.host && <HostHighlight host={snap.host} />}
       <SnapGuides guides={snap.guides} unit={unit} />
     </group>
   );

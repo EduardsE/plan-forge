@@ -3,6 +3,7 @@ import {
   footprintCorners,
   type Point,
   type Room,
+  syncStackedRiders,
 } from "#/lib/model";
 import {
   PLACEMENT_GRID,
@@ -48,7 +49,9 @@ export function containFurniture(
   outline: Point[],
   item: FurnitureItem,
 ): FurnitureItem {
-  if (item.mount) return item;
+  // Wall mounts anchor to their wall, riders to their host — the host's own
+  // containment keeps a rider inside the room.
+  if (item.mount || item.stack) return item;
   const size = rotatedFootprintSize(item.footprint, item.rotation);
   const { center } = snapPlacement(
     outline,
@@ -65,17 +68,25 @@ export function containFurniture(
 
 /** Re-contain one item of the room (by id) after a mutation moved or spun it. */
 export function containRoomFurniture(room: Room, id: string): Room {
-  return {
+  const next = {
     ...room,
     furniture: room.furniture.map((item) =>
       item.id === id ? containFurniture(room.outline, item) : item,
     ),
   };
+  // Containment that slid a host back inside carries its riders with it.
+  return syncStackedRiders(next, id);
 }
 
-/** Whether an item's footprint takes part in overlap warnings. */
+/** Whether an item's footprint takes part in overlap warnings. Stacked
+ * riders stand above the floor plane (like mounts), so a lamp never warns
+ * against the desk it stands on. */
 function participatesInCollision(item: FurnitureItem): boolean {
-  return !item.mount && item.footprint.height > FLOOR_COVERING_MAX_HEIGHT;
+  return (
+    !item.mount &&
+    !item.stack &&
+    item.footprint.height > FLOOR_COVERING_MAX_HEIGHT
+  );
 }
 
 /** Min/max of a polygon's vertices projected onto a (unit) axis. */

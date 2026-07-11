@@ -26,6 +26,7 @@ import type {
   Room,
 } from "#/lib/model";
 import {
+  canHostStack,
   catalogItemById,
   floorArea,
   furnitureDisplayName,
@@ -91,6 +92,8 @@ const RUG_FILL_Y = 0.009;
 const FILL_Y = 0.01;
 const RUG_LINE_Y = 0.013;
 const LINE_Y = 0.014;
+/** Extra lift for stacked riders, so a lamp draws over its desk's footprint. */
+const STACK_LIFT = 0.008;
 
 interface FootprintStyle {
   label: string;
@@ -457,11 +460,15 @@ function PlantFootprint({
   const shape = useMemo(() => shapeFromPoints(outline), [outline]);
   const halo = useMemo(() => circlePoints(radius + HALO_GAP), [radius]);
   const cross = 0.66 * radius * Math.SQRT1_2;
+  // Stacked riders draw over their host's footprint.
+  const lift = item.stack ? STACK_LIFT : 0;
+  const fillY = FILL_Y + lift;
+  const lineY = LINE_Y + lift;
   return (
     <group>
       <FlatShape
         shapes={shape}
-        y={FILL_Y}
+        y={fillY}
         color={warning ? WARNING_COLOR : PLANT_FILL}
         opacity={
           (selected ? 0.16 + SELECTED_FILL_BOOST : 0.16) +
@@ -469,7 +476,7 @@ function PlantFootprint({
         }
       />
       <Line
-        points={[...outline, outline[0]].map((p) => v3(p, LINE_Y))}
+        points={[...outline, outline[0]].map((p) => v3(p, lineY))}
         color={
           active ? SELECTION_COLOR : warning ? WARNING_COLOR : SYMBOL_COLOR
         }
@@ -481,8 +488,8 @@ function PlantFootprint({
         <Line
           key={sign}
           points={[
-            v3({ x: -cross, y: -sign * cross }, LINE_Y),
-            v3({ x: cross, y: sign * cross }, LINE_Y),
+            v3({ x: -cross, y: -sign * cross }, lineY),
+            v3({ x: cross, y: sign * cross }, lineY),
           ]}
           color={SYMBOL_COLOR}
           lineWidth={2}
@@ -492,7 +499,7 @@ function PlantFootprint({
       ))}
       {selected && (
         <Line
-          points={[...halo, halo[0]].map((p) => v3(p, LINE_Y))}
+          points={[...halo, halo[0]].map((p) => v3(p, lineY))}
           color={SELECTION_COLOR}
           lineWidth={1.5}
           transparent
@@ -502,7 +509,7 @@ function PlantFootprint({
         />
       )}
       <Html
-        position={[0, LINE_Y, radius + 0.18]}
+        position={[0, lineY, radius + 0.18]}
         center
         style={{ pointerEvents: "none" }}
       >
@@ -547,16 +554,19 @@ function FurnitureFootprint({
     const loop = [...outline, outline[0]];
     return isRug ? dashedPolyline(loop, 0.07, 0.05) : loop;
   }, [outline, isRug]);
+  // Stacked riders draw over their host's footprint.
+  const lift = item.stack ? STACK_LIFT : 0;
+  const lineY = (isRug ? RUG_LINE_Y : LINE_Y) + lift;
   const label = isRug ? (
     <Html
-      position={[-width / 2 + 0.16, LINE_Y, depth / 2 - 0.14]}
+      position={[-width / 2 + 0.16, lineY, depth / 2 - 0.14]}
       center
       style={{ pointerEvents: "none" }}
     >
       <span className={FAINT_LABEL_CLASS}>{style.label}</span>
     </Html>
   ) : (
-    <Html position={[0, LINE_Y, 0]} center style={{ pointerEvents: "none" }}>
+    <Html position={[0, lineY, 0]} center style={{ pointerEvents: "none" }}>
       <span
         className={LABEL_CLASS}
         style={
@@ -573,7 +583,7 @@ function FurnitureFootprint({
     <group rotation-y={MathUtils.degToRad(item.rotation)}>
       <FlatShape
         shapes={shape}
-        y={isRug ? RUG_FILL_Y : FILL_Y}
+        y={(isRug ? RUG_FILL_Y : FILL_Y) + lift}
         color={warning ? WARNING_COLOR : style.fill}
         opacity={
           (selected
@@ -583,7 +593,7 @@ function FurnitureFootprint({
       />
       <Line
         segments={isRug}
-        points={border.map((p) => v3(p, isRug ? RUG_LINE_Y : LINE_Y))}
+        points={border.map((p) => v3(p, lineY))}
         color={
           active
             ? SELECTION_COLOR
@@ -599,7 +609,7 @@ function FurnitureFootprint({
       />
       {selected && (
         <Line
-          points={[...halo, halo[0]].map((p) => v3(p, LINE_Y))}
+          points={[...halo, halo[0]].map((p) => v3(p, lineY))}
           color={SELECTION_COLOR}
           lineWidth={1.5}
           transparent
@@ -748,12 +758,21 @@ export function PlanScene({
   );
   const selectedItem =
     room.furniture.find((item) => item.id === selectedId) ?? null;
-  // Every placed item except the one being dragged is a snap neighbor.
+  // Every placed item except the one being dragged is a snap neighbor —
+  // stacked riders sit above the floor and don't block it.
   const moveObstacles = useMemo(
     () =>
       room.furniture
-        .filter((item) => item.id !== drag?.id)
+        .filter((item) => item.id !== drag?.id && !item.stack)
         .map(furnitureObstacle),
+    [room.furniture, drag?.id],
+  );
+  // Furniture a dragged rider may land on.
+  const stackHosts = useMemo(
+    () =>
+      room.furniture.filter(
+        (item) => item.id !== drag?.id && canHostStack(item),
+      ),
     [room.furniture, drag?.id],
   );
 
@@ -834,6 +853,7 @@ export function PlanScene({
         <MoveDragSession
           outline={room.outline}
           obstacles={moveObstacles}
+          hosts={stackHosts}
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}
