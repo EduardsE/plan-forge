@@ -63,8 +63,8 @@ import type { ViewMode } from "#/lib/view-mode";
 /**
  * The R3F workspace canvas: one scene for both lenses, switched by camera.
  * 3D (and objects) mode orbits a perspective camera; 2D and draw mode look
- * straight down through an orthographic one. The floating toolbar drives the
- * rig through `CameraApi` and the readout chip listens on the readout store.
+ * straight down through an orthographic one. The zoom pill drives the rig
+ * through `CameraApi`; the status bar and pill listen on the readout store.
  *
  * Lens switches animate: the perspective camera flies between its orbit pose
  * and a top-down, narrow-fov pose whose framing matches the orthographic
