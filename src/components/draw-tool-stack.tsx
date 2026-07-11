@@ -1,4 +1,5 @@
 import type { ComponentProps, JSX } from "react";
+import { Tooltip } from "#/components/tooltip";
 import { cn } from "#/lib/utils";
 
 export type DrawTool = "select" | "wall" | "rect";
@@ -89,21 +90,22 @@ export function DrawToolStack({ tool, onToolChange }: DrawToolStackProps) {
 			{TOOLS.map(({ tool: id, label, icon }) => {
 				const isActive = id === tool;
 				return (
-					<button
-						key={id}
-						type="button"
-						aria-label={label}
-						aria-pressed={isActive}
-						onClick={() => onToolChange(id)}
-						className={cn(
-							"flex h-10 w-10 items-center justify-center rounded-[10px]",
-							isActive
-								? "bg-[rgba(45,212,207,0.16)] text-[#0F766E] shadow-[0_0_0_1px_rgba(34,211,238,0.4)]"
-								: "text-[var(--navy-500)] hover:bg-[var(--surface-alt)]",
-						)}
-					>
-						{icon}
-					</button>
+					<Tooltip key={id} label={label} side="right">
+						<button
+							type="button"
+							aria-label={label}
+							aria-pressed={isActive}
+							onClick={() => onToolChange(id)}
+							className={cn(
+								"flex h-10 w-10 items-center justify-center rounded-[10px]",
+								isActive
+									? "bg-[rgba(45,212,207,0.16)] text-[#0F766E] shadow-[0_0_0_1px_rgba(34,211,238,0.4)]"
+									: "text-[var(--navy-500)] hover:bg-[var(--surface-alt)]",
+							)}
+						>
+							{icon}
+						</button>
+					</Tooltip>
 				);
 			})}
 		</div>

@@ -1,4 +1,5 @@
 import type { ComponentProps, JSX } from "react";
+import { Tooltip } from "#/components/tooltip";
 import type { OpeningKind } from "#/lib/model";
 import { cn } from "#/lib/utils";
 
@@ -72,21 +73,22 @@ export function OpeningToolStack({
 			{TOOLS.map(({ kind, label, icon }) => {
 				const isActive = kind === tool;
 				return (
-					<button
-						key={kind}
-						type="button"
-						aria-label={label}
-						aria-pressed={isActive}
-						onClick={() => onToolChange(isActive ? null : kind)}
-						className={cn(
-							"flex h-10 w-10 items-center justify-center rounded-[10px]",
-							isActive
-								? "bg-[rgba(45,212,207,0.16)] text-[#0F766E] shadow-[0_0_0_1px_rgba(34,211,238,0.4)]"
-								: "text-[var(--navy-500)] hover:bg-[var(--surface-alt)]",
-						)}
-					>
-						{icon}
-					</button>
+					<Tooltip key={kind} label={label} side="right">
+						<button
+							type="button"
+							aria-label={label}
+							aria-pressed={isActive}
+							onClick={() => onToolChange(isActive ? null : kind)}
+							className={cn(
+								"flex h-10 w-10 items-center justify-center rounded-[10px]",
+								isActive
+									? "bg-[rgba(45,212,207,0.16)] text-[#0F766E] shadow-[0_0_0_1px_rgba(34,211,238,0.4)]"
+									: "text-[var(--navy-500)] hover:bg-[var(--surface-alt)]",
+							)}
+						>
+							{icon}
+						</button>
+					</Tooltip>
 				);
 			})}
 		</div>

@@ -1,4 +1,5 @@
 import { Crosshair, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { Tooltip } from "#/components/tooltip";
 import { cn } from "#/lib/utils";
 
 interface ToolbarButtonDef {
@@ -68,19 +69,21 @@ export function FloatingToolbar({
 							aria-hidden="true"
 						/>
 					)}
-					<button
-						type="button"
-						aria-label={label}
-						disabled={disabled}
-						onClick={onClick ?? (() => {})}
-						className={cn(
-							"flex h-10 w-10 items-center justify-center rounded-[10px] text-[var(--navy-500)]",
-							"disabled:cursor-not-allowed disabled:text-[var(--navy-100)]",
-							!disabled && "hover:bg-[var(--surface-alt)]",
-						)}
-					>
-						<Icon width={20} height={20} strokeWidth={1.6} />
-					</button>
+					<Tooltip label={label} side="bottom">
+						<button
+							type="button"
+							aria-label={label}
+							disabled={disabled}
+							onClick={onClick ?? (() => {})}
+							className={cn(
+								"flex h-10 w-10 items-center justify-center rounded-[10px] text-[var(--navy-500)]",
+								"disabled:cursor-not-allowed disabled:text-[var(--navy-100)]",
+								!disabled && "hover:bg-[var(--surface-alt)]",
+							)}
+						>
+							<Icon width={20} height={20} strokeWidth={1.6} />
+						</button>
+					</Tooltip>
 				</div>
 			))}
 		</div>

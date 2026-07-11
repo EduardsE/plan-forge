@@ -1,5 +1,6 @@
 import { Html } from "@react-three/drei";
 import { Copy, RotateCw, Trash2 } from "lucide-react";
+import { Tooltip } from "#/components/tooltip";
 import type { FurnitureItem } from "#/lib/model";
 import { formatFootprintCm, furnitureDisplayName } from "#/lib/model";
 
@@ -57,31 +58,37 @@ export function SelectionChip({
 				</div>
 				<div className="flex items-center gap-1.5 rounded-[13px] border border-[rgba(94,234,212,0.25)] bg-[rgba(13,22,48,0.94)] px-3 py-[9px] shadow-[0_16px_40px_rgba(13,22,48,0.35),0_0_22px_rgba(45,212,238,0.18)]">
 					{showRotate && (
+						<Tooltip label="Rotate 90°" side="bottom">
+							<button
+								type="button"
+								aria-label="Rotate 90°"
+								className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
+								onClick={onRotate}
+							>
+								<RotateCw size={17} strokeWidth={1.6} />
+							</button>
+						</Tooltip>
+					)}
+					<Tooltip label="Duplicate" side="bottom">
 						<button
 							type="button"
-							aria-label="Rotate 90°"
+							aria-label="Duplicate"
 							className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
-							onClick={onRotate}
+							onClick={onDuplicate}
 						>
-							<RotateCw size={17} strokeWidth={1.6} />
+							<Copy size={17} strokeWidth={1.6} />
 						</button>
-					)}
-					<button
-						type="button"
-						aria-label="Duplicate"
-						className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
-						onClick={onDuplicate}
-					>
-						<Copy size={17} strokeWidth={1.6} />
-					</button>
-					<button
-						type="button"
-						aria-label="Delete"
-						className={`${ACTION_BUTTON_CLASS} text-[#f2a6a6]`}
-						onClick={onDelete}
-					>
-						<Trash2 size={17} strokeWidth={1.6} />
-					</button>
+					</Tooltip>
+					<Tooltip label="Delete" side="bottom">
+						<button
+							type="button"
+							aria-label="Delete"
+							className={`${ACTION_BUTTON_CLASS} text-[#f2a6a6]`}
+							onClick={onDelete}
+						>
+							<Trash2 size={17} strokeWidth={1.6} />
+						</button>
+					</Tooltip>
 					<div className="mx-[3px] h-[22px] w-px bg-white/[0.14]" />
 					<span className="whitespace-nowrap font-mono text-[#7ee9e1] text-[12.5px]">
 						{formatFootprintCm(item.footprint)}

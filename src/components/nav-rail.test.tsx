@@ -25,11 +25,17 @@ describe("NavRail", () => {
 		expect(onSelectMode).toHaveBeenCalledWith("objects");
 	});
 
-	it("does not call onSelectMode when an unmapped item like Dashboard is clicked", () => {
+	it("does not render the dropped Dashboard button", () => {
+		render(<NavRail activeMode="3d" onSelectMode={() => {}} />);
+
+		expect(screen.queryByRole("button", { name: "Dashboard" })).toBeNull();
+	});
+
+	it("does not call onSelectMode when an unmapped item like Settings is clicked", () => {
 		const onSelectMode = vi.fn();
 		render(<NavRail activeMode="3d" onSelectMode={onSelectMode} />);
 
-		fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
 		expect(onSelectMode).not.toHaveBeenCalled();
 	});

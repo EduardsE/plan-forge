@@ -10,6 +10,7 @@ import {
 } from "#/components/move-drag";
 import { ACTION_BUTTON_CLASS } from "#/components/selection-chip";
 import { SnapGuides } from "#/components/snap-guides";
+import { Tooltip } from "#/components/tooltip";
 import type { OpeningKind, Point } from "#/lib/model";
 import {
 	defaultOpeningWidth,
@@ -239,23 +240,27 @@ function OpeningChip({
 				</div>
 				<div className="flex items-center gap-1.5 rounded-[13px] border border-[rgba(94,234,212,0.25)] bg-[rgba(13,22,48,0.94)] px-3 py-[9px] shadow-[0_16px_40px_rgba(13,22,48,0.35),0_0_22px_rgba(45,212,238,0.18)]">
 					{hole.kind === "door" && (
+						<Tooltip label="Flip hinge side" side="bottom">
+							<button
+								type="button"
+								aria-label="Flip hinge side"
+								className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
+								onClick={() => onFlipHinge(hole.id)}
+							>
+								<ArrowLeftRight size={17} strokeWidth={1.6} />
+							</button>
+						</Tooltip>
+					)}
+					<Tooltip label="Delete opening" side="bottom">
 						<button
 							type="button"
-							aria-label="Flip hinge side"
-							className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
-							onClick={() => onFlipHinge(hole.id)}
+							aria-label="Delete opening"
+							className={`${ACTION_BUTTON_CLASS} text-[#f2a6a6]`}
+							onClick={() => onDelete(hole.id)}
 						>
-							<ArrowLeftRight size={17} strokeWidth={1.6} />
+							<Trash2 size={17} strokeWidth={1.6} />
 						</button>
-					)}
-					<button
-						type="button"
-						aria-label="Delete opening"
-						className={`${ACTION_BUTTON_CLASS} text-[#f2a6a6]`}
-						onClick={() => onDelete(hole.id)}
-					>
-						<Trash2 size={17} strokeWidth={1.6} />
-					</button>
+					</Tooltip>
 					<div className="mx-[3px] h-[22px] w-px bg-white/[0.14]" />
 					<span className="whitespace-nowrap font-mono text-[#7ee9e1] text-[12.5px]">
 						W {formatLength(hole.width, unit)}

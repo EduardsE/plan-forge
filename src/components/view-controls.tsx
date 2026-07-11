@@ -1,4 +1,5 @@
 import { Grid2x2, Magnet, Maximize } from "lucide-react";
+import { Tooltip } from "#/components/tooltip";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -104,24 +105,25 @@ export function ViewControls({
 
 			<div className="flex gap-1 rounded-full p-[5px]" style={GLASS_SURFACE}>
 				{toggleButtons.map(({ label, icon: Icon, active, onClick }) => (
-					<button
-						key={label}
-						type="button"
-						aria-label={label}
-						aria-pressed={label === "Fullscreen" ? undefined : active}
-						onClick={onClick}
-						className={cn(
-							"flex h-[38px] w-[38px] items-center justify-center rounded-full",
-							active
-								? "text-[var(--accent-teal-deep)]"
-								: "text-[var(--navy-500)]",
-						)}
-						style={
-							active ? { background: "rgba(45, 212, 207, 0.14)" } : undefined
-						}
-					>
-						<Icon width={18} height={18} strokeWidth={1.6} />
-					</button>
+					<Tooltip key={label} label={label} side="top">
+						<button
+							type="button"
+							aria-label={label}
+							aria-pressed={label === "Fullscreen" ? undefined : active}
+							onClick={onClick}
+							className={cn(
+								"flex h-[38px] w-[38px] items-center justify-center rounded-full",
+								active
+									? "text-[var(--accent-teal-deep)]"
+									: "text-[var(--navy-500)]",
+							)}
+							style={
+								active ? { background: "rgba(45, 212, 207, 0.14)" } : undefined
+							}
+						>
+							<Icon width={18} height={18} strokeWidth={1.6} />
+						</button>
+					</Tooltip>
 				))}
 			</div>
 		</div>

@@ -1,11 +1,4 @@
-import {
-	Box,
-	Eye,
-	LayoutGrid,
-	Pencil,
-	SlidersHorizontal,
-	Sofa,
-} from "lucide-react";
+import { Box, Eye, Pencil, SlidersHorizontal, Sofa } from "lucide-react";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -16,12 +9,11 @@ interface NavRailProps {
 
 interface NavItemDef {
 	label: string;
-	icon: typeof LayoutGrid;
+	icon: typeof Pencil;
 	mode: ViewMode | null;
 }
 
 const NAV_ITEMS: NavItemDef[] = [
-	{ label: "Dashboard", icon: LayoutGrid, mode: null },
 	{ label: "Draw", icon: Pencil, mode: "draw" },
 	{ label: "Furnish", icon: Sofa, mode: "3d" },
 	{ label: "Objects", icon: Box, mode: "objects" },
