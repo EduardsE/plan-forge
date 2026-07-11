@@ -9,6 +9,7 @@ import {
 } from "react";
 import { DrawHintBar } from "#/components/draw-hint-bar";
 import { type DrawTool, DrawToolStack } from "#/components/draw-tool-stack";
+import { Inspector } from "#/components/inspector";
 import { NavRail } from "#/components/nav-rail";
 import { ObjectsPanel } from "#/components/objects-panel";
 import { OpeningToolStack } from "#/components/opening-tool-stack";
@@ -17,6 +18,7 @@ import { StatusBar } from "#/components/status-bar";
 import { WorkspaceHeader } from "#/components/workspace-header";
 import { ZoomPill } from "#/components/zoom-pill";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
+import { containRoomFurniture } from "#/lib/collision";
 import { rectangleOutline, setSegmentLength } from "#/lib/draw";
 import {
 	commitHistory,
@@ -29,9 +31,17 @@ import {
 import {
 	type CatalogItem,
 	createSampleRoom,
+	duplicateFurniture,
+	type Footprint,
 	type OpeningKind,
 	type Point,
 	type Room,
+	removeFurniture,
+	rotateFurniture,
+	setFurnitureFootprint,
+	setFurnitureRotation,
+	setMountElevation,
+	updateFurniture,
 } from "#/lib/model";
 import {
 	applyOutlineDraft,
@@ -71,12 +81,14 @@ function Planner() {
 	);
 	const room = roomHistory.current;
 	const setRoom = useCallback((next: Room | ((room: Room) => Room)) => {
-		setRoomHistory((history) =>
-			commitHistory(
-				history,
-				typeof next === "function" ? next(history.current) : next,
-			),
-		);
+		setRoomHistory((history) => {
+			const value = typeof next === "function" ? next(history.current) : next;
+			// The pure model setters return the same reference for no-ops —
+			// those must not become empty undo steps (or clear the redo stack).
+			return value === history.current
+				? history
+				: commitHistory(history, value);
+		});
 	}, []);
 	const previewRoom = useCallback(
 		(next: Room) => setRoomHistory((history) => previewHistory(history, next)),
@@ -91,6 +103,84 @@ function Planner() {
 	const canUndo = historyActive && roomHistory.past.length > 0;
 	const canRedo = historyActive && roomHistory.future.length > 0;
 	const [unit, setUnit] = useState<Unit>("m");
+	// The furniture selection is route state so the inspector (outside the
+	// canvas) and the in-scene picking/label share one selection. The canvas
+	// keeps opening selection internal and clears this one when it takes over.
+	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const selectedItem =
+		room.furniture.find((item) => item.id === selectedId) ?? null;
+	// Inspector commits: one history step each. The pure setters return the
+	// room unchanged (same reference) for no-ops, which must not become empty
+	// undo steps. Rotations/resizes re-contain the item so it can't poke out.
+	const rotateSelected90 = useCallback(() => {
+		if (!selectedId) return;
+		setRoom((current) =>
+			containRoomFurniture(
+				rotateFurniture(current, selectedId, 90),
+				selectedId,
+			),
+		);
+	}, [selectedId, setRoom]);
+	const cloneSelected = useCallback(() => {
+		if (!selectedId) return;
+		const newId = crypto.randomUUID();
+		setRoom((current) =>
+			containRoomFurniture(
+				duplicateFurniture(current, selectedId, newId),
+				newId,
+			),
+		);
+		// Selection follows the copy, like a drop.
+		setSelectedId(newId);
+	}, [selectedId, setRoom]);
+	const deleteSelected = useCallback(() => {
+		if (!selectedId) return;
+		setRoom((current) => removeFurniture(current, selectedId));
+		setSelectedId(null);
+	}, [selectedId, setRoom]);
+	const resizeSelected = useCallback(
+		(footprint: Footprint) => {
+			if (!selectedId) return;
+			setRoom((current) => {
+				const next = setFurnitureFootprint(current, selectedId, footprint);
+				return next === current
+					? current
+					: containRoomFurniture(next, selectedId);
+			});
+		},
+		[selectedId, setRoom],
+	);
+	const rotateSelectedTo = useCallback(
+		(deg: number) => {
+			if (!selectedId) return;
+			setRoom((current) => {
+				const next = setFurnitureRotation(current, selectedId, deg);
+				return next === current
+					? current
+					: containRoomFurniture(next, selectedId);
+			});
+		},
+		[selectedId, setRoom],
+	);
+	const elevateSelected = useCallback(
+		(elevation: number) => {
+			if (!selectedId) return;
+			setRoom((current) => setMountElevation(current, selectedId, elevation));
+		},
+		[selectedId, setRoom],
+	);
+	const moveSelectedTo = useCallback(
+		(position: Point) => {
+			if (!selectedId) return;
+			setRoom((current) =>
+				containRoomFurniture(
+					updateFurniture(current, selectedId, { position }),
+					selectedId,
+				),
+			);
+		},
+		[selectedId, setRoom],
+	);
 	// Bottom-left view toggles. Grid shows the in-scene reference grid; snap
 	// gates draw/placement quantize + flush snapping. Both default on, matching
 	// the lit state the mockups show.
@@ -405,6 +495,8 @@ function Planner() {
 							onRoomPreview={previewRoom}
 							onRoomGestureEnd={settleRoom}
 							viewMode={viewMode}
+							selectedId={selectedId}
+							onSelectedIdChange={setSelectedId}
 							cameraApiRef={cameraApiRef}
 							readoutStore={readoutStore}
 							unit={unit}
@@ -471,11 +563,20 @@ function Planner() {
 				placingName={placing?.item.name ?? null}
 				openingTool={openingTool}
 			/>
-			{/* Inspector column — populated by Phase 6 R2. */}
-			<aside
-				aria-label="Inspector"
-				className="border-[var(--hairline)] border-l bg-[var(--panel)]"
-				style={{ gridArea: "inspector" }}
+			<Inspector
+				room={room}
+				unit={unit}
+				mode={viewMode}
+				selectedItem={selectedItem}
+				draftCornerCount={draft.corners.length}
+				draftClosed={draft.closed}
+				onResize={resizeSelected}
+				onRotateTo={rotateSelectedTo}
+				onElevate={elevateSelected}
+				onMoveTo={moveSelectedTo}
+				onRotate90={rotateSelected90}
+				onClone={cloneSelected}
+				onDelete={deleteSelected}
 			/>
 		</div>
 	);

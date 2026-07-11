@@ -679,9 +679,6 @@ export interface PlanSceneProps {
 	/** Snap toggle: off means free furniture moves (no flush/quantize). */
 	snapEnabled: boolean;
 	onSelectItem: (id: string) => void;
-	onRotateItem: (id: string) => void;
-	onDuplicateItem: (id: string) => void;
-	onDeleteItem: (id: string) => void;
 	/** Live update during a move drag (already snapped; wall items carry mount). */
 	onMoveItem: (id: string, update: FurnitureUpdate) => void;
 	/** A move drag started/ended — the canvas locks pan/zoom while it runs. */
@@ -709,9 +706,6 @@ export function PlanScene({
 	unit,
 	snapEnabled,
 	onSelectItem,
-	onRotateItem,
-	onDuplicateItem,
-	onDeleteItem,
 	onMoveItem,
 	onMoveActiveChange,
 	onSelectOpening,
@@ -835,10 +829,6 @@ export function PlanScene({
 								2 -
 							CHIP_GAP,
 					]}
-					showRotate={!selectedItem.mount}
-					onRotate={() => onRotateItem(selectedItem.id)}
-					onDuplicate={() => onDuplicateItem(selectedItem.id)}
-					onDelete={() => onDeleteItem(selectedItem.id)}
 				/>
 			)}
 			{drag && (

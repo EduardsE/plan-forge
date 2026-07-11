@@ -1,46 +1,31 @@
 import { Html } from "@react-three/drei";
-import { Copy, RotateCw, Trash2 } from "lucide-react";
-import { Tooltip } from "#/components/tooltip";
 import type { FurnitureItem } from "#/lib/model";
 import { formatFootprintCm, furnitureDisplayName } from "#/lib/model";
 
 /**
- * The in-scene selection UI from mockup screen 1a: a white name pill over a
- * dark toolbar chip (rotate / duplicate / delete + a live mono dimensions
- * readout) with a cyan leader line dropping toward the selected item. All
- * colors and metrics are lifted from the mockup's inline styles.
+ * The in-scene selection label (screen 2b): a small white card with a blue
+ * square dot, the item name, and a mono dimensions readout. Label only —
+ * the actions (rotate / clone / delete) live in the inspector panel.
  */
 
-/** Gap between the item's top face and the leader line's lower end. */
+/** Gap between the item's top face and the label. */
 const CHIP_CLEARANCE = 0.12;
 
-/** Shared by the furniture chip and the opening chip (plan-openings.tsx). */
+/** Shared by the opening chip (plan-openings.tsx). */
 export const ACTION_BUTTON_CLASS =
 	"pointer-events-auto flex size-[30px] items-center justify-center rounded-lg bg-white/[0.06] transition-colors hover:bg-white/[0.14]";
 
 interface SelectionChipProps {
 	item: FurnitureItem;
 	/**
-	 * Where the leader line points, world coords. Defaults to the item's top
-	 * face (the 3D lens); the 2D plan hangs the chip off the footprint's
-	 * screen-top edge instead, since height doesn't project there.
+	 * Where the label hangs, world coords. Defaults to the item's top face
+	 * (the 3D lens); the 2D plan hangs it off the footprint's screen-top edge
+	 * instead, since height doesn't project there.
 	 */
 	anchor?: [number, number, number];
-	/** Wall-mounted items align to their wall, so they hide the rotate button. */
-	showRotate?: boolean;
-	onRotate: () => void;
-	onDuplicate: () => void;
-	onDelete: () => void;
 }
 
-export function SelectionChip({
-	item,
-	anchor,
-	showRotate = true,
-	onRotate,
-	onDuplicate,
-	onDelete,
-}: SelectionChipProps) {
+export function SelectionChip({ item, anchor }: SelectionChipProps) {
 	return (
 		<Html
 			position={
@@ -52,49 +37,17 @@ export function SelectionChip({
 			}
 			style={{ pointerEvents: "none" }}
 		>
-			<div className="pointer-events-none flex -translate-x-1/2 -translate-y-full flex-col items-center">
-				<div className="mb-1.5 whitespace-nowrap rounded-full border border-[rgba(34,211,238,0.5)] bg-white/90 px-3 py-[5px] font-semibold text-[#0f766e] text-[12.5px] shadow-[0_8px_20px_rgba(15,27,61,0.12)]">
+			<div className="-translate-x-1/2 -translate-y-full pointer-events-none flex items-center gap-[9px] whitespace-nowrap rounded-[9px] border border-[var(--control-border)] bg-white px-3 py-[7px] shadow-[0_14px_34px_rgba(15,27,61,0.14)]">
+				<span
+					aria-hidden="true"
+					className="h-[7px] w-[7px] rounded-[2px] bg-[var(--blue)]"
+				/>
+				<span className="font-semibold text-[13px] text-[var(--ink-900)]">
 					{furnitureDisplayName(item.catalogId)}
-				</div>
-				<div className="flex items-center gap-1.5 rounded-[13px] border border-[rgba(94,234,212,0.25)] bg-[rgba(13,22,48,0.94)] px-3 py-[9px] shadow-[0_16px_40px_rgba(13,22,48,0.35),0_0_22px_rgba(45,212,238,0.18)]">
-					{showRotate && (
-						<Tooltip label="Rotate 90°" side="bottom">
-							<button
-								type="button"
-								aria-label="Rotate 90°"
-								className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
-								onClick={onRotate}
-							>
-								<RotateCw size={17} strokeWidth={1.6} />
-							</button>
-						</Tooltip>
-					)}
-					<Tooltip label="Duplicate" side="bottom">
-						<button
-							type="button"
-							aria-label="Duplicate"
-							className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
-							onClick={onDuplicate}
-						>
-							<Copy size={17} strokeWidth={1.6} />
-						</button>
-					</Tooltip>
-					<Tooltip label="Delete" side="bottom">
-						<button
-							type="button"
-							aria-label="Delete"
-							className={`${ACTION_BUTTON_CLASS} text-[#f2a6a6]`}
-							onClick={onDelete}
-						>
-							<Trash2 size={17} strokeWidth={1.6} />
-						</button>
-					</Tooltip>
-					<div className="mx-[3px] h-[22px] w-px bg-white/[0.14]" />
-					<span className="whitespace-nowrap font-mono text-[#7ee9e1] text-[12.5px]">
-						{formatFootprintCm(item.footprint)}
-					</span>
-				</div>
-				<div className="h-[26px] w-[1.5px] bg-gradient-to-b from-[rgba(45,212,238,0.8)] to-transparent" />
+				</span>
+				<span className="font-mono text-[12px] text-[var(--ink-400)]">
+					{formatFootprintCm(item.footprint)}
+				</span>
 			</div>
 		</Html>
 	);

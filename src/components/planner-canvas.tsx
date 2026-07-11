@@ -25,7 +25,6 @@ import { DrawScene } from "#/components/draw-scene";
 import type { DrawTool } from "#/components/draw-tool-stack";
 import { PlacementGhost } from "#/components/placement-ghost";
 import { PlanScene } from "#/components/plan-scene";
-import { PropertiesCard } from "#/components/properties-card";
 import { RoomScene } from "#/components/room-scene";
 import { WallMountGhost } from "#/components/wall-mount-ghost";
 import {
@@ -38,13 +37,10 @@ import {
 	planFitZoom,
 	wrapAngle,
 } from "#/lib/camera";
-import { containRoomFurniture } from "#/lib/collision";
 import {
 	addFurniture,
 	addOpening,
 	type CatalogItem,
-	duplicateFurniture,
-	type Footprint,
 	type FurnitureUpdate,
 	flipDoorHinge,
 	isWallItem,
@@ -54,12 +50,7 @@ import {
 	outlineBounds,
 	type Point,
 	type Room,
-	removeFurniture,
 	removeOpening,
-	rotateFurniture,
-	setFurnitureFootprint,
-	setFurnitureRotation,
-	setMountElevation,
 	updateFurniture,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
@@ -556,8 +547,6 @@ function CameraRig({
 	);
 }
 
-/** How many degrees one press of the selection toolbar's rotate turns an item. */
-const ROTATE_STEP_DEG = 90;
 /** Clicks that travelled further than this (px) were camera drags, not picks. */
 const CLICK_SLOP_PX = 4;
 
@@ -570,6 +559,9 @@ export interface PlannerCanvasProps {
 	/** A drag ended (however) — the route folds its previews into one step. */
 	onRoomGestureEnd: () => void;
 	viewMode: ViewMode;
+	/** Furniture selection — owned by the route, shared with the inspector. */
+	selectedId: string | null;
+	onSelectedIdChange: (id: string | null) => void;
 	cameraApiRef: RefObject<CameraApi | null>;
 	readoutStore: CameraReadoutStore;
 	/** Display unit for draw-mode labels. */
@@ -604,6 +596,8 @@ export function PlannerCanvas({
 	onRoomPreview,
 	onRoomGestureEnd,
 	viewMode,
+	selectedId,
+	onSelectedIdChange: setSelectedId,
 	cameraApiRef,
 	readoutStore,
 	unit,
@@ -632,8 +626,8 @@ export function PlannerCanvas({
 	// plan drawing swaps in only at the matched top-down endpoint.
 	const [renderPlan, setRenderPlan] = useState(planView);
 
-	const [selectedId, setSelectedId] = useState<string | null>(null);
-	// Selected opening (2D lens only) — one selection at a time across both.
+	// Selected opening (2D lens only) — one selection at a time across both
+	// (the furniture side lives in the route, where the inspector shares it).
 	const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(
 		null,
 	);
@@ -662,75 +656,27 @@ export function PlannerCanvas({
 		[room.furniture],
 	);
 
-	// The docked properties card needs the selected item itself, not just the id.
-	const selectedItem =
-		room.furniture.find((item) => item.id === selectedId) ?? null;
-
-	const selectItem = useCallback((id: string) => {
-		setSelectedId(id);
-		setSelectedOpeningId(null);
-	}, []);
-	const selectOpening = useCallback((id: string) => {
-		setSelectedOpeningId(id);
-		setSelectedId(null);
-	}, []);
-
-	const rotateItem = useCallback(
-		// A 90° turn grows the footprint's hull along the wall it faced; contain
-		// it so the spun item can't poke through (a duplicated copy likewise).
-		(id: string) =>
-			onRoomChange(
-				containRoomFurniture(rotateFurniture(room, id, ROTATE_STEP_DEG), id),
-			),
-		[room, onRoomChange],
+	const selectItem = useCallback(
+		(id: string) => {
+			setSelectedId(id);
+			setSelectedOpeningId(null);
+		},
+		[setSelectedId],
 	);
+	const selectOpening = useCallback(
+		(id: string) => {
+			setSelectedOpeningId(id);
+			setSelectedId(null);
+		},
+		[setSelectedId],
+	);
+
 	const moveItem = useCallback(
 		// Streams per pointermove — a preview, folded into one history step
 		// when the drag session releases the camera controls below.
 		(id: string, update: FurnitureUpdate) =>
 			onRoomPreview(updateFurniture(room, id, update)),
 		[room, onRoomPreview],
-	);
-	// Properties-card commits: absolute size / angle / elevation setters, one
-	// history step each. The setters return the room unchanged (same reference)
-	// for no-ops, which must not become empty undo steps.
-	const resizeItem = useCallback(
-		(id: string, footprint: Footprint) => {
-			const next = setFurnitureFootprint(room, id, footprint);
-			if (next !== room) onRoomChange(containRoomFurniture(next, id));
-		},
-		[room, onRoomChange],
-	);
-	const rotateItemTo = useCallback(
-		(id: string, deg: number) => {
-			const next = setFurnitureRotation(room, id, deg);
-			if (next !== room) onRoomChange(containRoomFurniture(next, id));
-		},
-		[room, onRoomChange],
-	);
-	const elevateItem = useCallback(
-		(id: string, elevation: number) => {
-			const next = setMountElevation(room, id, elevation);
-			if (next !== room) onRoomChange(next);
-		},
-		[room, onRoomChange],
-	);
-	const duplicateItem = useCallback(
-		(id: string) => {
-			const newId = crypto.randomUUID();
-			onRoomChange(
-				containRoomFurniture(duplicateFurniture(room, id, newId), newId),
-			);
-			setSelectedId(newId);
-		},
-		[room, onRoomChange],
-	);
-	const deleteItem = useCallback(
-		(id: string) => {
-			onRoomChange(removeFurniture(room, id));
-			setSelectedId(null);
-		},
-		[room, onRoomChange],
 	);
 
 	const insertOpening = useCallback(
@@ -781,14 +727,14 @@ export function PlannerCanvas({
 	// sit between the pointer and the floor (its DOM would eat the drop).
 	useEffect(() => {
 		if (placingItem) setSelectedId(null);
-	}, [placingItem]);
+	}, [placingItem, setSelectedId]);
 	// Arming a door/window tool likewise clears any selection — clicks now
 	// mean "insert here", and a chip would sit over the wall pick strips.
 	useEffect(() => {
 		if (!openingTool) return;
 		setSelectedId(null);
 		setSelectedOpeningId(null);
-	}, [openingTool]);
+	}, [openingTool, setSelectedId]);
 
 	const placeDraggedItem = useCallback(
 		(center: Point) => {
@@ -807,7 +753,13 @@ export function PlannerCanvas({
 			setSelectedId(id);
 			onPlacingEnd();
 		},
-		[placingItem, room, onRoomChange, onPlacingEnd],
+		[
+			placingItem,
+			room,
+			onRoomChange,
+			onPlacingEnd, // Selection follows the drop, same as duplicate.
+			setSelectedId,
+		],
 	);
 	const placeMountedItem = useCallback(
 		(result: WallMountResult) => {
@@ -826,7 +778,7 @@ export function PlannerCanvas({
 			setSelectedId(id);
 			onPlacingEnd();
 		},
-		[placingItem, room, onRoomChange, onPlacingEnd],
+		[placingItem, room, onRoomChange, onPlacingEnd, setSelectedId],
 	);
 
 	return (
@@ -924,9 +876,6 @@ export function PlannerCanvas({
 							unit={unit}
 							snapEnabled={snapEnabled}
 							onSelectItem={selectItem}
-							onRotateItem={rotateItem}
-							onDuplicateItem={duplicateItem}
-							onDeleteItem={deleteItem}
 							onMoveItem={moveItem}
 							onMoveActiveChange={handleRoomDragActive}
 							onSelectOpening={selectOpening}
@@ -945,9 +894,6 @@ export function PlannerCanvas({
 							unit={unit}
 							snapEnabled={snapEnabled}
 							onSelectItem={selectItem}
-							onRotateItem={rotateItem}
-							onDuplicateItem={duplicateItem}
-							onDeleteItem={deleteItem}
 							onMoveItem={moveItem}
 							onMoveActiveChange={handleRoomDragActive}
 						/>
@@ -975,15 +921,6 @@ export function PlannerCanvas({
 					</>
 				)}
 			</Canvas>
-			{selectedItem && !drawing && (
-				<PropertiesCard
-					item={selectedItem}
-					unit={unit}
-					onResize={(footprint) => resizeItem(selectedItem.id, footprint)}
-					onRotateTo={(deg) => rotateItemTo(selectedItem.id, deg)}
-					onElevate={(elevation) => elevateItem(selectedItem.id, elevation)}
-				/>
-			)}
 		</div>
 	);
 }

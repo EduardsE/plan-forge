@@ -615,9 +615,6 @@ export interface RoomSceneProps {
 	/** Snap toggle: off means free furniture moves (no flush/quantize). */
 	snapEnabled: boolean;
 	onSelectItem: (id: string) => void;
-	onRotateItem: (id: string) => void;
-	onDuplicateItem: (id: string) => void;
-	onDeleteItem: (id: string) => void;
 	/** Live update during a move drag (already snapped; wall items carry mount). */
 	onMoveItem: (id: string, update: FurnitureUpdate) => void;
 	/** A move drag started/ended — the canvas locks orbit while it runs. */
@@ -630,9 +627,6 @@ export function RoomScene({
 	unit,
 	snapEnabled,
 	onSelectItem,
-	onRotateItem,
-	onDuplicateItem,
-	onDeleteItem,
 	onMoveItem,
 	onMoveActiveChange,
 }: RoomSceneProps) {
@@ -694,10 +688,6 @@ export function RoomScene({
 								]
 							: undefined
 					}
-					showRotate={!selectedItem.mount}
-					onRotate={() => onRotateItem(selectedItem.id)}
-					onDuplicate={() => onDuplicateItem(selectedItem.id)}
-					onDelete={() => onDeleteItem(selectedItem.id)}
 				/>
 			)}
 			{drag && (
