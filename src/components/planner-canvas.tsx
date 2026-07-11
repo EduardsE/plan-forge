@@ -579,8 +579,12 @@ export interface PlannerCanvasProps {
   /** Draw-mode state, owned by the route (the header shows the count). */
   drawTool: DrawTool;
   draftCorners: Point[];
-  /** Closed draft: draw mode is reshaping the room, not placing corners. */
+  /** Closed draft: draw mode is reshaping a room, not placing corners. */
   draftClosed: boolean;
+  /** The room the draft edits; null while drafting a brand-new room. */
+  draftRoomId: string | null;
+  /** A context room was clicked in draw mode — re-target the session. */
+  onActivateDraftRoom: (roomId: string) => void;
   onPlaceCorner: (point: Point) => void;
   onPlaceRect: (a: Point, b: Point) => void;
   onSetDraftSegmentLength: (segmentIndex: number, meters: number) => void;
@@ -613,6 +617,8 @@ export function PlannerCanvas({
   drawTool,
   draftCorners,
   draftClosed,
+  draftRoomId,
+  onActivateDraftRoom,
   onPlaceCorner,
   onPlaceRect,
   onSetDraftSegmentLength,
@@ -889,13 +895,17 @@ export function PlannerCanvas({
             <DrawScene
               corners={draftCorners}
               closed={draftClosed}
-              // The draft edits the floor's first room until M3 adds
-              // draw-a-new-room; the rest render as a static backdrop.
-              contextRooms={floor.rooms.slice(1)}
+              // Every room the draft is *not* editing: a plan backdrop, a
+              // snap target, and (in select mode) a click re-targets the
+              // session onto it.
+              contextRooms={floor.rooms.filter(
+                (entry) => entry.id !== draftRoomId,
+              )}
               unit={unit}
               snapEnabled={snapEnabled}
               placing={drawTool === "wall" && !draftClosed}
               rectMode={drawTool === "rect"}
+              onActivateRoom={onActivateDraftRoom}
               onPlaceCorner={onPlaceCorner}
               onPlaceRect={onPlaceRect}
               onSetSegmentLength={onSetDraftSegmentLength}

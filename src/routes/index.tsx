@@ -30,15 +30,18 @@ import {
   undoHistory,
 } from "#/lib/history";
 import {
+  addRoom,
   type CatalogItem,
   createSampleFloor,
   duplicateFurniture,
   type Floor,
   type Footprint,
+  nextRoomName,
   type OpeningKind,
   type Point,
   type Room,
   removeFurniture,
+  roomById,
   roomOfFurniture,
   rotateFurniture,
   setFurnitureColorway,
@@ -54,6 +57,7 @@ import {
   applyOutlineDraft,
   draftFromRoom,
   emptyOutlineDraft,
+  type OutlineDraft,
   sameOutline,
   setClosedSegmentLength,
   splitOutlineWall,
@@ -91,13 +95,13 @@ function Planner() {
     createHistory(createSampleFloor()),
   );
   const floor = floorHistory.current;
-  // The floor's first room still anchors the flows that are inherently
-  // single-room until M3: the draw draft, the settings popover, and the
-  // header breadcrumb. Everything selection-shaped resolves its owning room
-  // from the item id instead (floor-wide, no active-room mode).
+  // The floor's first room still anchors the header breadcrumb (the "Loft
+  // apartment / room" line stays single-name until projects exist).
+  // Everything selection-shaped resolves its owning room from the item id
+  // instead (floor-wide, no active-room mode), and the draw draft carries
+  // the id of the room it edits.
   const room = floor.rooms[0];
-  const roomId = room.id;
-  // Whole-floor commits ("New room" today, "add room" later).
+  // Whole-floor commits ("New room" and draw mode's "add room").
   const setFloor = useCallback((next: Floor) => {
     setFloorHistory((history) =>
       next === history.current ? history : commitHistory(history, next),
@@ -107,29 +111,20 @@ function Planner() {
   // `updateRoomIn` keeps the pure setters' no-op contract at floor level: a
   // same-reference room yields the same floor, which must not become an
   // empty undo step (or clear the redo stack).
-  const commitRoom = useCallback((targetId: string, next: Room) => {
-    setFloorHistory((history) => {
-      const value = updateRoomIn(history.current, targetId, () => next);
-      return value === history.current
-        ? history
-        : commitHistory(history, value);
-    });
-  }, []);
-  // The floor's first room, for the single-room flows named above.
-  const setRoom = useCallback(
-    (next: Room | ((room: Room) => Room)) => {
+  const commitToRoom = useCallback(
+    (targetId: string, update: (room: Room) => Room) => {
       setFloorHistory((history) => {
-        const value = updateRoomIn(
-          history.current,
-          roomId,
-          typeof next === "function" ? next : () => next,
-        );
+        const value = updateRoomIn(history.current, targetId, update);
         return value === history.current
           ? history
           : commitHistory(history, value);
       });
     },
-    [roomId],
+    [],
+  );
+  const commitRoom = useCallback(
+    (targetId: string, next: Room) => commitToRoom(targetId, () => next),
+    [commitToRoom],
   );
   const previewRoom = useCallback(
     (targetId: string, next: Room) =>
@@ -291,20 +286,21 @@ function Planner() {
     },
     [selectedId],
   );
-  // The Settings rail button's popover: room name + ceiling height, each
+  // The Settings rail button's popover: per-room name + ceiling height, each
   // commit one history step through the pure room setters (no-ops return the
   // same reference and land nowhere).
   const [settingsOpen, setSettingsOpen] = useState(false);
   const toggleSettings = useCallback(() => setSettingsOpen((on) => !on), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const renameRoom = useCallback(
-    (name: string) => setRoom((current) => setRoomName(current, name)),
-    [setRoom],
+    (targetId: string, name: string) =>
+      commitToRoom(targetId, (current) => setRoomName(current, name)),
+    [commitToRoom],
   );
   const setCeilingHeight = useCallback(
-    (meters: number) =>
-      setRoom((current) => setRoomWallHeight(current, meters)),
-    [setRoom],
+    (targetId: string, meters: number) =>
+      commitToRoom(targetId, (current) => setRoomWallHeight(current, meters)),
+    [commitToRoom],
   );
   // Bottom-left view toggles. Grid shows the in-scene reference grid; snap
   // gates draw/placement quantize + flush snapping. Both default on, matching
@@ -367,34 +363,93 @@ function Planner() {
 
   // The draw-mode draft outline. Owned here (not by the canvas) so the
   // header's status line can count corners and committing can become the
-  // room. Entering draw mode over an existing room reopens its outline as a
-  // *closed* editable draft ("Draw" means "edit this room"); only an empty
-  // outline — right after New room — starts the open from-scratch draft.
-  // Leaving draw mode applies a closed draft, so lens switches never lose
-  // edits; esc reverts it instead.
-  const [draft, setDraft] = useState(emptyOutlineDraft);
+  // room. The draft carries the id of the floor room it edits; a null id
+  // means committing *adds* a new room to the floor (the wall/rect tools).
+  // Entering draw mode reopens the first room's outline as a *closed*
+  // editable draft ("Draw" starts as "edit this room" — clicking another
+  // room re-targets the session); only an empty outline — right after New
+  // room — starts the open from-scratch draft. Leaving draw mode applies a
+  // closed draft, so lens switches never lose edits; esc reverts it instead.
+  const [draft, setDraft] = useState(() => emptyOutlineDraft());
   const [drawTool, setDrawTool] = useState<DrawTool>("wall");
+  // Commit a finished draft: reshape its room, or — for a new-room draft —
+  // append a Room to the floor. One history step either way; reshapes that
+  // didn't change the outline land nowhere.
+  const applyDraft = useCallback((finished: OutlineDraft) => {
+    if (finished.corners.length < 3) return;
+    const targetId = finished.roomId;
+    if (targetId !== null) {
+      setFloorHistory((history) => {
+        const value = updateRoomIn(history.current, targetId, (current) =>
+          sameOutline(finished.corners, current.outline)
+            ? current
+            : applyOutlineDraft(current, finished.corners, finished.openings),
+        );
+        return value === history.current
+          ? history
+          : commitHistory(history, value);
+      });
+    } else {
+      setFloorHistory((history) =>
+        commitHistory(
+          history,
+          addRoom(history.current, {
+            id: crypto.randomUUID(),
+            name: nextRoomName(history.current),
+            outline: finished.corners,
+            openings: finished.openings,
+            furniture: [],
+          }),
+        ),
+      );
+    }
+  }, []);
   const prevViewModeRef = useRef(viewMode);
   useEffect(() => {
     const prev = prevViewModeRef.current;
     if (prev === viewMode) return;
     prevViewModeRef.current = viewMode;
     if (viewMode === "draw") {
-      // Seed from the room; an in-progress open draft (mid fresh drawing)
-      // survives the round trip through another lens.
-      if (room.outline.length >= 3) setDraft(draftFromRoom(room));
-    } else if (prev === "draw" && draft.closed) {
-      if (
-        draft.corners.length >= 3 &&
-        !sameOutline(draft.corners, room.outline)
-      ) {
-        setRoom((current) =>
-          applyOutlineDraft(current, draft.corners, draft.openings),
-        );
+      // Seed from the first room; an in-progress draft (fresh corners mid
+      // new-room drawing) survives the round trip through another lens. The
+      // tool follows the seed: a closed draft reshapes (Select), an empty
+      // room draws from scratch (Wall).
+      if (draft.corners.length === 0) {
+        const seeded = draftFromRoom(room);
+        setDraft(seeded);
+        setDrawTool(seeded.closed ? "select" : "wall");
       }
+    } else if (prev === "draw" && draft.closed) {
+      applyDraft(draft);
       setDraft(emptyOutlineDraft());
     }
-  }, [viewMode, room, draft, setRoom]);
+  }, [viewMode, room, draft, applyDraft]);
+  // Wall/rect are *add-room* tools: picking one over a reshape session
+  // applies the session first (switching tools never silently loses edits)
+  // and starts a fresh new-room draft.
+  const handleDrawToolChange = useCallback(
+    (tool: DrawTool) => {
+      if (tool !== "select" && draft.closed) {
+        applyDraft(draft);
+        setDraft(emptyOutlineDraft());
+      }
+      setDrawTool(tool);
+    },
+    [draft, applyDraft],
+  );
+  // Clicking another room in draw mode re-targets the session onto it,
+  // applying whatever the current draft holds first.
+  const activateDraftRoom = useCallback(
+    (targetId: string) => {
+      if (targetId === draft.roomId) return;
+      const target = roomById(floor, targetId);
+      if (!target) return;
+      if (draft.closed) applyDraft(draft);
+      setDraft(draftFromRoom(target));
+      setDrawTool("select");
+    },
+    [floor, draft, applyDraft],
+  );
 
   // The 2D lens's armed door/window tool. Owned here (like drawTool) so the
   // tool stack chrome and the header status line share it with the canvas.
@@ -442,14 +497,19 @@ function Planner() {
       ),
     [],
   );
-  // The rect tool's two clicks: replace the draft with a fresh closed
-  // rectangle and hand off to Select so its corners drag / lengths edit like
-  // any closed draft. Openings drop (they belonged to a different outline);
-  // furniture that still fits is kept at commit by `applyOutlineDraft`.
+  // The rect tool's two clicks: close the draft as a fresh rectangle and
+  // hand off to Select so its corners drag / lengths edit like any closed
+  // draft. The draft's target rides along — a new-room rect commits as a new
+  // room, the New-room flow's rect fills its empty room.
   const placeRect = useCallback((a: Point, b: Point) => {
     const corners = rectangleOutline(a, b);
     if (!corners) return;
-    setDraft({ corners, closed: true, openings: [] });
+    setDraft((current) => ({
+      roomId: current.roomId,
+      corners,
+      closed: true,
+      openings: [],
+    }));
     setDrawTool("select");
   }, []);
   const setDraftSegmentLength = useCallback(
@@ -495,26 +555,28 @@ function Planner() {
     [],
   );
   // ⏎ (or clicking the start corner while drawing) commits the draft: the
-  // outline becomes the room, openings re-anchor to their (possibly resized
-  // or split) walls, and furniture stays wherever it still fits inside.
+  // outline becomes its room — or a brand-new room — openings re-anchor to
+  // their (possibly resized or split) walls, and furniture stays wherever it
+  // still fits inside.
   const closeDraft = useCallback(() => {
     if (draft.corners.length < 3) return;
-    if (!sameOutline(draft.corners, room.outline)) {
-      setRoom((current) =>
-        applyOutlineDraft(current, draft.corners, draft.openings),
-      );
-    }
+    applyDraft(draft);
     setDraft(emptyOutlineDraft());
     setViewMode("2d");
-  }, [draft, room.outline, setRoom]);
-  // Esc reverts an edit session to the room as it stands; a fresh open
-  // draft just clears.
+  }, [draft, applyDraft]);
+  // Esc reverts an edit session to its room as it stands; a fresh open
+  // draft (or an uncommitted new-room rectangle) just clears, keeping its
+  // target.
   const cancelDraft = useCallback(
     () =>
-      setDraft((current) =>
-        current.closed ? draftFromRoom(room) : emptyOutlineDraft(),
-      ),
-    [room],
+      setDraft((current) => {
+        if (current.closed && current.roomId !== null) {
+          const target = roomById(floor, current.roomId);
+          if (target) return draftFromRoom(target);
+        }
+        return emptyOutlineDraft(current.roomId);
+      }),
+    [floor],
   );
 
   // The "new room" escape hatch: clear the floor down to one fresh empty
@@ -528,10 +590,11 @@ function Planner() {
     ) {
       return;
     }
+    const freshId = crypto.randomUUID();
     setFloor({
       rooms: [
         {
-          id: crypto.randomUUID(),
+          id: freshId,
           name: "Untitled room",
           outline: [],
           openings: [],
@@ -539,7 +602,10 @@ function Planner() {
         },
       ],
     });
-    setDraft(emptyOutlineDraft());
+    // Target the fresh room directly — when "New" is clicked from inside
+    // draw mode the enter-draw seeding effect won't fire again.
+    setDraft(emptyOutlineDraft(freshId));
+    setDrawTool("wall");
     setViewMode("draw");
   }, [setFloor]);
 
@@ -693,7 +759,7 @@ function Planner() {
       />
       {settingsOpen && (
         <SettingsPopover
-          room={room}
+          rooms={floor.rooms}
           unit={unit}
           onRename={renameRoom}
           onWallHeightChange={setCeilingHeight}
@@ -739,6 +805,8 @@ function Planner() {
               drawTool={drawTool}
               draftCorners={draft.corners}
               draftClosed={draft.closed}
+              draftRoomId={draft.roomId}
+              onActivateDraftRoom={activateDraftRoom}
               onPlaceCorner={placeCorner}
               onPlaceRect={placeRect}
               onSetDraftSegmentLength={setDraftSegmentLength}
@@ -754,8 +822,15 @@ function Planner() {
         )}
         {viewMode === "draw" && (
           <>
-            <DrawToolStack tool={drawTool} onToolChange={setDrawTool} />
-            <DrawHintBar editing={draft.closed} rect={drawTool === "rect"} />
+            <DrawToolStack
+              tool={drawTool}
+              onToolChange={handleDrawToolChange}
+            />
+            <DrawHintBar
+              editing={draft.closed}
+              rect={drawTool === "rect"}
+              multiRoom={floor.rooms.length > 1}
+            />
           </>
         )}
         {viewMode === "2d" && (

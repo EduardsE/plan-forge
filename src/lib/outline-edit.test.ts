@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { snapTargetsOf } from "#/lib/draw";
 import type { FurnitureItem, Opening, Point, Room } from "#/lib/model";
 import {
   applyOutlineDraft,
   draftFromRoom,
+  emptyOutlineDraft,
   sameOutline,
   setClosedSegmentLength,
   snapCornerDrag,
@@ -58,14 +60,23 @@ describe("draftFromRoom", () => {
     const source = room({ openings: [opening({})] });
     const draft = draftFromRoom(source);
     expect(draft.closed).toBe(true);
+    expect(draft.roomId).toBe("room-1");
     expect(draft.corners).toEqual(RECT);
     expect(draft.openings).toEqual(source.openings);
   });
 
-  it("falls back to a blank open draft when the outline is empty", () => {
+  it("falls back to a blank open draft still targeting the room", () => {
     const draft = draftFromRoom(room({ outline: [] }));
     expect(draft.closed).toBe(false);
+    expect(draft.roomId).toBe("room-1");
     expect(draft.corners).toEqual([]);
+  });
+});
+
+describe("emptyOutlineDraft", () => {
+  it("defaults to a new-room draft (null target)", () => {
+    expect(emptyOutlineDraft().roomId).toBeNull();
+    expect(emptyOutlineDraft("kitchen").roomId).toBe("kitchen");
   });
 });
 
@@ -107,6 +118,67 @@ describe("snapCornerDrag", () => {
     const snap = snapCornerDrag(RECT, 1, { x: 6.04, y: 0.06 }, TOL, false);
     expect(snap.point).toEqual({ x: 6.04, y: 0.06 });
     expect(snap.guides).toEqual([]);
+  });
+
+  describe("against other rooms", () => {
+    // A neighboring room just right of RECT, its left wall at x = 6.4.
+    const targets = snapTargetsOf([
+      room({
+        id: "kitchen",
+        outline: [
+          { x: 6.4, y: 0 },
+          { x: 9.4, y: 0 },
+          { x: 9.4, y: 3 },
+          { x: 6.4, y: 3 },
+        ],
+      }),
+    ]);
+
+    it("lands exactly on a neighbor corner within tolerance", () => {
+      const snap = snapCornerDrag(
+        RECT,
+        1,
+        { x: 6.45, y: 0.07 },
+        TOL,
+        true,
+        targets,
+      );
+      expect(snap.point).toEqual({ x: 6.4, y: 0 });
+      expect(snap.guides).toEqual([]);
+      expect(snap.floorSnaps).toEqual([
+        { kind: "corner", at: { x: 6.4, y: 0 } },
+      ]);
+    });
+
+    it("pins an axis to the neighbor's wall when it is the closest match", () => {
+      const snap = snapCornerDrag(
+        RECT,
+        1,
+        { x: 6.36, y: 2 },
+        TOL,
+        true,
+        targets,
+      );
+      expect(snap.point).toEqual({ x: 6.4, y: 2 });
+      expect(snap.floorSnaps).toHaveLength(1);
+      expect(snap.floorSnaps[0].kind).toBe("wall");
+    });
+
+    it("still prefers a strictly closer draft corner", () => {
+      // x sits 2 cm from the draft's own top-right corner (x = 6) and 38 cm
+      // from the neighbor wall — the draft corner wins the axis.
+      const snap = snapCornerDrag(
+        RECT,
+        1,
+        { x: 6.02, y: 2 },
+        TOL,
+        true,
+        targets,
+      );
+      expect(snap.point).toEqual({ x: 6, y: 2 });
+      expect(snap.guides).toEqual([{ cornerIndex: 2, axis: "x" }]);
+      expect(snap.floorSnaps).toEqual([]);
+    });
   });
 });
 

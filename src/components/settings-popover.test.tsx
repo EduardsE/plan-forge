@@ -8,7 +8,7 @@ function renderPopover(
 ) {
   return render(
     <SettingsPopover
-      room={createSampleRoom()}
+      rooms={[createSampleRoom()]}
       unit="m"
       onRename={() => {}}
       onWallHeightChange={() => {}}
@@ -20,7 +20,7 @@ function renderPopover(
 
 describe("SettingsPopover", () => {
   it("shows the room name and the effective ceiling height", () => {
-    renderPopover({ room: { ...createSampleRoom(), wallHeight: 3.1 } });
+    renderPopover({ rooms: [{ ...createSampleRoom(), wallHeight: 3.1 }] });
 
     expect((screen.getByLabelText("Room name") as HTMLInputElement).value).toBe(
       "Living room",
@@ -28,6 +28,33 @@ describe("SettingsPopover", () => {
     expect(
       (screen.getByLabelText("Ceiling height") as HTMLInputElement).value,
     ).toBe("3.10");
+  });
+
+  it("renders a section per room and commits against the edited room's id", () => {
+    const onRename = vi.fn();
+    const kitchen = {
+      ...createSampleRoom(),
+      id: "kitchen",
+      name: "Kitchen",
+      wallHeight: 2.8,
+    };
+    renderPopover({ rooms: [createSampleRoom(), kitchen], onRename });
+
+    expect(
+      (screen.getByLabelText("Room 1 name") as HTMLInputElement).value,
+    ).toBe("Living room");
+    const kitchenName = screen.getByLabelText(
+      "Room 2 name",
+    ) as HTMLInputElement;
+    expect(kitchenName.value).toBe("Kitchen");
+    expect(
+      (screen.getByLabelText("Room 2 ceiling height") as HTMLInputElement)
+        .value,
+    ).toBe("2.80");
+
+    fireEvent.change(kitchenName, { target: { value: "Pantry" } });
+    fireEvent.blur(kitchenName);
+    expect(onRename).toHaveBeenCalledWith("kitchen", "Pantry");
   });
 
   it("falls back to the default ceiling height and honors the unit", () => {
@@ -45,7 +72,7 @@ describe("SettingsPopover", () => {
     const name = screen.getByLabelText("Room name") as HTMLInputElement;
     fireEvent.change(name, { target: { value: "  Studio " } });
     fireEvent.blur(name);
-    expect(onRename).toHaveBeenCalledWith("Studio");
+    expect(onRename).toHaveBeenCalledWith("living-room", "Studio");
 
     fireEvent.change(name, { target: { value: "   " } });
     fireEvent.blur(name);
@@ -62,7 +89,7 @@ describe("SettingsPopover", () => {
     fireEvent.change(height, { target: { value: "310" } });
     fireEvent.blur(height);
 
-    expect(onWallHeightChange).toHaveBeenCalledWith(3.1);
+    expect(onWallHeightChange).toHaveBeenCalledWith("living-room", 3.1);
   });
 
   it("drops unparsable height input and snaps the field back", () => {

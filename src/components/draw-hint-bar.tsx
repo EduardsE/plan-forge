@@ -27,9 +27,12 @@ const DIVIDER = <span className="text-white/25">·</span>;
 export function DrawHintBar({
   editing = false,
   rect = false,
+  multiRoom = false,
 }: {
   editing?: boolean;
   rect?: boolean;
+  /** More than one room on the floor: clicking another room edits it. */
+  multiRoom?: boolean;
 }) {
   return (
     <div className="-translate-x-1/2 absolute bottom-11 left-1/2 flex items-center gap-2.5 rounded-[9px] bg-[var(--ink-900)] px-4 py-2 shadow-[0_14px_34px_rgba(15,27,61,0.25)]">
@@ -46,6 +49,12 @@ export function DrawHintBar({
           <Hint>Drag corners to reshape</Hint>
           {DIVIDER}
           <Hint>Click a wall to add a corner</Hint>
+          {multiRoom && (
+            <>
+              {DIVIDER}
+              <Hint>Click another room to edit it</Hint>
+            </>
+          )}
           {DIVIDER}
           <Hint>
             <Key>⏎</Key> apply

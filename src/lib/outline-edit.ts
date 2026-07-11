@@ -1,4 +1,12 @@
-import { DRAW_GRID_STEP, quantizeToStep } from "#/lib/draw";
+import {
+  DRAW_GRID_STEP,
+  type FloorSnap,
+  NO_SNAP_TARGETS,
+  nearestTargetCorner,
+  quantizeToStep,
+  type SnapTargets,
+  targetAxisCandidate,
+} from "#/lib/draw";
 import {
   type FurnitureItem,
   footprintCorners,
@@ -27,25 +35,35 @@ import { slideOpening, type WallSpan } from "#/lib/opening-place";
  * *closed* draft from the room's outline instead — corners drag, walls split.
  * A closed draft carries the room's openings so wall splits can re-anchor
  * them exactly (indices and offsets shift at split time, not at commit).
+ *
+ * `roomId` names the floor room the draft edits; null means the draft is a
+ * *new* room — committing it appends a Room to the floor instead of
+ * reshaping an existing one.
  */
 export interface OutlineDraft {
+  roomId: string | null;
   corners: Point[];
   closed: boolean;
   openings: Opening[];
 }
 
-export function emptyOutlineDraft(): OutlineDraft {
-  return { corners: [], closed: false, openings: [] };
+export function emptyOutlineDraft(roomId: string | null = null): OutlineDraft {
+  return { roomId, corners: [], closed: false, openings: [] };
 }
 
 /**
  * The draft a room opens as in draw mode: its outline as a closed editable
- * loop, or a blank open draft when there's no outline yet (right after "New
- * room" — fresh from-scratch drawing).
+ * loop, or a blank open draft targeting the room when there's no outline yet
+ * (right after "New room" — fresh from-scratch drawing).
  */
 export function draftFromRoom(room: Room): OutlineDraft {
-  if (room.outline.length < 3) return emptyOutlineDraft();
-  return { corners: room.outline, closed: true, openings: room.openings };
+  if (room.outline.length < 3) return emptyOutlineDraft(room.id);
+  return {
+    roomId: room.id,
+    corners: room.outline,
+    closed: true,
+    openings: room.openings,
+  };
 }
 
 /** Two outlines with identical corners (same order, exact coordinates). */
@@ -65,13 +83,16 @@ export interface CornerDragSnap {
   point: Point;
   /** At most one guide per axis. */
   guides: CornerGuide[];
+  /** Locks onto other rooms' corners/walls, for in-scene feedback. */
+  floorSnaps: FloorSnap[];
 }
 
 /**
- * Snap corner `index` being dragged to `cursor`: each coordinate locks to the
- * nearest other corner's matching coordinate within `tolerance` (keeping
- * walls axis-aligned takes just the two neighbors, but any corner may align),
- * and whatever stays free quantizes to the drawing grid.
+ * Snap corner `index` being dragged to `cursor`: the cursor may land exactly
+ * on another room's corner (the flush seam beats everything); otherwise each
+ * coordinate locks to the nearest of the other draft corners' matching
+ * coordinate, another room's wall line, or another room's corner coordinate
+ * within `tolerance` — and whatever stays free quantizes to the drawing grid.
  *
  * With `snap` off (the snap toggle), the raw cursor passes straight through —
  * no corner alignment, no quantize — for free-hand corner dragging.
@@ -82,10 +103,22 @@ export function snapCornerDrag(
   cursor: Point,
   tolerance: number,
   snap = true,
+  targets: SnapTargets = NO_SNAP_TARGETS,
 ): CornerDragSnap {
-  if (!snap) return { point: { x: cursor.x, y: cursor.y }, guides: [] };
+  if (!snap) {
+    return { point: { x: cursor.x, y: cursor.y }, guides: [], floorSnaps: [] };
+  }
+  const exactCorner = nearestTargetCorner(targets.corners, cursor, tolerance);
+  if (exactCorner) {
+    return {
+      point: { x: exactCorner.x, y: exactCorner.y },
+      guides: [],
+      floorSnaps: [{ kind: "corner", at: exactCorner }],
+    };
+  }
   const point: Point = { x: cursor.x, y: cursor.y };
   const guides: CornerGuide[] = [];
+  const floorSnaps: FloorSnap[] = [];
   for (const axis of ["x", "y"] as const) {
     let best: number | null = null;
     let bestDistance = tolerance;
@@ -97,14 +130,18 @@ export function snapCornerDrag(
         best = i;
       }
     }
-    if (best !== null) {
+    const target = targetAxisCandidate(targets, axis, cursor, tolerance);
+    if (target && target.distance < bestDistance) {
+      point[axis] = target.value;
+      floorSnaps.push(target.snap);
+    } else if (best !== null) {
       point[axis] = corners[best][axis];
       guides.push({ cornerIndex: best, axis });
     } else {
       point[axis] = quantizeToStep(point[axis], DRAW_GRID_STEP);
     }
   }
-  return { point, guides };
+  return { point, guides, floorSnaps };
 }
 
 /** Splits landing closer than this to a corner are refused (meters) — the

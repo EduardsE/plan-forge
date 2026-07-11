@@ -92,6 +92,23 @@ export function totalPerimeter(floor: Floor): number {
   );
 }
 
+/** Append a room to the floor (draw mode's "add room" commit). */
+export function addRoom(floor: Floor, room: Room): Floor {
+  return { ...floor, rooms: [...floor.rooms, room] };
+}
+
+/**
+ * A name for the next drawn room that no existing room already uses
+ * ("Room 2", "Room 3", …) — editable later in the settings popover.
+ */
+export function nextRoomName(floor: Floor): string {
+  const taken = new Set(floor.rooms.map((room) => room.name));
+  for (let n = floor.rooms.length + 1; ; n++) {
+    const name = `Room ${n}`;
+    if (!taken.has(name)) return name;
+  }
+}
+
 /**
  * Apply a per-room update to the room with this id. Unknown ids and updates
  * that return the room unchanged (same reference) return the floor unchanged

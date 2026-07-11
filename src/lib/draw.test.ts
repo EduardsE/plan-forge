@@ -1,12 +1,29 @@
 import { describe, expect, it } from "vitest";
+import type { Room } from "#/lib/model";
 import {
   rectangleOutline,
   setSegmentLength,
   snapDraftPoint,
   snapRectPoint,
+  snapTargetsOf,
 } from "./draw";
 
 const TOL = 0.1;
+
+/** An existing 6.4 × 5.2 room the draft snaps against (plan coords, y down). */
+const NEIGHBOR: Room = {
+  id: "living",
+  name: "Living room",
+  outline: [
+    { x: 0, y: 0 },
+    { x: 6.4, y: 0 },
+    { x: 6.4, y: 5.2 },
+    { x: 0, y: 5.2 },
+  ],
+  openings: [],
+  furniture: [],
+};
+const TARGETS = snapTargetsOf([NEIGHBOR]);
 
 describe("snapDraftPoint", () => {
   it("quantizes a free cursor to the 5 cm draw grid", () => {
@@ -100,6 +117,73 @@ describe("snapDraftPoint", () => {
   });
 });
 
+describe("snapTargetsOf", () => {
+  it("collects every corner and wall of the given rooms", () => {
+    expect(TARGETS.corners).toHaveLength(4);
+    expect(TARGETS.walls).toHaveLength(4);
+    expect(TARGETS.walls[1].start).toEqual({ x: 6.4, y: 0 });
+    expect(TARGETS.walls[1].end).toEqual({ x: 6.4, y: 5.2 });
+  });
+});
+
+describe("snapDraftPoint against other rooms", () => {
+  it("lands exactly on a nearby room corner", () => {
+    const snap = snapDraftPoint([], { x: 6.45, y: 5.13 }, TOL, true, TARGETS);
+    expect(snap.point).toEqual({ x: 6.4, y: 5.2 });
+    expect(snap.floorSnap).toEqual({ kind: "corner", at: { x: 6.4, y: 5.2 } });
+  });
+
+  it("prefers the room corner over an axis lock from the last corner", () => {
+    // The last corner would axis-lock y to 5.15; the flush seam wins.
+    const snap = snapDraftPoint(
+      [{ x: 8, y: 5.15 }],
+      { x: 6.45, y: 5.12 },
+      TOL,
+      true,
+      TARGETS,
+    );
+    expect(snap.point).toEqual({ x: 6.4, y: 5.2 });
+    expect(snap.floorSnap?.kind).toBe("corner");
+  });
+
+  it("pins a coordinate to a wall line within the wall's span", () => {
+    const snap = snapDraftPoint([], { x: 6.45, y: 2.52 }, TOL, true, TARGETS);
+    expect(snap.point).toEqual({ x: 6.4, y: 2.5 });
+    expect(snap.floorSnap?.kind).toBe("wall");
+  });
+
+  it("aligns with a room corner's coordinate beyond the wall span", () => {
+    // y = 8 is far past the right wall's span, so the wall no longer pins x,
+    // but the corner coordinate still aligns (the flush-extension case).
+    const snap = snapDraftPoint([], { x: 6.44, y: 8.03 }, TOL, true, TARGETS);
+    expect(snap.point).toEqual({ x: 6.4, y: 8.05 });
+    expect(snap.floorSnap).toEqual({
+      kind: "align",
+      at: { x: 6.4, y: 0 },
+      axis: "x",
+    });
+  });
+
+  it("composes an axis lock with a wall pin on the free coordinate", () => {
+    const snap = snapDraftPoint(
+      [{ x: 2, y: 2.5 }],
+      { x: 6.37, y: 2.53 },
+      TOL,
+      true,
+      TARGETS,
+    );
+    expect(snap.point).toEqual({ x: 6.4, y: 2.5 });
+    expect(snap.axisSnapped).toBe(true);
+    expect(snap.floorSnap?.kind).toBe("wall");
+  });
+
+  it("passes the raw cursor through when snapping is off", () => {
+    const snap = snapDraftPoint([], { x: 6.45, y: 5.13 }, TOL, false, TARGETS);
+    expect(snap.point).toEqual({ x: 6.45, y: 5.13 });
+    expect(snap.floorSnap).toBeNull();
+  });
+});
+
 describe("snapRectPoint", () => {
   it("quantizes both axes to the 5 cm draw grid", () => {
     expect(snapRectPoint({ x: 2.03, y: 1.28 })).toEqual({ x: 2.05, y: 1.3 });
@@ -109,6 +193,19 @@ describe("snapRectPoint", () => {
     expect(snapRectPoint({ x: 2.03, y: 1.28 }, false)).toEqual({
       x: 2.03,
       y: 1.28,
+    });
+  });
+
+  it("pins each coordinate to another room's wall or corner", () => {
+    // x flush against the right wall, y free → quantized.
+    expect(snapRectPoint({ x: 6.43, y: 1.28 }, true, TARGETS, TOL)).toEqual({
+      x: 6.4,
+      y: 1.3,
+    });
+    // Both coordinates within tolerance of the bottom-right corner.
+    expect(snapRectPoint({ x: 6.44, y: 5.16 }, true, TARGETS, TOL)).toEqual({
+      x: 6.4,
+      y: 5.2,
     });
   });
 });

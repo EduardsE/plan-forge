@@ -91,17 +91,18 @@ function SettingField({
 }
 
 export interface SettingsPopoverProps {
-  room: Room;
+  /** Every room on the floor — each gets its own name + ceiling fields. */
+  rooms: Room[];
   unit: Unit;
   /** A committed rename; empty input never arrives (the field snaps back). */
-  onRename: (name: string) => void;
+  onRename: (roomId: string, name: string) => void;
   /** A committed wall/ceiling height, meters (the setter clamps it). */
-  onWallHeightChange: (meters: number) => void;
+  onWallHeightChange: (roomId: string, meters: number) => void;
   onClose: () => void;
 }
 
 export function SettingsPopover({
-  room,
+  rooms,
   unit,
   onRename,
   onWallHeightChange,
@@ -148,41 +149,49 @@ export function SettingsPopover({
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [onClose]);
 
-  const commitName = (text: string) => {
+  const commitName = (roomId: string) => (text: string) => {
     const trimmed = text.trim();
-    if (trimmed !== "") onRename(trimmed);
+    if (trimmed !== "") onRename(roomId, trimmed);
   };
-  const commitWallHeight = (text: string) => {
+  const commitWallHeight = (roomId: string) => (text: string) => {
     const meters = parseLength(text, unit);
-    if (meters !== null) onWallHeightChange(meters);
+    if (meters !== null) onWallHeightChange(roomId, meters);
   };
+  const single = rooms.length === 1;
 
   return (
     <div
       ref={popoverRef}
       role="dialog"
       aria-label="Room settings"
-      className="fixed bottom-[14px] left-[72px] z-50 flex w-[268px] flex-col gap-2.5 rounded-[12px] border border-[var(--hairline)] bg-[var(--frame)] p-[14px]"
+      className="fixed bottom-[14px] left-[72px] z-50 flex max-h-[70vh] w-[268px] flex-col gap-2.5 overflow-y-auto rounded-[12px] border border-[var(--hairline)] bg-[var(--frame)] p-[14px]"
       style={{ boxShadow: "0 14px 34px rgba(15, 27, 61, 0.14)" }}
     >
       <div className="font-semibold text-[11px] text-[var(--ink-400)] tracking-[0.11em]">
         ROOM SETTINGS
       </div>
-      <SettingField
-        label="NAME"
-        ariaLabel="Room name"
-        suffix=""
-        value={room.name ?? "Untitled room"}
-        onCommit={commitName}
-      />
-      <SettingField
-        label="CEILING HEIGHT"
-        ariaLabel="Ceiling height"
-        suffix={unit}
-        mono
-        value={formatLengthValue(wallHeightOf(room), unit)}
-        onCommit={commitWallHeight}
-      />
+      {rooms.map((room, index) => (
+        <div key={room.id} className="flex flex-col gap-2.5">
+          {index > 0 && <div className="h-px bg-[var(--hairline)]" />}
+          <SettingField
+            label="NAME"
+            ariaLabel={single ? "Room name" : `Room ${index + 1} name`}
+            suffix=""
+            value={room.name ?? "Untitled room"}
+            onCommit={commitName(room.id)}
+          />
+          <SettingField
+            label="CEILING HEIGHT"
+            ariaLabel={
+              single ? "Ceiling height" : `Room ${index + 1} ceiling height`
+            }
+            suffix={unit}
+            mono
+            value={formatLengthValue(wallHeightOf(room), unit)}
+            onCommit={commitWallHeight(room.id)}
+          />
+        </div>
+      ))}
       <div className="text-[11.5px] text-[var(--ink-400)] leading-relaxed">
         {formatLengthValue(MIN_WALL_HEIGHT, unit)}–
         {formatLengthValue(MAX_WALL_HEIGHT, unit)} {unit} — door and window

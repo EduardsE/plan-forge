@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  addRoom,
   floorBounds,
+  nextRoomName,
   roomAtPoint,
   roomById,
   roomOfFurniture,
@@ -37,6 +39,27 @@ const secondRoom = (): Room => ({
 
 const twoRoomFloor = (): Floor => ({
   rooms: [createSampleRoom(), secondRoom()],
+});
+
+describe("addRoom", () => {
+  it("appends the room, leaving existing rooms untouched", () => {
+    const floor: Floor = { rooms: [createSampleRoom()] };
+    const next = addRoom(floor, secondRoom());
+    expect(next.rooms).toHaveLength(2);
+    expect(next.rooms[0]).toBe(floor.rooms[0]);
+    expect(next.rooms[1].id).toBe("kitchen");
+    // The input floor is untouched (pure).
+    expect(floor.rooms).toHaveLength(1);
+  });
+});
+
+describe("nextRoomName", () => {
+  it("numbers past the existing rooms and skips taken names", () => {
+    expect(nextRoomName(twoRoomFloor())).toBe("Room 3");
+    const floor = twoRoomFloor();
+    floor.rooms[1] = { ...floor.rooms[1], name: "Room 3" };
+    expect(nextRoomName(floor)).toBe("Room 4");
+  });
 });
 
 describe("roomById", () => {

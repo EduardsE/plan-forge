@@ -1,4 +1,4 @@
-import type { Point } from "#/lib/model";
+import { type Point, type Room, type Wall, wallsOf } from "#/lib/model";
 
 /**
  * Pure geometry for the draw-mode flow (mockup screen 1c): snapping the
@@ -27,6 +27,103 @@ export interface AlignmentSnap {
   axis: "x" | "y";
 }
 
+/**
+ * Corners and walls of the floor's *other* rooms, as snap targets while
+ * drawing or reshaping — new corners land exactly on them so rooms sit
+ * flush (M4's abutment detection needs exact shared coordinates).
+ */
+export interface SnapTargets {
+  corners: Point[];
+  walls: Wall[];
+}
+
+export const NO_SNAP_TARGETS: SnapTargets = { corners: [], walls: [] };
+
+export function snapTargetsOf(rooms: Room[]): SnapTargets {
+  const corners: Point[] = [];
+  const walls: Wall[] = [];
+  for (const room of rooms) {
+    corners.push(...room.outline);
+    walls.push(...wallsOf(room.outline));
+  }
+  return { corners, walls };
+}
+
+/** How the snapped point locked onto another room, for in-scene feedback. */
+export type FloorSnap =
+  | { kind: "corner"; at: Point }
+  | { kind: "wall"; wall: Wall }
+  /** Aligned with a room corner's x or y beyond its walls' spans. */
+  | { kind: "align"; at: Point; axis: "x" | "y" };
+
+const AXIS_EPS = 1e-9;
+
+/**
+ * Best snap for one free coordinate against the targets: wall lines within
+ * the wall's own span (the flush case), then corner coordinates (alignment
+ * past a span). Ties inside `tolerance` prefer the wall — it's the seam.
+ */
+export function targetAxisCandidate(
+  targets: SnapTargets,
+  axis: "x" | "y",
+  cursor: Point,
+  tolerance: number,
+): { value: number; distance: number; snap: FloorSnap } | null {
+  const cross: "x" | "y" = axis === "x" ? "y" : "x";
+  let best: { value: number; distance: number; snap: FloorSnap } | null = null;
+  for (const wall of targets.walls) {
+    // Only walls running along the cross axis pin this coordinate.
+    if (Math.abs(wall.start[axis] - wall.end[axis]) > AXIS_EPS) continue;
+    const lo = Math.min(wall.start[cross], wall.end[cross]) - tolerance;
+    const hi = Math.max(wall.start[cross], wall.end[cross]) + tolerance;
+    if (cursor[cross] < lo || cursor[cross] > hi) continue;
+    const distance = Math.abs(cursor[axis] - wall.start[axis]);
+    if (distance < tolerance && (!best || distance < best.distance)) {
+      best = {
+        value: wall.start[axis],
+        distance,
+        snap: { kind: "wall", wall },
+      };
+    }
+  }
+  for (const corner of targets.corners) {
+    const distance = Math.abs(cursor[axis] - corner[axis]);
+    if (distance < tolerance && (!best || distance < best.distance)) {
+      best = {
+        value: corner[axis],
+        distance,
+        snap: { kind: "align", at: corner, axis },
+      };
+    }
+  }
+  return best;
+}
+
+/** The nearest target corner within `tolerance` on *both* axes, if any —
+ * the strongest snap: the new corner meets the existing room exactly. */
+export function nearestTargetCorner(
+  corners: Point[],
+  cursor: Point,
+  tolerance: number,
+): Point | null {
+  let best: Point | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const corner of corners) {
+    if (
+      Math.abs(cursor.x - corner.x) >= tolerance ||
+      Math.abs(cursor.y - corner.y) >= tolerance
+    ) {
+      continue;
+    }
+    const d = Math.hypot(cursor.x - corner.x, cursor.y - corner.y);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = corner;
+    }
+  }
+  return best;
+}
+
 export interface DraftSnap {
   point: Point;
   /** True when the preview segment locked horizontal/vertical from the last corner. */
@@ -39,6 +136,8 @@ export interface DraftSnap {
   turnAngleDeg: number | null;
   /** Guide-line alignment with an earlier corner, if any. */
   alignment: AlignmentSnap | null;
+  /** Lock onto another room's corner or wall, if any. */
+  floorSnap: FloorSnap | null;
 }
 
 /**
@@ -54,9 +153,12 @@ const quantize = quantizeToStep;
 
 /**
  * Snap the cursor while placing the next corner. Snaps compose in priority
- * order: first the segment from the last corner locks to an axis (within
- * `tolerance` meters), then the still-free coordinate may align with an
- * earlier corner, and whatever remains free quantizes to `DRAW_GRID_STEP`.
+ * order: first the cursor may land exactly on another room's corner (the
+ * flush seam beats everything), else the segment from the last corner locks
+ * to an axis (within `tolerance` meters), then the still-free coordinates
+ * may pin to another room's wall line or corner coordinate, then align with
+ * an earlier draft corner, and whatever remains free quantizes to
+ * `DRAW_GRID_STEP`.
  *
  * With `snap` off (the snap toggle), the raw cursor passes straight through —
  * no axis lock, no alignment, no quantize — for free-hand corner placement.
@@ -66,6 +168,7 @@ export function snapDraftPoint(
   cursor: Point,
   tolerance: number,
   snap = true,
+  targets: SnapTargets = NO_SNAP_TARGETS,
 ): DraftSnap {
   if (!snap) {
     return {
@@ -73,6 +176,7 @@ export function snapDraftPoint(
       axisSnapped: false,
       turnAngleDeg: null,
       alignment: null,
+      floorSnap: null,
     };
   }
   let x = cursor.x;
@@ -81,9 +185,23 @@ export function snapDraftPoint(
   /** Which coordinates are already exact and must not be re-quantized. */
   let xLocked = false;
   let yLocked = false;
+  let floorSnap: FloorSnap | null = null;
 
   const last = corners.at(-1);
-  if (last) {
+
+  const exactCorner = nearestTargetCorner(targets.corners, cursor, tolerance);
+  if (exactCorner) {
+    x = exactCorner.x;
+    y = exactCorner.y;
+    xLocked = true;
+    yLocked = true;
+    floorSnap = { kind: "corner", at: exactCorner };
+    // The badge logic below still applies when the met corner happens to
+    // continue the draft at a right angle.
+    axisSnapped = last ? x === last.x || y === last.y : false;
+  }
+
+  if (!xLocked && !yLocked && last) {
     const dx = Math.abs(x - last.x);
     const dy = Math.abs(y - last.y);
     if (dy <= dx && dy < tolerance) {
@@ -94,6 +212,24 @@ export function snapDraftPoint(
       x = last.x;
       axisSnapped = true;
       xLocked = true;
+    }
+  }
+
+  // Free coordinates pin to another room's walls/corners before the draft's
+  // own alignment pass — flush against the neighbor beats internal guides.
+  if (!floorSnap) {
+    for (const axis of ["x", "y"] as const) {
+      if (axis === "x" ? xLocked : yLocked) continue;
+      const candidate = targetAxisCandidate(targets, axis, { x, y }, tolerance);
+      if (!candidate) continue;
+      if (axis === "x") {
+        x = candidate.value;
+        xLocked = true;
+      } else {
+        y = candidate.value;
+        yLocked = true;
+      }
+      if (!floorSnap) floorSnap = candidate.snap;
     }
   }
 
@@ -144,23 +280,35 @@ export function snapDraftPoint(
     }
   }
 
-  return { point: { x, y }, axisSnapped, turnAngleDeg, alignment };
+  return { point: { x, y }, axisSnapped, turnAngleDeg, alignment, floorSnap };
 }
 
 /** A rectangle side thinner than this (meters) is degenerate — no room. */
 const MIN_RECT_SIDE = 0.01;
 
 /**
- * Snap a free cursor for the rect tool: quantize both axes to the draw grid
- * (there's no last corner to axis-lock against — the two corners are placed
+ * Snap a free cursor for the rect tool: each coordinate may pin to another
+ * room's corner or wall line (within `tolerance`, so the rectangle sits
+ * flush), and whatever stays free quantizes to the draw grid (there's no
+ * last corner to axis-lock against — the two corners are placed
  * independently). Raw cursor through when `snap` is off.
  */
-export function snapRectPoint(cursor: Point, snap = true): Point {
+export function snapRectPoint(
+  cursor: Point,
+  snap = true,
+  targets: SnapTargets = NO_SNAP_TARGETS,
+  tolerance = 0,
+): Point {
   if (!snap) return { x: cursor.x, y: cursor.y };
-  return {
-    x: quantize(cursor.x, DRAW_GRID_STEP),
-    y: quantize(cursor.y, DRAW_GRID_STEP),
-  };
+  const point = { x: cursor.x, y: cursor.y };
+  for (const axis of ["x", "y"] as const) {
+    const candidate = targetAxisCandidate(targets, axis, cursor, tolerance);
+    point[axis] =
+      candidate !== null
+        ? candidate.value
+        : quantize(cursor[axis], DRAW_GRID_STEP);
+  }
+  return point;
 }
 
 /**

@@ -13,9 +13,12 @@ import {
 import { PlanRoomLayer } from "#/components/plan-scene";
 import {
   type DraftSnap,
+  type FloorSnap,
   rectangleOutline,
+  type SnapTargets,
   snapDraftPoint,
   snapRectPoint,
+  snapTargetsOf,
 } from "#/lib/draw";
 import type { Point, Room } from "#/lib/model";
 import {
@@ -277,6 +280,45 @@ function AngleBadge({
   );
 }
 
+/** In-scene feedback for a lock onto another room: a dashed overlay along
+ * the matched wall, a ring on the matched corner, or an alignment guide
+ * from the matched corner to the snapped point. */
+function FloorSnapMarker({ snap, at }: { snap: FloorSnap; at: Point }) {
+  const dashes = useMemo(
+    () =>
+      snap.kind === "wall"
+        ? dashedPolyline([snap.wall.start, snap.wall.end], 0.14, 0.1)
+        : [],
+    [snap],
+  );
+  if (snap.kind === "align") {
+    return <AlignmentGuide from={snap.at} to={at} startAligned={false} />;
+  }
+  if (snap.kind === "wall") {
+    if (dashes.length === 0) return null;
+    return (
+      <Line
+        segments
+        points={dashes.map((p) => v3(p, GUIDE_Y))}
+        color={SNAP_COLOR}
+        lineWidth={2.5}
+        transparent
+        opacity={0.6}
+        alphaToCoverage={false}
+      />
+    );
+  }
+  return (
+    <Html
+      position={v3(snap.at, LABEL_Y)}
+      center
+      style={{ pointerEvents: "none" }}
+    >
+      <div className="h-3.5 w-3.5 rounded-full border-2 border-[#3a5bf0] bg-[rgba(58,91,240,0.35)] shadow-[0_0_0_5px_rgba(58,91,240,0.2)]" />
+    </Html>
+  );
+}
+
 /** Corner dot; the start corner carries the cyan glow (mockup screen 1c). */
 function CornerDot({ at, isStart }: { at: Point; isStart: boolean }) {
   return (
@@ -411,12 +453,14 @@ interface CornerDrag {
 function CornerDragSession({
   corners,
   snapEnabled,
+  targets,
   drag,
   onMove,
   onEnd,
 }: {
   corners: Point[];
   snapEnabled: boolean;
+  targets: SnapTargets;
   drag: CornerDrag;
   onMove: (index: number, point: Point) => void;
   onEnd: () => void;
@@ -424,12 +468,15 @@ function CornerDragSession({
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const [guides, setGuides] = useState<CornerGuide[]>([]);
+  const [floorSnaps, setFloorSnaps] = useState<FloorSnap[]>([]);
   // Latest corners/snap/callbacks without resubscribing mid-drag (every move
   // rebuilds the draft the handlers close over).
   const cornersRef = useRef(corners);
   cornersRef.current = corners;
   const snapRef = useRef(snapEnabled);
   snapRef.current = snapEnabled;
+  const targetsRef = useRef(targets);
+  targetsRef.current = targets;
   const moveRef = useRef(onMove);
   moveRef.current = onMove;
   const endRef = useRef(onEnd);
@@ -458,9 +505,11 @@ function CornerDragSession({
         point,
         SNAP_TOLERANCE_PX / zoom,
         snapRef.current,
+        targetsRef.current,
       );
       moveRef.current(drag.index, snap.point);
       setGuides(snap.guides);
+      setFloorSnaps(snap.floorSnaps);
     };
     const handleUp = () => endRef.current();
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -493,6 +542,14 @@ function CornerDragSession({
           from={corners[guide.cornerIndex]}
           to={at}
           startAligned={guide.cornerIndex === 0}
+        />
+      ))}
+      {floorSnaps.map((snap, index) => (
+        <FloorSnapMarker
+          // biome-ignore lint/suspicious/noArrayIndexKey: at most two, rebuilt per move
+          key={index}
+          snap={snap}
+          at={at}
         />
       ))}
     </group>
@@ -553,12 +610,14 @@ function CornerHandle({
 function OutlineEditLayer({
   corners,
   snapEnabled,
+  targets,
   onMoveCorner,
   onSplitWall,
   onDragActiveChange,
 }: {
   corners: Point[];
   snapEnabled: boolean;
+  targets: SnapTargets;
   onMoveCorner: (index: number, point: Point) => void;
   onSplitWall: (wallIndex: number, point: Point) => void;
   onDragActiveChange: (active: boolean) => void;
@@ -657,6 +716,7 @@ function OutlineEditLayer({
         <CornerDragSession
           corners={corners}
           snapEnabled={snapEnabled}
+          targets={targets}
           drag={drag}
           onMove={onMoveCorner}
           onEnd={endDrag}
@@ -666,13 +726,49 @@ function OutlineEditLayer({
   );
 }
 
+/** A context room's invisible fill: hovering shows a pointer, clicking
+ * re-targets the draw session onto that room (select mode only). */
+function ContextRoomPick({
+  room,
+  onActivate,
+}: {
+  room: Room;
+  onActivate: (roomId: string) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered, "pointer");
+  const shape = useMemo(() => shapeFromPoints(room.outline), [room.outline]);
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element.
+    <mesh
+      rotation-x={-Math.PI / 2}
+      position-y={0.006}
+      onPointerOver={(event) => {
+        event.stopPropagation();
+        setHovered(true);
+      }}
+      onPointerOut={() => setHovered(false)}
+      onClick={(event) => {
+        // A drag that ends here is a camera pan, not a room pick.
+        if (event.delta > CLICK_SLOP_PX) return;
+        event.stopPropagation();
+        onActivate(room.id);
+      }}
+    >
+      <shapeGeometry args={[shape]} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+    </mesh>
+  );
+}
+
 export interface DrawSceneProps {
   corners: Point[];
   /** Closed loop (editing an existing room) vs open chain (fresh drawing). */
   closed: boolean;
   /**
-   * The floor's other rooms, drawn as a static plan backdrop (no picking)
-   * so the outline being edited keeps its neighbors in view.
+   * The floor's rooms the draft is not editing: a static plan backdrop,
+   * snap targets for flush seams, and — in select mode — click targets
+   * that re-focus the session.
    */
   contextRooms: Room[];
   unit: Unit;
@@ -682,6 +778,8 @@ export interface DrawSceneProps {
   placing: boolean;
   /** Rect tool active: two opposite-corner clicks draw a rectangular room. */
   rectMode: boolean;
+  /** A context room was clicked in select mode — re-target the session. */
+  onActivateRoom: (roomId: string) => void;
   onPlaceCorner: (point: Point) => void;
   /** Rect tool: the two clicked opposite corners define the new outline. */
   onPlaceRect: (a: Point, b: Point) => void;
@@ -704,6 +802,7 @@ export function DrawScene({
   snapEnabled,
   placing,
   rectMode,
+  onActivateRoom,
   onPlaceCorner,
   onPlaceRect,
   onSetSegmentLength,
@@ -738,6 +837,9 @@ export function DrawScene({
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [rectMode, rectAnchor]);
 
+  // The other rooms' corners and walls, as flush-snap targets for every
+  // draw interaction (corner placement, rect corners, corner drags).
+  const targets = useMemo(() => snapTargetsOf(contextRooms), [contextRooms]);
   const centroid = useMemo(() => centroidOf(corners), [corners]);
   const last = corners.at(-1);
   const preview = !closed && placing && last && snap ? snap : null;
@@ -756,11 +858,15 @@ export function DrawScene({
   const handleMove = (event: ThreeEvent<PointerEvent>) => {
     const cursor = { x: event.point.x, y: event.point.z };
     if (rectMode) {
-      setRectCursor(snapRectPoint(cursor, snapEnabled));
+      setRectCursor(
+        snapRectPoint(cursor, snapEnabled, targets, toleranceOf(event)),
+      );
       return;
     }
     if (!placing) return;
-    setSnap(snapDraftPoint(corners, cursor, toleranceOf(event), snapEnabled));
+    setSnap(
+      snapDraftPoint(corners, cursor, toleranceOf(event), snapEnabled, targets),
+    );
   };
 
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
@@ -773,6 +879,8 @@ export function DrawScene({
       const corner = snapRectPoint(
         { x: event.point.x, y: event.point.z },
         snapEnabled,
+        targets,
+        toleranceOf(event),
       );
       if (!rectAnchor) {
         setRectAnchor(corner);
@@ -792,6 +900,7 @@ export function DrawScene({
       { x: event.point.x, y: event.point.z },
       tolerance,
       snapEnabled,
+      targets,
     );
     if (corners.length >= 3) {
       const closeTolerance =
@@ -813,6 +922,20 @@ export function DrawScene({
       {contextRooms.map((room) => (
         <PlanRoomLayer key={room.id} room={room} unit={unit} />
       ))}
+      {/* In select mode a context room is clickable — the session re-targets
+			    onto it. Inert while placing corners so drawing along (or across)
+			    a neighbor never steals the click. */}
+      {!placing &&
+        !rectMode &&
+        contextRooms
+          .filter((room) => room.outline.length >= 3)
+          .map((room) => (
+            <ContextRoomPick
+              key={room.id}
+              room={room}
+              onActivate={onActivateRoom}
+            />
+          ))}
       {/* Invisible pick plane: the "grid plane" the task says to click. */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element. */}
       <mesh
@@ -888,6 +1011,10 @@ export function DrawScene({
         />
       )}
 
+      {preview?.floorSnap && (
+        <FloorSnapMarker snap={preview.floorSnap} at={preview.point} />
+      )}
+
       {preview?.turnAngleDeg === 90 && last && corners.length >= 2 && (
         <AngleBadge
           prev={corners[corners.length - 2]}
@@ -911,6 +1038,7 @@ export function DrawScene({
         <OutlineEditLayer
           corners={corners}
           snapEnabled={snapEnabled}
+          targets={targets}
           onMoveCorner={onMoveCorner}
           onSplitWall={onSplitWall}
           onDragActiveChange={onDragActiveChange}
