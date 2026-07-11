@@ -1,12 +1,27 @@
 import { Line } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plane, Raycaster, Shape, Vector2, Vector3 } from "three";
 import { HostHighlight } from "#/components/host-highlight";
 import { SnapGuides } from "#/components/snap-guides";
-import type { CatalogItem, FurnitureItem, Point, Stack } from "#/lib/model";
-import { isStackRider, stackSurfaceHeight } from "#/lib/model";
-import { type Obstacle, type PlacementGuide, snapPlacement } from "#/lib/place";
+import type {
+  CatalogItem,
+  FurnitureItem,
+  Point,
+  Room,
+  Stack,
+} from "#/lib/model";
+import {
+  canHostStack,
+  isStackRider,
+  roomAtPoint,
+  stackSurfaceHeight,
+} from "#/lib/model";
+import {
+  furnitureObstacle,
+  type PlacementGuide,
+  snapPlacement,
+} from "#/lib/place";
 import { dashedPolyline, roundedRectPoints } from "#/lib/plan-scene";
 import { stackAt } from "#/lib/stack-place";
 import type { Unit } from "#/lib/units";
@@ -61,23 +76,18 @@ interface GhostSnap {
 }
 
 export interface PlacementGhostProps {
-  outline: Point[];
-  /** Placed items the ghost snaps flush against, alongside the walls. */
-  obstacles: Obstacle[];
-  /** Stackable furniture a rider-category item may land on. */
-  hosts: FurnitureItem[];
+  /** Every room of the floor; the drop targets the room under the cursor. */
+  rooms: Room[];
   item: CatalogItem;
   unit: Unit;
   /** Snap toggle: off means free placement (contained, no flush/quantize). */
   snapEnabled: boolean;
-  onPlace: (center: Point, stack?: Stack) => void;
+  onPlace: (roomId: string, center: Point, stack?: Stack) => void;
   onCancel: () => void;
 }
 
 export function PlacementGhost({
-  outline,
-  obstacles,
-  hosts,
+  rooms,
   item,
   unit,
   snapEnabled,
@@ -87,6 +97,10 @@ export function PlacementGhost({
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const [snap, setSnap] = useState<GhostSnap | null>(null);
+  // The room the ghost last hovered: a cursor between rooms (or over a wall)
+  // keeps clamping into the room it came from instead of jumping to the
+  // floor's first room.
+  const lastRoomIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const raycaster = new Raycaster();
@@ -106,13 +120,30 @@ export function PlacementGhost({
         : null;
     };
     const rider = isStackRider(item.id);
+    /** The room the drop would land in: the one under the cursor, else the
+     * last hovered, else the floor's first room. */
+    const targetRoom = (point: Point): Room | undefined => {
+      const contained = roomAtPoint({ rooms }, point, 0.05);
+      const room =
+        contained ??
+        rooms.find((entry) => entry.id === lastRoomIdRef.current) ??
+        rooms.find((entry) => entry.outline.length >= 3) ??
+        rooms[0];
+      if (room) lastRoomIdRef.current = room.id;
+      return room;
+    };
     /** The ghost placement under the cursor: a hovered host's top for a
-     * rider-category item (a fresh drop is unrotated), the floor otherwise. */
-    const resolve = (point: Point): GhostSnap => {
+     * rider-category item (a fresh drop is unrotated), the target room's
+     * floor otherwise. */
+    const resolve = (point: Point): (GhostSnap & { roomId: string }) | null => {
+      const room = targetRoom(point);
+      if (!room) return null;
       if (rider) {
+        const hosts = room.furniture.filter(canHostStack);
         const stacked = stackAt(hosts, point, item.footprint, 0, snapEnabled);
         if (stacked) {
           return {
+            roomId: room.id,
             center: stacked.position,
             guides: [],
             stack: stacked.stack,
@@ -120,15 +151,23 @@ export function PlacementGhost({
           };
         }
       }
-      return snapPlacement(
-        outline,
-        item.footprint,
-        point,
-        obstacles,
-        undefined,
-        undefined,
-        snapEnabled,
-      );
+      // Placed items the ghost snaps flush against (a fresh drop isn't in
+      // the room yet, so every non-stacked item is a neighbor).
+      const obstacles = room.furniture
+        .filter((entry) => !entry.stack)
+        .map(furnitureObstacle);
+      return {
+        roomId: room.id,
+        ...snapPlacement(
+          room.outline,
+          item.footprint,
+          point,
+          obstacles,
+          undefined,
+          undefined,
+          snapEnabled,
+        ),
+      };
     };
     const handleMove = (event: PointerEvent) => {
       const point = toFloor(event);
@@ -138,10 +177,9 @@ export function PlacementGhost({
       // Off-canvas releases belong to the drag layer.
       if (!(event.target instanceof HTMLCanvasElement)) return;
       const point = toFloor(event);
-      if (point) {
-        const placed = resolve(point);
-        onPlace(placed.center, placed.stack);
-      } else onCancel();
+      const placed = point ? resolve(point) : null;
+      if (placed) onPlace(placed.roomId, placed.center, placed.stack);
+      else onCancel();
     };
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp);
@@ -149,17 +187,7 @@ export function PlacementGhost({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [
-    outline,
-    obstacles,
-    hosts,
-    item,
-    snapEnabled,
-    camera,
-    gl,
-    onPlace,
-    onCancel,
-  ]);
+  }, [rooms, item, snapEnabled, camera, gl, onPlace, onCancel]);
 
   const rect = useMemo(
     () =>

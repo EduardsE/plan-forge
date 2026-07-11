@@ -5,14 +5,16 @@ import { colorwaysForCatalog, furnitureBaseColor } from "#/lib/furniture-parts";
 import {
   CATALOG_CATEGORY_LABELS,
   catalogItemById,
+  type Floor,
   type Footprint,
   type FurnitureItem,
   floorArea,
   furnitureDisplayName,
   type Point,
   type Room,
+  totalFloorArea,
+  totalPerimeter,
   wallHeightOf,
-  wallLengths,
 } from "#/lib/model";
 import { formatLengthValue, parseLength, type Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
@@ -113,7 +115,9 @@ interface SelectionSectionProps {
   item: FurnitureItem;
   /** Display name of the furniture the item stands on, if stacked. */
   hostName: string | null;
-  /** The room's wall height — the ceiling clamp for mounted elevations. */
+  /** Containing-room name, shown on multi-room floors (else null). */
+  roomName: string | null;
+  /** The owning room's wall height — the ceiling clamp for elevations. */
   wallHeight: number;
   unit: Unit;
   /** A committed size edit — the full footprint with one dimension changed. */
@@ -134,6 +138,7 @@ interface SelectionSectionProps {
 function SelectionSection({
   item,
   hostName,
+  roomName,
   wallHeight,
   unit,
   onResize,
@@ -241,6 +246,7 @@ function SelectionSection({
             {catalogItem ? CATALOG_CATEGORY_LABELS[catalogItem.category] : "—"}
             {item.mount ? " · Wall-mounted" : ""}
             {hostName ? ` · On ${hostName}` : ""}
+            {roomName ? ` · ${roomName}` : ""}
           </div>
         </div>
       </div>
@@ -362,9 +368,11 @@ function SelectionSection({
 }
 
 export interface InspectorProps {
-  room: Room;
+  floor: Floor;
   unit: Unit;
   mode: ViewMode;
+  /** The selected item's owning room (derived floor-wide), or null. */
+  selectedRoom: Room | null;
   selectedItem: FurnitureItem | null;
   /** Draw-mode draft state, for the OUTLINE view. */
   draftCornerCount?: number;
@@ -380,9 +388,10 @@ export interface InspectorProps {
 }
 
 export function Inspector({
-  room,
+  floor,
   unit,
   mode,
+  selectedRoom,
   selectedItem,
   draftCornerCount = 0,
   draftClosed = false,
@@ -396,14 +405,23 @@ export function Inspector({
   onDelete,
 }: InspectorProps) {
   const drawing = mode === "draw";
-  const showSelection = selectedItem !== null && !drawing;
-  const header = drawing ? "OUTLINE" : showSelection ? "SELECTION" : "ROOM";
+  const showSelection =
+    selectedItem !== null && selectedRoom !== null && !drawing;
+  const multiRoom = floor.rooms.length > 1;
+  const header = drawing
+    ? "OUTLINE"
+    : showSelection
+      ? "SELECTION"
+      : multiRoom
+        ? "FLOOR"
+        : "ROOM";
 
-  const area = room.outline.length >= 3 ? floorArea(room.outline) : null;
-  const perimeter =
-    room.outline.length >= 3
-      ? wallLengths(room.outline).reduce((sum, length) => sum + length, 0)
-      : null;
+  // Footer facts are floor totals (equal to the room's own on a one-room
+  // floor, so nothing changes until a second room exists).
+  const hasOutline = floor.rooms.some((room) => room.outline.length >= 3);
+  const area = hasOutline ? totalFloorArea(floor) : null;
+  const perimeter = hasOutline ? totalPerimeter(floor) : null;
+  const firstRoom = floor.rooms[0];
 
   return (
     <aside
@@ -433,16 +451,17 @@ export function Inspector({
         ) : showSelection ? (
           <SelectionSection
             item={selectedItem}
-            wallHeight={wallHeightOf(room)}
+            wallHeight={wallHeightOf(selectedRoom)}
             hostName={
               selectedItem.stack
                 ? furnitureDisplayName(
-                    room.furniture.find(
+                    selectedRoom.furniture.find(
                       (entry) => entry.id === selectedItem.stack?.hostId,
                     )?.catalogId ?? "",
                   )
                 : null
             }
+            roomName={multiRoom ? (selectedRoom.name ?? "Untitled room") : null}
             unit={unit}
             onResize={onResize}
             onRotateTo={onRotateTo}
@@ -453,19 +472,47 @@ export function Inspector({
             onClone={onClone}
             onDelete={onDelete}
           />
+        ) : multiRoom ? (
+          <div className="flex flex-col gap-2.5">
+            <div
+              className="font-semibold text-[15px] text-[var(--ink-900)]"
+              data-testid="inspector-room-name"
+            >
+              {floor.name ?? `${floor.rooms.length} rooms`}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {floor.rooms.map((room) => (
+                <div
+                  key={room.id}
+                  className="flex items-baseline justify-between text-[12.5px]"
+                >
+                  <span className="truncate text-[var(--ink-500)]">
+                    {room.name ?? "Untitled room"}
+                  </span>
+                  <span className="ml-2 shrink-0 font-mono text-[var(--ink-400)]">
+                    {floorArea(room.outline).toFixed(2)} m²
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
+              Select an item in either lens to edit its size, rotation and
+              position here.
+            </div>
+          </div>
         ) : (
           <div className="flex flex-col gap-2.5">
             <div
               className="font-semibold text-[15px] text-[var(--ink-900)]"
               data-testid="inspector-room-name"
             >
-              {room.name ?? "Untitled room"}
+              {firstRoom.name ?? "Untitled room"}
             </div>
             <div className="text-[12.5px] text-[var(--ink-500)]">
-              {room.furniture.length} object
-              {room.furniture.length === 1 ? "" : "s"} · {room.openings.length}{" "}
-              opening
-              {room.openings.length === 1 ? "" : "s"}
+              {firstRoom.furniture.length} object
+              {firstRoom.furniture.length === 1 ? "" : "s"} ·{" "}
+              {firstRoom.openings.length} opening
+              {firstRoom.openings.length === 1 ? "" : "s"}
             </div>
             <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
               Select an item in either lens to edit its size, rotation and
@@ -479,7 +526,11 @@ export function Inspector({
         {[
           ["FLOOR", area === null ? "—" : `${area.toFixed(2)} m²`],
           ["PERIMETER", perimeter === null ? "—" : `${perimeter.toFixed(1)} m`],
-          ["CEILING", `${wallHeightOf(room).toFixed(2)} m`],
+          // On a one-room floor the ceiling is unambiguous; with several
+          // rooms (each its own height) the slot shows the room count.
+          multiRoom
+            ? ["ROOMS", `${floor.rooms.length}`]
+            : ["CEILING", `${wallHeightOf(firstRoom).toFixed(2)} m`],
         ].map(([label, value]) => (
           <div key={label} className="flex flex-col gap-[3px]">
             <span

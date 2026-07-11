@@ -30,6 +30,7 @@ import {
   canHostStack,
   catalogItemById,
   floorArea,
+  floorBounds,
   furnitureDisplayName,
   outlineBounds,
 } from "#/lib/model";
@@ -678,53 +679,64 @@ function DimensionLine({
   );
 }
 
-export interface PlanSceneProps {
+export interface PlanRoomLayerProps {
   room: Room;
-  selectedId: string | null;
-  /** Selected opening id — never set together with `selectedId`. */
-  selectedOpeningId: string | null;
-  /** Armed door/window insert tool, or null. */
-  openingTool: OpeningKind | null;
+  /** Floor-wide furniture selection; only this room's items can match. */
+  selectedId?: string | null;
   unit: Unit;
-  /** Snap toggle: off means free furniture moves (no flush/quantize). */
-  snapEnabled: boolean;
-  onSelectItem: (id: string) => void;
-  /** Live update during a move drag (already snapped; wall items carry mount). */
-  onMoveItem: (id: string, update: FurnitureUpdate) => void;
-  /** A move drag started/ended — the canvas locks pan/zoom while it runs. */
-  onMoveActiveChange: (active: boolean) => void;
-  onSelectOpening: (id: string) => void;
-  onInsertOpening: (
+  /**
+   * Interactive rendering (the 2D lens): pickable footprints and the
+   * opening pick strips/tools. Off for draw-mode context rooms, where the
+   * layer is a static backdrop under the draft being edited.
+   */
+  interactive?: boolean;
+  selectedOpeningId?: string | null;
+  openingTool?: OpeningKind | null;
+  onSelectItem?: (id: string) => void;
+  onDragStart?: (
+    item: FurnitureItem,
+    floorPoint: Point,
+    screen: { x: number; y: number },
+  ) => void;
+  onSelectOpening?: (id: string) => void;
+  /** Insert on this room's wall — the layer binds its room id. */
+  onInsertOpening?: (
+    roomId: string,
     kind: OpeningKind,
     wallIndex: number,
     offset: number,
     width: number,
   ) => void;
-  /** Live re-offset during an opening drag (already snapped). */
-  onMoveOpening: (id: string, offset: number) => void;
-  onFlipDoorHinge: (id: string) => void;
-  onDeleteOpening: (id: string) => void;
-  /** A committed width from the opening chip's field. */
-  onResizeOpening: (id: string, width: number) => void;
+  onMoveOpening?: (id: string, offset: number) => void;
+  onFlipDoorHinge?: (id: string) => void;
+  onDeleteOpening?: (id: string) => void;
+  onResizeOpening?: (id: string, width: number) => void;
+  onDragActiveChange?: (active: boolean) => void;
 }
 
-export function PlanScene({
+/**
+ * One room of the floor as an architectural drawing: shadow, floor sheet,
+ * wall fills, opening symbols, furniture footprints, and the room's area
+ * card. The floor-level concerns — selection chip, rotate handle, the move
+ * drag session, whole-floor dimension lines — live in `PlanScene`.
+ */
+export function PlanRoomLayer({
   room,
-  selectedId,
-  selectedOpeningId,
-  openingTool,
+  selectedId = null,
   unit,
-  snapEnabled,
+  interactive = false,
+  selectedOpeningId = null,
+  openingTool = null,
   onSelectItem,
-  onMoveItem,
-  onMoveActiveChange,
+  onDragStart,
   onSelectOpening,
   onInsertOpening,
   onMoveOpening,
   onFlipDoorHinge,
   onDeleteOpening,
   onResizeOpening,
-}: PlanSceneProps) {
+  onDragActiveChange,
+}: PlanRoomLayerProps) {
   const solids = useMemo(() => buildWallSolids(room), [room]);
   const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
   const area = useMemo(() => floorArea(room.outline), [room.outline]);
@@ -751,34 +763,14 @@ export function PlanScene({
     }
     return shapes;
   }, [solids]);
-
-  const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
+  // Overlap warnings are a per-room concern: furniture belongs to exactly
+  // one room, and cross-room adjacency is M5's business.
   const warnings = useMemo(
     () => overlappingFurnitureIds(room.furniture),
     [room.furniture],
   );
-  const selectedItem =
-    room.furniture.find((item) => item.id === selectedId) ?? null;
-  // Every placed item except the one being dragged is a snap neighbor —
-  // stacked riders sit above the floor and don't block it.
-  const moveObstacles = useMemo(
-    () =>
-      room.furniture
-        .filter((item) => item.id !== drag?.id && !item.stack)
-        .map(furnitureObstacle),
-    [room.furniture, drag?.id],
-  );
-  // Furniture a dragged rider may land on.
-  const stackHosts = useMemo(
-    () =>
-      room.furniture.filter(
-        (item) => item.id !== drag?.id && canHostStack(item),
-      ),
-    [room.furniture, drag?.id],
-  );
 
   if (!bounds || !floorShape) return null;
-  const dimensionOffset = WALL_THICKNESS + DIMENSION_GAP;
   return (
     <group>
       <PlanShadow outline={room.outline} min={bounds.min} max={bounds.max} />
@@ -792,50 +784,188 @@ export function PlanScene({
       {solids.map((solid) => (
         <WallOpenings key={solid.index} solid={solid} />
       ))}
-      <PlanOpenings
-        solids={solids}
-        selectedId={selectedOpeningId}
-        tool={openingTool}
-        unit={unit}
-        onSelect={onSelectOpening}
-        onInsert={onInsertOpening}
-        onMove={onMoveOpening}
-        onFlipHinge={onFlipDoorHinge}
-        onDelete={onDeleteOpening}
-        onResize={onResizeOpening}
-        onDragActiveChange={onMoveActiveChange}
-      />
-      {room.furniture.map((item) => (
-        <PickableFootprint
-          key={item.id}
-          item={item}
-          selected={item.id === selectedId}
-          onSelect={onSelectItem}
-          onDragStart={beginDrag}
-        >
-          {(active) =>
-            catalogItemById(item.catalogId)?.category === "plants" ? (
-              <PlantFootprint
-                item={item}
-                active={active}
-                selected={item.id === selectedId}
-                warning={warnings.has(item.id)}
-              />
-            ) : (
-              <FurnitureFootprint
-                item={item}
-                active={active}
-                selected={item.id === selectedId}
-                warning={warnings.has(item.id)}
-              />
-            )
+      {interactive && onInsertOpening && (
+        <PlanOpenings
+          solids={solids}
+          selectedId={selectedOpeningId}
+          tool={openingTool ?? null}
+          unit={unit}
+          onSelect={onSelectOpening ?? (() => {})}
+          onInsert={(kind, wallIndex, offset, width) =>
+            onInsertOpening(room.id, kind, wallIndex, offset, width)
           }
-        </PickableFootprint>
+          onMove={onMoveOpening ?? (() => {})}
+          onFlipHinge={onFlipDoorHinge ?? (() => {})}
+          onDelete={onDeleteOpening ?? (() => {})}
+          onResize={onResizeOpening ?? (() => {})}
+          onDragActiveChange={onDragActiveChange ?? (() => {})}
+        />
+      )}
+      {room.furniture.map((item) => {
+        const footprint = (active: boolean) =>
+          catalogItemById(item.catalogId)?.category === "plants" ? (
+            <PlantFootprint
+              item={item}
+              active={active}
+              selected={item.id === selectedId}
+              warning={warnings.has(item.id)}
+            />
+          ) : (
+            <FurnitureFootprint
+              item={item}
+              active={active}
+              selected={item.id === selectedId}
+              warning={warnings.has(item.id)}
+            />
+          );
+        return interactive && onSelectItem && onDragStart ? (
+          <PickableFootprint
+            key={item.id}
+            item={item}
+            selected={item.id === selectedId}
+            onSelect={onSelectItem}
+            onDragStart={onDragStart}
+          >
+            {footprint}
+          </PickableFootprint>
+        ) : (
+          <group key={item.id} position={[item.position.x, 0, item.position.y]}>
+            {footprint(false)}
+          </group>
+        );
+      })}
+      <Html
+        position={[
+          (bounds.min.x + bounds.max.x) / 2,
+          LINE_Y,
+          (bounds.min.y + bounds.max.y) / 2,
+        ]}
+        center
+        style={{ pointerEvents: "none" }}
+      >
+        <div className="flex flex-col items-center gap-1 whitespace-nowrap rounded-[14px] border border-[rgba(15,27,61,0.08)] bg-white/85 px-[22px] py-3 shadow-[0_12px_30px_rgba(15,27,61,0.08)] backdrop-blur-[10px]">
+          <span className="text-[15px] font-bold tracking-[0.14em] text-[#33415C]">
+            {(room.name ?? "Room").toUpperCase()}
+          </span>
+          <span className="font-mono text-[12.5px] text-[#3a5bf0]">
+            {area.toFixed(2)} m² floor area
+          </span>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+export interface PlanSceneProps {
+  /** Every room of the floor, all drawn; "which room" is derived per item. */
+  rooms: Room[];
+  selectedId: string | null;
+  /** Selected opening id — never set together with `selectedId`. */
+  selectedOpeningId: string | null;
+  /** Armed door/window insert tool, or null. */
+  openingTool: OpeningKind | null;
+  unit: Unit;
+  /** Snap toggle: off means free furniture moves (no flush/quantize). */
+  snapEnabled: boolean;
+  onSelectItem: (id: string) => void;
+  /** Live update during a move drag (already snapped; wall items carry mount). */
+  onMoveItem: (id: string, update: FurnitureUpdate) => void;
+  /** A move drag started/ended — the canvas locks pan/zoom while it runs. */
+  onMoveActiveChange: (active: boolean) => void;
+  onSelectOpening: (id: string) => void;
+  onInsertOpening: (
+    roomId: string,
+    kind: OpeningKind,
+    wallIndex: number,
+    offset: number,
+    width: number,
+  ) => void;
+  /** Live re-offset during an opening drag (already snapped). */
+  onMoveOpening: (id: string, offset: number) => void;
+  onFlipDoorHinge: (id: string) => void;
+  onDeleteOpening: (id: string) => void;
+  /** A committed width from the opening chip's field. */
+  onResizeOpening: (id: string, width: number) => void;
+}
+
+export function PlanScene({
+  rooms,
+  selectedId,
+  selectedOpeningId,
+  openingTool,
+  unit,
+  snapEnabled,
+  onSelectItem,
+  onMoveItem,
+  onMoveActiveChange,
+  onSelectOpening,
+  onInsertOpening,
+  onMoveOpening,
+  onFlipDoorHinge,
+  onDeleteOpening,
+  onResizeOpening,
+}: PlanSceneProps) {
+  const bounds = useMemo(() => floorBounds({ rooms }), [rooms]);
+
+  const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
+  // The owning room is derived from the item id — selection and drags are
+  // floor-wide, but each drag stays inside its item's room (M5 adds seams).
+  const selectedRoom = selectedId
+    ? rooms.find((room) =>
+        room.furniture.some((item) => item.id === selectedId),
+      )
+    : undefined;
+  const selectedItem =
+    selectedRoom?.furniture.find((item) => item.id === selectedId) ?? null;
+  const dragRoom = drag
+    ? rooms.find((room) => room.furniture.some((item) => item.id === drag.id))
+    : undefined;
+  // Every placed item of the drag's room except the dragged one is a snap
+  // neighbor — stacked riders sit above the floor and don't block it.
+  const moveObstacles = useMemo(
+    () =>
+      (dragRoom?.furniture ?? [])
+        .filter((item) => item.id !== drag?.id && !item.stack)
+        .map(furnitureObstacle),
+    [dragRoom?.furniture, drag?.id],
+  );
+  // Furniture a dragged rider may land on.
+  const stackHosts = useMemo(
+    () =>
+      (dragRoom?.furniture ?? []).filter(
+        (item) => item.id !== drag?.id && canHostStack(item),
+      ),
+    [dragRoom?.furniture, drag?.id],
+  );
+
+  if (!bounds) return null;
+  const dimensionOffset = WALL_THICKNESS + DIMENSION_GAP;
+  return (
+    <group>
+      {rooms.map((room) => (
+        <PlanRoomLayer
+          key={room.id}
+          room={room}
+          selectedId={selectedId}
+          unit={unit}
+          interactive
+          selectedOpeningId={selectedOpeningId}
+          openingTool={openingTool}
+          onSelectItem={onSelectItem}
+          onDragStart={beginDrag}
+          onSelectOpening={onSelectOpening}
+          onInsertOpening={onInsertOpening}
+          onMoveOpening={onMoveOpening}
+          onFlipDoorHinge={onFlipDoorHinge}
+          onDeleteOpening={onDeleteOpening}
+          onResizeOpening={onResizeOpening}
+          onDragActiveChange={onMoveActiveChange}
+        />
       ))}
-      {selectedItem && !selectedItem.mount && !drag && (
+      {selectedItem && selectedRoom && !selectedItem.mount && !drag && (
         <RotateHandle
           item={selectedItem}
-          outline={room.outline}
+          outline={selectedRoom.outline}
           snapEnabled={snapEnabled}
           onRotate={(update) => onMoveItem(selectedItem.id, update)}
           onActiveChange={onMoveActiveChange}
@@ -859,9 +989,9 @@ export function PlanScene({
           ]}
         />
       )}
-      {drag && (
+      {drag && dragRoom && (
         <MoveDragSession
-          outline={room.outline}
+          outline={dragRoom.outline}
           obstacles={moveObstacles}
           hosts={stackHosts}
           drag={drag}
@@ -871,6 +1001,8 @@ export function PlanScene({
           onEnd={endDrag}
         />
       )}
+      {/* Whole-floor dimension lines: one width + one height along the
+			    floor's bounding box (per-room lines would collide on flush rooms). */}
       <DimensionLine
         from={{ x: bounds.min.x, y: bounds.min.y - dimensionOffset }}
         to={{ x: bounds.max.x, y: bounds.min.y - dimensionOffset }}
@@ -881,24 +1013,6 @@ export function PlanScene({
         to={{ x: bounds.min.x - dimensionOffset, y: bounds.max.y }}
         label={`${bounds.height.toFixed(2)} m`}
       />
-      <Html
-        position={[
-          (bounds.min.x + bounds.max.x) / 2,
-          LINE_Y,
-          (bounds.min.y + bounds.max.y) / 2,
-        ]}
-        center
-        style={{ pointerEvents: "none" }}
-      >
-        <div className="flex flex-col items-center gap-1 whitespace-nowrap rounded-[14px] border border-[rgba(15,27,61,0.08)] bg-white/85 px-[22px] py-3 shadow-[0_12px_30px_rgba(15,27,61,0.08)] backdrop-blur-[10px]">
-          <span className="text-[15px] font-bold tracking-[0.14em] text-[#33415C]">
-            {(room.name ?? "Room").toUpperCase()}
-          </span>
-          <span className="font-mono text-[12.5px] text-[#3a5bf0]">
-            {area.toFixed(2)} m² floor area
-          </span>
-        </div>
-      </Html>
     </group>
   );
 }

@@ -14,6 +14,7 @@ import {
   type CatalogItem,
   defaultMountElevation,
   type Point,
+  type Room,
   wallFrames,
 } from "#/lib/model";
 import { mountAt, type WallMountResult } from "#/lib/mount-place";
@@ -34,17 +35,18 @@ const GHOST_COLOR = "#3a5bf0";
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 
 export interface WallMountGhostProps {
-  outline: Point[];
+  /** Every room of the floor; the mount targets the nearest fitting wall. */
+  rooms: Room[];
   item: CatalogItem;
   unit: Unit;
   /** Snap toggle: off means free slide along the wall (no quantize/guides). */
   snapEnabled: boolean;
-  onPlace: (result: WallMountResult) => void;
+  onPlace: (roomId: string, result: WallMountResult) => void;
   onCancel: () => void;
 }
 
 export function WallMountGhost({
-  outline,
+  rooms,
   item,
   unit,
   snapEnabled,
@@ -54,7 +56,14 @@ export function WallMountGhost({
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const [result, setResult] = useState<WallMountResult | null>(null);
-  const frames = useMemo(() => wallFrames(outline), [outline]);
+  const roomFrames = useMemo(
+    () =>
+      rooms.map((room) => ({
+        roomId: room.id,
+        frames: wallFrames(room.outline),
+      })),
+    [rooms],
+  );
   const elevation = defaultMountElevation(item.id);
 
   useEffect(() => {
@@ -74,18 +83,44 @@ export function WallMountGhost({
         ? { x: hit.x, y: hit.z }
         : null;
     };
-    const resolve = (point: Point): WallMountResult | null =>
-      mountAt(frames, point, item.footprint, elevation, snapEnabled);
+    /** Nearest fitting wall across every room: `mountAt` per room, keeping
+     * the candidate whose mounted position sits closest to the cursor (a
+     * mount's wallIndex only means something within its own room). */
+    const resolve = (
+      point: Point,
+    ): { roomId: string; result: WallMountResult } | null => {
+      let best: { roomId: string; result: WallMountResult } | null = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (const { roomId, frames } of roomFrames) {
+        const candidate = mountAt(
+          frames,
+          point,
+          item.footprint,
+          elevation,
+          snapEnabled,
+        );
+        if (!candidate) continue;
+        const distance = Math.hypot(
+          candidate.position.x - point.x,
+          candidate.position.y - point.y,
+        );
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = { roomId, result: candidate };
+        }
+      }
+      return best;
+    };
     const handleMove = (event: PointerEvent) => {
       const point = toFloor(event);
-      setResult(point ? resolve(point) : null);
+      setResult(point ? (resolve(point)?.result ?? null) : null);
     };
     const handleUp = (event: PointerEvent) => {
       // Off-canvas releases belong to the drag layer.
       if (!(event.target instanceof HTMLCanvasElement)) return;
       const point = toFloor(event);
       const placed = point ? resolve(point) : null;
-      if (placed) onPlace(placed);
+      if (placed) onPlace(placed.roomId, placed.result);
       else onCancel();
     };
     window.addEventListener("pointermove", handleMove);
@@ -94,7 +129,7 @@ export function WallMountGhost({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [frames, item, elevation, snapEnabled, camera, gl, onPlace, onCancel]);
+  }, [roomFrames, item, elevation, snapEnabled, camera, gl, onPlace, onCancel]);
 
   if (!result) return null;
   const { width, height } = item.footprint;

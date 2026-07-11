@@ -39,6 +39,7 @@ import {
   type Point,
   type Room,
   removeFurniture,
+  roomOfFurniture,
   rotateFurniture,
   setFurnitureColorway,
   setFurnitureFootprint,
@@ -90,10 +91,10 @@ function Planner() {
     createHistory(createSampleFloor()),
   );
   const floor = floorHistory.current;
-  // One room today: scenes render `floor.rooms` through it, and every
-  // room-scoped mutation below addresses it by id (M2 makes the scenes
-  // iterate all rooms; nothing here assumes more structure than "the room
-  // being edited").
+  // The floor's first room still anchors the flows that are inherently
+  // single-room until M3: the draw draft, the settings popover, and the
+  // header breadcrumb. Everything selection-shaped resolves its owning room
+  // from the item id instead (floor-wide, no active-room mode).
   const room = floor.rooms[0];
   const roomId = room.id;
   // Whole-floor commits ("New room" today, "add room" later).
@@ -102,12 +103,22 @@ function Planner() {
       next === history.current ? history : commitHistory(history, next),
     );
   }, []);
+  // One room's discrete mutation, addressed by id — one undo step.
+  // `updateRoomIn` keeps the pure setters' no-op contract at floor level: a
+  // same-reference room yields the same floor, which must not become an
+  // empty undo step (or clear the redo stack).
+  const commitRoom = useCallback((targetId: string, next: Room) => {
+    setFloorHistory((history) => {
+      const value = updateRoomIn(history.current, targetId, () => next);
+      return value === history.current
+        ? history
+        : commitHistory(history, value);
+    });
+  }, []);
+  // The floor's first room, for the single-room flows named above.
   const setRoom = useCallback(
     (next: Room | ((room: Room) => Room)) => {
       setFloorHistory((history) => {
-        // `updateRoomIn` keeps the pure setters' no-op contract at floor
-        // level: a same-reference room yields the same floor, which must not
-        // become an empty undo step (or clear the redo stack).
         const value = updateRoomIn(
           history.current,
           roomId,
@@ -121,14 +132,14 @@ function Planner() {
     [roomId],
   );
   const previewRoom = useCallback(
-    (next: Room) =>
+    (targetId: string, next: Room) =>
       setFloorHistory((history) =>
         previewHistory(
           history,
-          updateRoomIn(history.current, roomId, () => next),
+          updateRoomIn(history.current, targetId, () => next),
         ),
       ),
-    [roomId],
+    [],
   );
   const settleRoom = useCallback(() => setFloorHistory(settleHistory), []);
   const undoRoom = useCallback(() => setFloorHistory(undoHistory), []);
@@ -142,25 +153,45 @@ function Planner() {
   // The furniture selection is route state so the inspector (outside the
   // canvas) and the in-scene picking/label share one selection. The canvas
   // keeps opening selection internal and clears this one when it takes over.
+  // Selection is floor-wide: the owning room is derived from the item id.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedRoom = selectedId
+    ? (roomOfFurniture(floor, selectedId) ?? null)
+    : null;
   const selectedItem =
-    room.furniture.find((item) => item.id === selectedId) ?? null;
+    selectedRoom?.furniture.find((item) => item.id === selectedId) ?? null;
+  // One commit against the room owning `itemId`, resolved inside the
+  // functional update so bursts never work from a stale floor. One history
+  // step per commit; same-reference no-ops land nowhere.
+  const mutateRoomOf = useCallback(
+    (itemId: string, update: (owner: Room) => Room) => {
+      setFloorHistory((history) => {
+        const owner = roomOfFurniture(history.current, itemId);
+        if (!owner) return history;
+        const value = updateRoomIn(history.current, owner.id, update);
+        return value === history.current
+          ? history
+          : commitHistory(history, value);
+      });
+    },
+    [],
+  );
   // Inspector commits: one history step each. The pure setters return the
   // room unchanged (same reference) for no-ops, which must not become empty
   // undo steps. Rotations/resizes re-contain the item so it can't poke out.
   const rotateSelected90 = useCallback(() => {
     if (!selectedId) return;
-    setRoom((current) =>
+    mutateRoomOf(selectedId, (current) =>
       containRoomFurniture(
         rotateFurniture(current, selectedId, 90),
         selectedId,
       ),
     );
-  }, [selectedId, setRoom]);
+  }, [selectedId, mutateRoomOf]);
   const cloneSelected = useCallback(() => {
     if (!selectedId) return;
     const newId = crypto.randomUUID();
-    setRoom((current) =>
+    mutateRoomOf(selectedId, (current) =>
       containRoomFurniture(
         duplicateFurniture(current, selectedId, newId),
         newId,
@@ -168,61 +199,65 @@ function Planner() {
     );
     // Selection follows the copy, like a drop.
     setSelectedId(newId);
-  }, [selectedId, setRoom]);
+  }, [selectedId, mutateRoomOf]);
   const deleteSelected = useCallback(() => {
     if (!selectedId) return;
-    setRoom((current) => removeFurniture(current, selectedId));
+    mutateRoomOf(selectedId, (current) => removeFurniture(current, selectedId));
     setSelectedId(null);
-  }, [selectedId, setRoom]);
+  }, [selectedId, mutateRoomOf]);
   const resizeSelected = useCallback(
     (footprint: Footprint) => {
       if (!selectedId) return;
-      setRoom((current) => {
+      mutateRoomOf(selectedId, (current) => {
         const next = setFurnitureFootprint(current, selectedId, footprint);
         return next === current
           ? current
           : containRoomFurniture(next, selectedId);
       });
     },
-    [selectedId, setRoom],
+    [selectedId, mutateRoomOf],
   );
   const rotateSelectedTo = useCallback(
     (deg: number) => {
       if (!selectedId) return;
-      setRoom((current) => {
+      mutateRoomOf(selectedId, (current) => {
         const next = setFurnitureRotation(current, selectedId, deg);
         return next === current
           ? current
           : containRoomFurniture(next, selectedId);
       });
     },
-    [selectedId, setRoom],
+    [selectedId, mutateRoomOf],
   );
   const elevateSelected = useCallback(
     (elevation: number) => {
       if (!selectedId) return;
-      setRoom((current) => setMountElevation(current, selectedId, elevation));
+      mutateRoomOf(selectedId, (current) =>
+        setMountElevation(current, selectedId, elevation),
+      );
     },
-    [selectedId, setRoom],
+    [selectedId, mutateRoomOf],
   );
   const moveSelectedTo = useCallback(
     (position: Point) => {
       if (!selectedId) return;
-      setRoom((current) =>
+      mutateRoomOf(selectedId, (current) =>
         containRoomFurniture(
           updateFurniture(current, selectedId, { position }),
           selectedId,
         ),
       );
     },
-    [selectedId, setRoom],
+    [selectedId, mutateRoomOf],
   );
   const recolorSelected = useCallback(
     (colorway: string | null) => {
       if (!selectedId) return;
-      setRoom((current) => setFurnitureColorway(current, selectedId, colorway));
+      mutateRoomOf(selectedId, (current) =>
+        setFurnitureColorway(current, selectedId, colorway),
+      );
     },
-    [selectedId, setRoom],
+    [selectedId, mutateRoomOf],
   );
   // A live pointer drag in either lens (furniture move, rotate handle,
   // opening slide). Settling on end folds the drag's previews into one
@@ -244,7 +279,9 @@ function Planner() {
     (dx: number, dy: number) => {
       if (!selectedId) return;
       setFloorHistory((history) => {
-        const next = updateRoomIn(history.current, roomId, (current) =>
+        const owner = roomOfFurniture(history.current, selectedId);
+        if (!owner) return history;
+        const next = updateRoomIn(history.current, owner.id, (current) =>
           nudgeFurniture(current, selectedId, dx, dy),
         );
         return next === history.current
@@ -252,7 +289,7 @@ function Planner() {
           : previewHistory(history, next);
       });
     },
-    [selectedId, roomId],
+    [selectedId],
   );
   // The Settings rail button's popover: room name + ceiling height, each
   // commit one history step through the pure room setters (no-ops return the
@@ -687,8 +724,8 @@ function Planner() {
         {canvasReady && (
           <Suspense fallback={null}>
             <PlannerCanvas
-              room={room}
-              onRoomChange={setRoom}
+              floor={floor}
+              onRoomChange={commitRoom}
               onRoomPreview={previewRoom}
               onRoomDragActiveChange={handleRoomDragActive}
               viewMode={viewMode}
@@ -740,7 +777,8 @@ function Planner() {
       </div>
       <StatusBar
         mode={viewMode}
-        room={room}
+        floor={floor}
+        selectedRoomName={selectedRoom?.name ?? null}
         cameraReadout={readoutStore}
         unit={unit}
         onUnitChange={setUnit}
@@ -761,9 +799,10 @@ function Planner() {
         />
       ) : (
         <Inspector
-          room={room}
+          floor={floor}
           unit={unit}
           mode={viewMode}
+          selectedRoom={selectedRoom}
           selectedItem={selectedItem}
           draftCornerCount={draft.corners.length}
           draftClosed={draft.closed}

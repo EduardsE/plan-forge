@@ -1,18 +1,47 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { createSampleRoom, type FurnitureItem } from "#/lib/model";
+import {
+  createSampleRoom,
+  type Floor,
+  type FurnitureItem,
+  type Room,
+} from "#/lib/model";
 import { Inspector } from "./inspector";
 
 const room = createSampleRoom();
+const floor: Floor = { rooms: [room] };
 const item = room.furniture.find((entry) => !entry.mount) as FurnitureItem;
 const mounted = room.furniture.find((entry) => entry.mount) ?? null;
+
+const kitchen: Room = {
+  id: "kitchen",
+  name: "Kitchen",
+  outline: [
+    { x: 6.4, y: 0 },
+    { x: 9.4, y: 0 },
+    { x: 9.4, y: 3 },
+    { x: 6.4, y: 3 },
+  ],
+  openings: [],
+  furniture: [
+    {
+      id: "stool-1",
+      catalogId: "desk-chair",
+      position: { x: 7, y: 1 },
+      rotation: 0,
+      footprint: { width: 0.64, depth: 0.64, height: 1.04 },
+    },
+  ],
+};
+const twoRoomFloor: Floor = { rooms: [room, kitchen] };
 
 function renderInspector(props: Partial<Parameters<typeof Inspector>[0]>) {
   return render(
     <Inspector
-      room={room}
+      floor={floor}
       unit="m"
       mode="3d"
+      selectedRoom={room}
       selectedItem={null}
       onResize={() => {}}
       onRotateTo={() => {}}
@@ -29,7 +58,7 @@ function renderInspector(props: Partial<Parameters<typeof Inspector>[0]>) {
 
 describe("Inspector", () => {
   it("shows the room overview when nothing is selected", () => {
-    renderInspector({});
+    renderInspector({ selectedRoom: null });
 
     expect(screen.getByText("ROOM")).toBeTruthy();
     expect(screen.getByTestId("inspector-room-name").textContent).toBe(
@@ -39,7 +68,7 @@ describe("Inspector", () => {
   });
 
   it("always shows the floor / perimeter / ceiling stats", () => {
-    renderInspector({});
+    renderInspector({ selectedRoom: null });
 
     expect(screen.getByText("33.28 m²")).toBeTruthy();
     expect(screen.getByText("23.2 m")).toBeTruthy();
@@ -47,9 +76,38 @@ describe("Inspector", () => {
   });
 
   it("shows the room's own ceiling height when set", () => {
-    renderInspector({ room: { ...room, wallHeight: 3.1 } });
+    renderInspector({
+      floor: { rooms: [{ ...room, wallHeight: 3.1 }] },
+      selectedRoom: null,
+    });
 
     expect(screen.getByText("3.10 m")).toBeTruthy();
+  });
+
+  it("shows floor totals, the room list, and the room count on a multi-room floor", () => {
+    renderInspector({ floor: twoRoomFloor, selectedRoom: null });
+
+    // "FLOOR" is both the section header and the footer's area label.
+    expect(screen.getAllByText("FLOOR")).toHaveLength(2);
+    // Overview lists every room with its own area…
+    expect(screen.getByText("Kitchen")).toBeTruthy();
+    expect(screen.getByText("9.00 m²")).toBeTruthy();
+    // …and the footer sums areas/perimeters and counts rooms.
+    expect(screen.getByText("42.28 m²")).toBeTruthy();
+    expect(screen.getByText("35.2 m")).toBeTruthy();
+    expect(screen.getByText("ROOMS")).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+  });
+
+  it("names the containing room on a multi-room selection", () => {
+    renderInspector({
+      floor: twoRoomFloor,
+      selectedRoom: kitchen,
+      selectedItem: kitchen.furniture[0],
+    });
+
+    expect(screen.getByText("SELECTION")).toBeTruthy();
+    expect(screen.getByText(/· Kitchen/)).toBeTruthy();
   });
 
   it("shows the selected item with editable transform fields", () => {

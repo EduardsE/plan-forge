@@ -40,24 +40,27 @@ import {
 import {
   addFurniture,
   addOpening,
+  type Bounds,
   type CatalogItem,
-  canHostStack,
+  type Floor,
   type FurnitureUpdate,
   flipDoorHinge,
+  floorBounds,
   isWallItem,
   moveOpening,
   type Opening,
   type OpeningKind,
-  outlineBounds,
   type Point,
   type Room,
   removeOpening,
+  roomById,
+  roomOfFurniture,
+  roomOfOpening,
   type Stack,
   updateFurniture,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
 import { resizeOpening } from "#/lib/opening-place";
-import { furnitureObstacle } from "#/lib/place";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -176,7 +179,8 @@ function lerpPose(from: CameraPose, to: CameraPose, k: number): CameraPose {
 }
 
 interface CameraRigProps {
-  room: Room;
+  /** Whole-floor bounding box the cameras frame (every room together). */
+  bounds: Bounds | null;
   planView: boolean;
   /**
    * Which camera actually renders — owned by the parent so the scene
@@ -194,7 +198,7 @@ interface CameraRigProps {
 }
 
 function CameraRig({
-  room,
+  bounds,
   planView,
   renderPlan,
   onRenderPlanChange: setRenderPlan,
@@ -214,7 +218,6 @@ function CameraRig({
   /** Orbit pose saved when leaving 3D, restored on the way back. */
   const savedOrbitRef = useRef<CameraPose | null>(null);
 
-  const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
   const center = useMemo(
     () =>
       bounds
@@ -554,11 +557,11 @@ function CameraRig({
 const CLICK_SLOP_PX = 4;
 
 export interface PlannerCanvasProps {
-  room: Room;
-  /** A discrete mutation — one undo step in the route's room history. */
-  onRoomChange: (room: Room) => void;
+  floor: Floor;
+  /** A discrete mutation of one room — one undo step in the floor history. */
+  onRoomChange: (roomId: string, room: Room) => void;
   /** A mid-drag state: applied live but not a history step of its own. */
-  onRoomPreview: (room: Room) => void;
+  onRoomPreview: (roomId: string, room: Room) => void;
   /** A room drag began/ended (however) — the route settles the previews
    * into one step on end, and stands its keyboard editing down meanwhile. */
   onRoomDragActiveChange: (active: boolean) => void;
@@ -595,7 +598,7 @@ export interface PlannerCanvasProps {
 }
 
 export function PlannerCanvas({
-  room,
+  floor,
   onRoomChange,
   onRoomPreview,
   onRoomDragActiveChange,
@@ -654,18 +657,8 @@ export function PlannerCanvas({
     },
     [onRoomDragActiveChange],
   );
-  // Placed items the placement ghost snaps flush against (a fresh drop isn't
-  // in the room yet, so every item is a neighbor — except stacked riders,
-  // which sit above the floor).
-  const placementObstacles = useMemo(
-    () => room.furniture.filter((item) => !item.stack).map(furnitureObstacle),
-    [room.furniture],
-  );
-  // Furniture a dragged rider-category catalog item may land on.
-  const placementHosts = useMemo(
-    () => room.furniture.filter(canHostStack),
-    [room.furniture],
-  );
+  // Whole-floor camera framing: every room's outline together.
+  const bounds = useMemo(() => floorBounds(floor), [floor]);
 
   const selectItem = useCallback(
     (id: string) => {
@@ -684,14 +677,25 @@ export function PlannerCanvas({
 
   const moveItem = useCallback(
     // Streams per pointermove — a preview, folded into one history step
-    // when the drag session releases the camera controls below.
-    (id: string, update: FurnitureUpdate) =>
-      onRoomPreview(updateFurniture(room, id, update)),
-    [room, onRoomPreview],
+    // when the drag session releases the camera controls below. The owning
+    // room is derived from the item id (selection is floor-wide).
+    (id: string, update: FurnitureUpdate) => {
+      const owner = roomOfFurniture(floor, id);
+      if (owner) onRoomPreview(owner.id, updateFurniture(owner, id, update));
+    },
+    [floor, onRoomPreview],
   );
 
   const insertOpening = useCallback(
-    (kind: OpeningKind, wallIndex: number, offset: number, width: number) => {
+    (
+      roomId: string,
+      kind: OpeningKind,
+      wallIndex: number,
+      offset: number,
+      width: number,
+    ) => {
+      const owner = roomById(floor, roomId);
+      if (!owner) return;
       const opening: Opening = {
         id: crypto.randomUUID(),
         kind,
@@ -700,38 +704,46 @@ export function PlannerCanvas({
         width,
       };
       if (kind === "door") opening.hinge = "start";
-      onRoomChange(addOpening(room, opening));
+      onRoomChange(owner.id, addOpening(owner, opening));
       // Selection follows the insert (like a drop), ready to drag/adjust.
       selectOpening(opening.id);
       onOpeningToolDone();
     },
-    [room, onRoomChange, selectOpening, onOpeningToolDone],
+    [floor, onRoomChange, selectOpening, onOpeningToolDone],
   );
   const moveOpeningTo = useCallback(
     // Streams per pointermove during an opening slide, like moveItem.
-    (id: string, offset: number) =>
-      onRoomPreview(moveOpening(room, id, offset)),
-    [room, onRoomPreview],
+    (id: string, offset: number) => {
+      const owner = roomOfOpening(floor, id);
+      if (owner) onRoomPreview(owner.id, moveOpening(owner, id, offset));
+    },
+    [floor, onRoomPreview],
   );
   const flipHinge = useCallback(
-    (id: string) => onRoomChange(flipDoorHinge(room, id)),
-    [room, onRoomChange],
+    (id: string) => {
+      const owner = roomOfOpening(floor, id);
+      if (owner) onRoomChange(owner.id, flipDoorHinge(owner, id));
+    },
+    [floor, onRoomChange],
   );
   const resizeOpeningTo = useCallback(
     // A committed width from the opening chip's field; `resizeOpening` owns
     // the clamping and returns the same room for no-ops (no empty undo step).
     (id: string, width: number) => {
-      const next = resizeOpening(room, id, width);
-      if (next !== room) onRoomChange(next);
+      const owner = roomOfOpening(floor, id);
+      if (!owner) return;
+      const next = resizeOpening(owner, id, width);
+      if (next !== owner) onRoomChange(owner.id, next);
     },
-    [room, onRoomChange],
+    [floor, onRoomChange],
   );
   const deleteOpening = useCallback(
     (id: string) => {
-      onRoomChange(removeOpening(room, id));
+      const owner = roomOfOpening(floor, id);
+      if (owner) onRoomChange(owner.id, removeOpening(owner, id));
       setSelectedOpeningId(null);
     },
-    [room, onRoomChange],
+    [floor, onRoomChange],
   );
 
   // A placement drag takes over the scene; a leftover selection chip would
@@ -748,11 +760,16 @@ export function PlannerCanvas({
   }, [openingTool, setSelectedId]);
 
   const placeDraggedItem = useCallback(
-    (center: Point, stack?: Stack) => {
+    // The ghost already resolved which room the drop targets (the one whose
+    // outline contains the snapped center).
+    (roomId: string, center: Point, stack?: Stack) => {
       if (!placingItem) return;
+      const owner = roomById(floor, roomId);
+      if (!owner) return;
       const id = crypto.randomUUID();
       onRoomChange(
-        addFurniture(room, {
+        owner.id,
+        addFurniture(owner, {
           id,
           catalogId: placingItem.id,
           position: center,
@@ -768,18 +785,21 @@ export function PlannerCanvas({
     },
     [
       placingItem,
-      room,
+      floor,
       onRoomChange,
       onPlacingEnd, // Selection follows the drop, same as duplicate.
       setSelectedId,
     ],
   );
   const placeMountedItem = useCallback(
-    (result: WallMountResult) => {
+    (roomId: string, result: WallMountResult) => {
       if (!placingItem) return;
+      const owner = roomById(floor, roomId);
+      if (!owner) return;
       const id = crypto.randomUUID();
       onRoomChange(
-        addFurniture(room, {
+        owner.id,
+        addFurniture(owner, {
           id,
           catalogId: placingItem.id,
           position: result.position,
@@ -791,7 +811,7 @@ export function PlannerCanvas({
       setSelectedId(id);
       onPlacingEnd();
     },
-    [placingItem, room, onRoomChange, onPlacingEnd, setSelectedId],
+    [placingItem, floor, onRoomChange, onPlacingEnd, setSelectedId],
   );
 
   return (
@@ -839,7 +859,7 @@ export function PlannerCanvas({
         }}
       >
         <CameraRig
-          room={room}
+          bounds={bounds}
           planView={planView}
           renderPlan={renderPlan}
           onRenderPlanChange={setRenderPlan}
@@ -869,6 +889,9 @@ export function PlannerCanvas({
             <DrawScene
               corners={draftCorners}
               closed={draftClosed}
+              // The draft edits the floor's first room until M3 adds
+              // draw-a-new-room; the rest render as a static backdrop.
+              contextRooms={floor.rooms.slice(1)}
               unit={unit}
               snapEnabled={snapEnabled}
               placing={drawTool === "wall" && !draftClosed}
@@ -883,7 +906,7 @@ export function PlannerCanvas({
             />
           ) : (
             <PlanScene
-              room={room}
+              rooms={floor.rooms}
               selectedId={selectedId}
               selectedOpeningId={selectedOpeningId}
               openingTool={openingTool}
@@ -903,7 +926,7 @@ export function PlannerCanvas({
         ) : (
           <>
             <RoomScene
-              room={room}
+              rooms={floor.rooms}
               selectedId={selectedId}
               unit={unit}
               snapEnabled={snapEnabled}
@@ -914,7 +937,7 @@ export function PlannerCanvas({
             {placingItem &&
               (isWallItem(placingItem.id) ? (
                 <WallMountGhost
-                  outline={room.outline}
+                  rooms={floor.rooms}
                   item={placingItem}
                   unit={unit}
                   snapEnabled={snapEnabled}
@@ -923,9 +946,7 @@ export function PlannerCanvas({
                 />
               ) : (
                 <PlacementGhost
-                  outline={room.outline}
-                  obstacles={placementObstacles}
-                  hosts={placementHosts}
+                  rooms={floor.rooms}
                   item={placingItem}
                   unit={unit}
                   snapEnabled={snapEnabled}

@@ -2,14 +2,16 @@ import { Grid2x2, Magnet } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import type { CameraReadoutStore } from "#/lib/camera";
 import { scaleDenominator } from "#/lib/camera";
-import { floorArea, type Room } from "#/lib/model";
+import { type Floor, totalFloorArea } from "#/lib/model";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
 
 interface StatusBarProps {
   mode: ViewMode;
-  room: Room;
+  floor: Floor;
+  /** Name of the selected item's containing room (floor-wide selection). */
+  selectedRoomName?: string | null;
   /** Live camera state for the right-edge readout. */
   cameraReadout: CameraReadoutStore;
   unit: Unit;
@@ -56,7 +58,8 @@ const SNAP_LABEL: Record<ViewMode, string> = {
  */
 export function StatusBar({
   mode,
-  room,
+  floor,
+  selectedRoomName = null,
   cameraReadout,
   unit,
   onUnitChange,
@@ -75,10 +78,22 @@ export function StatusBar({
     () => null,
   );
 
-  const area = room.outline.length >= 3 ? floorArea(room.outline) : null;
+  // Floor totals: every room's area summed (null until an outline exists).
+  const area = floor.rooms.some((room) => room.outline.length >= 3)
+    ? totalFloorArea(floor)
+    : null;
+  const multiRoom = floor.rooms.length > 1;
+  const objectCount = floor.rooms.reduce(
+    (sum, room) => sum + room.furniture.length,
+    0,
+  );
 
-  // Left side: area + room name at rest; the current activity takes over.
-  let context: string = room.name ?? "Untitled room";
+  // Left side at rest: the room name (or the room count on a multi-room
+  // floor, plus the selection's containing room); the current activity
+  // takes over.
+  let context: string = multiRoom
+    ? `${floor.rooms.length} rooms${selectedRoomName ? ` · ${selectedRoomName}` : ""}`
+    : (floor.rooms[0]?.name ?? "Untitled room");
   if (mode === "draw") {
     context = drawStatusText(draftCornerCount, draftClosed);
   } else if (mode === "2d" && openingTool) {
@@ -86,7 +101,7 @@ export function StatusBar({
   } else if (mode === "objects") {
     context = placingName
       ? `Placing “${placingName}” — drop to confirm`
-      : `${room.furniture.length} objects placed`;
+      : `${objectCount} objects placed`;
   }
 
   // Right-edge camera readout: orbit angles under the perspective camera,

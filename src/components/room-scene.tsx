@@ -35,6 +35,7 @@ import {
 import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
 import {
   canHostStack,
+  floorBounds,
   outlineBounds,
   stackSurfaceHeight,
   wallHeightOf,
@@ -636,8 +637,66 @@ function KeyLight({ center }: { center: [number, number, number] }) {
   );
 }
 
-export interface RoomSceneProps {
+/** Host top-surface height per stacked rider of one room's furniture. */
+function stackTopsOf(furniture: FurnitureItem[]): Map<string, number> {
+  const byId = new Map(furniture.map((item) => [item.id, item]));
+  const tops = new Map<string, number>();
+  for (const item of furniture) {
+    if (!item.stack) continue;
+    const host = byId.get(item.stack.hostId);
+    if (host) tops.set(item.id, stackSurfaceHeight(host));
+  }
+  return tops;
+}
+
+/** One room of the floor: platform, cutaway walls, furniture bodies. */
+function RoomLayer({
+  room,
+  selectedId,
+  onSelectItem,
+  onDragStart,
+}: {
   room: Room;
+  selectedId: string | null;
+  onSelectItem: (id: string) => void;
+  onDragStart: (
+    item: FurnitureItem,
+    floorPoint: Point,
+    screen: { x: number; y: number },
+  ) => void;
+}) {
+  // Overlap warnings and stack lifts are per-room concerns: furniture
+  // belongs to exactly one room (cross-room adjacency is M5's business).
+  const warnings = useMemo(
+    () => overlappingFurnitureIds(room.furniture),
+    [room.furniture],
+  );
+  const stackTops = useMemo(
+    () => stackTopsOf(room.furniture),
+    [room.furniture],
+  );
+  return (
+    <group>
+      <Platform outline={room.outline} />
+      <Walls room={room} />
+      {room.furniture.map((item) => (
+        <FurnitureMesh
+          key={item.id}
+          item={item}
+          stackTop={stackTops.get(item.id)}
+          selected={item.id === selectedId}
+          warning={warnings.has(item.id)}
+          onSelect={onSelectItem}
+          onDragStart={onDragStart}
+        />
+      ))}
+    </group>
+  );
+}
+
+export interface RoomSceneProps {
+  /** Every room of the floor, all drawn; "which room" is derived per item. */
+  rooms: Room[];
   selectedId: string | null;
   unit: Unit;
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
@@ -650,7 +709,7 @@ export interface RoomSceneProps {
 }
 
 export function RoomScene({
-  room,
+  rooms,
   selectedId,
   unit,
   snapEnabled,
@@ -658,45 +717,49 @@ export function RoomScene({
   onMoveItem,
   onMoveActiveChange,
 }: RoomSceneProps) {
-  const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
+  // Lights aim at the whole floor's center, so a two-room flat reads as one
+  // warmly lit model rather than per-room hotspots.
+  const bounds = useMemo(() => floorBounds({ rooms }), [rooms]);
   const center: [number, number, number] = bounds
     ? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
     : [0, 0, 0];
+  // Selection and drags are floor-wide; the owning room is derived from the
+  // item id, and a drag stays inside its item's room (M5 adds seams).
+  const selectedRoom = selectedId
+    ? rooms.find((room) =>
+        room.furniture.some((item) => item.id === selectedId),
+      )
+    : undefined;
   const selectedItem =
-    room.furniture.find((item) => item.id === selectedId) ?? null;
-  const warnings = useMemo(
-    () => overlappingFurnitureIds(room.furniture),
-    [room.furniture],
+    selectedRoom?.furniture.find((item) => item.id === selectedId) ?? null;
+  const selectedStackTop = useMemo(
+    () =>
+      selectedRoom
+        ? stackTopsOf(selectedRoom.furniture)
+        : new Map<string, number>(),
+    [selectedRoom],
   );
-  // Host top-surface height per stacked rider (riders render lifted onto it).
-  const stackTops = useMemo(() => {
-    const byId = new Map(room.furniture.map((item) => [item.id, item]));
-    const tops = new Map<string, number>();
-    for (const item of room.furniture) {
-      if (!item.stack) continue;
-      const host = byId.get(item.stack.hostId);
-      if (host) tops.set(item.id, stackSurfaceHeight(host));
-    }
-    return tops;
-  }, [room.furniture]);
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
-  // Every placed item except the one being dragged is a snap neighbor —
-  // stacked riders sit above the floor and don't block it.
+  const dragRoom = drag
+    ? rooms.find((room) => room.furniture.some((item) => item.id === drag.id))
+    : undefined;
+  // Every placed item of the drag's room except the dragged one is a snap
+  // neighbor — stacked riders sit above the floor and don't block it.
   const moveObstacles = useMemo(
     () =>
-      room.furniture
+      (dragRoom?.furniture ?? [])
         .filter((item) => item.id !== drag?.id && !item.stack)
         .map(furnitureObstacle),
-    [room.furniture, drag?.id],
+    [dragRoom?.furniture, drag?.id],
   );
   // Furniture a dragged rider may land on.
   const stackHosts = useMemo(
     () =>
-      room.furniture.filter(
+      (dragRoom?.furniture ?? []).filter(
         (item) => item.id !== drag?.id && canHostStack(item),
       ),
-    [room.furniture, drag?.id],
+    [dragRoom?.furniture, drag?.id],
   );
   return (
     <group>
@@ -708,16 +771,12 @@ export function RoomScene({
         color="#e8eef7"
         intensity={0.45}
       />
-      <Platform outline={room.outline} />
-      <Walls room={room} />
-      {room.furniture.map((item) => (
-        <FurnitureMesh
-          key={item.id}
-          item={item}
-          stackTop={stackTops.get(item.id)}
-          selected={item.id === selectedId}
-          warning={warnings.has(item.id)}
-          onSelect={onSelectItem}
+      {rooms.map((room) => (
+        <RoomLayer
+          key={room.id}
+          room={room}
+          selectedId={selectedId}
+          onSelectItem={onSelectItem}
           onDragStart={beginDrag}
         />
       ))}
@@ -736,10 +795,10 @@ export function RoomScene({
                     0.14,
                   selectedItem.position.y,
                 ]
-              : stackTops.has(selectedItem.id)
+              : selectedStackTop.has(selectedItem.id)
                 ? [
                     selectedItem.position.x,
-                    (stackTops.get(selectedItem.id) ?? 0) +
+                    (selectedStackTop.get(selectedItem.id) ?? 0) +
                       selectedItem.footprint.height +
                       0.14,
                     selectedItem.position.y,
@@ -748,9 +807,9 @@ export function RoomScene({
           }
         />
       )}
-      {drag && (
+      {drag && dragRoom && (
         <MoveDragSession
-          outline={room.outline}
+          outline={dragRoom.outline}
           obstacles={moveObstacles}
           hosts={stackHosts}
           drag={drag}

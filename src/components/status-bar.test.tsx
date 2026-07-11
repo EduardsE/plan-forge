@@ -1,14 +1,32 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createCameraReadoutStore } from "#/lib/camera";
-import { createSampleRoom } from "#/lib/model";
+import { createSampleFloor, createSampleRoom, type Floor } from "#/lib/model";
 import { StatusBar } from "./status-bar";
+
+const twoRoomFloor = (): Floor => ({
+  rooms: [
+    createSampleRoom(),
+    {
+      id: "kitchen",
+      name: "Kitchen",
+      outline: [
+        { x: 6.4, y: 0 },
+        { x: 9.4, y: 0 },
+        { x: 9.4, y: 3 },
+        { x: 6.4, y: 3 },
+      ],
+      openings: [],
+      furniture: [],
+    },
+  ],
+});
 
 function renderBar(props: Partial<Parameters<typeof StatusBar>[0]>) {
   return render(
     <StatusBar
       mode="3d"
-      room={createSampleRoom()}
+      floor={createSampleFloor()}
       cameraReadout={createCameraReadoutStore()}
       unit="m"
       onUnitChange={() => {}}
@@ -86,7 +104,7 @@ describe("StatusBar", () => {
     rerender(
       <StatusBar
         mode="objects"
-        room={createSampleRoom()}
+        floor={createSampleFloor()}
         cameraReadout={createCameraReadoutStore()}
         unit="m"
         onUnitChange={() => {}}
@@ -98,6 +116,20 @@ describe("StatusBar", () => {
       />,
     );
     expect(screen.getByText(/Placing “Sofa · 2-seat”/)).toBeTruthy();
+  });
+
+  it("shows floor totals and the containing room on a multi-room floor", () => {
+    renderBar({ floor: twoRoomFloor(), selectedRoomName: "Kitchen" });
+
+    // 33.28 + 9 summed across rooms.
+    expect(screen.getByText("42.28 m²")).toBeTruthy();
+    expect(screen.getByText("2 rooms · Kitchen")).toBeTruthy();
+  });
+
+  it("shows the room count alone with no selection", () => {
+    renderBar({ floor: twoRoomFloor() });
+
+    expect(screen.getByText("2 rooms")).toBeTruthy();
   });
 
   it("shows the live orbit readout without the zoom (that's the zoom pill's)", () => {

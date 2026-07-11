@@ -10,13 +10,14 @@ import {
   floorProjector,
   useControlsPause,
 } from "#/components/move-drag";
+import { PlanRoomLayer } from "#/components/plan-scene";
 import {
   type DraftSnap,
   rectangleOutline,
   snapDraftPoint,
   snapRectPoint,
 } from "#/lib/draw";
-import type { Point } from "#/lib/model";
+import type { Point, Room } from "#/lib/model";
 import {
   type CornerGuide,
   snapCornerDrag,
@@ -669,6 +670,11 @@ export interface DrawSceneProps {
   corners: Point[];
   /** Closed loop (editing an existing room) vs open chain (fresh drawing). */
   closed: boolean;
+  /**
+   * The floor's other rooms, drawn as a static plan backdrop (no picking)
+   * so the outline being edited keeps its neighbors in view.
+   */
+  contextRooms: Room[];
   unit: Unit;
   /** Snap toggle: off means free-hand corners (no axis lock / quantize). */
   snapEnabled: boolean;
@@ -693,6 +699,7 @@ export interface DrawSceneProps {
 export function DrawScene({
   corners,
   closed,
+  contextRooms,
   unit,
   snapEnabled,
   placing,
@@ -801,6 +808,11 @@ export function DrawScene({
 
   return (
     <group>
+      {/* The rest of the floor as a static backdrop (non-interactive: its
+			    meshes carry no handlers, so they never intercept corner clicks). */}
+      {contextRooms.map((room) => (
+        <PlanRoomLayer key={room.id} room={room} unit={unit} />
+      ))}
       {/* Invisible pick plane: the "grid plane" the task says to click. */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element. */}
       <mesh
