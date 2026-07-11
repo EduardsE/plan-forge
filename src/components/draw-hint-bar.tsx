@@ -1,6 +1,6 @@
 /**
  * Bottom-center helper hint bar for draw mode (mockup screen 1c): what a
- * click does plus the ⏎ / esc keys, in a dark navy pill. The rect tool swaps
+ * click does plus the ⏎ / esc keys, in a dark ink pill (the one dark element on the Paper canvas, like the tooltips). The rect tool swaps
  * the copy to its two-click gesture; otherwise editing an existing outline (a
  * closed draft) shows the reshaping gestures, and fresh drawing the placement
  * ones.
@@ -16,7 +16,7 @@ function Key({ children }: { children: string }) {
 
 function Hint({ children }: { children: React.ReactNode }) {
 	return (
-		<span className="whitespace-nowrap text-[13.5px] text-[#C7D4EE]">
+		<span className="whitespace-nowrap text-[13px] text-[#d7d7d2]">
 			{children}
 		</span>
 	);
@@ -32,7 +32,7 @@ export function DrawHintBar({
 	rect?: boolean;
 }) {
 	return (
-		<div className="-translate-x-1/2 absolute bottom-11 left-1/2 flex items-center gap-2.5 rounded-full bg-[rgba(13,22,48,0.88)] px-[18px] py-[9px] shadow-[0_14px_34px_rgba(13,22,48,0.3)]">
+		<div className="-translate-x-1/2 absolute bottom-11 left-1/2 flex items-center gap-2.5 rounded-[9px] bg-[var(--ink-900)] px-4 py-2 shadow-[0_14px_34px_rgba(15,27,61,0.25)]">
 			{rect ? (
 				<>
 					<Hint>Click two opposite corners</Hint>

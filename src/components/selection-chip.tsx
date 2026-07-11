@@ -13,7 +13,7 @@ const CHIP_CLEARANCE = 0.12;
 
 /** Shared by the opening chip (plan-openings.tsx). */
 export const ACTION_BUTTON_CLASS =
-	"pointer-events-auto flex size-[30px] items-center justify-center rounded-lg bg-white/[0.06] transition-colors hover:bg-white/[0.14]";
+	"pointer-events-auto flex size-[30px] items-center justify-center rounded-[7px] transition-colors hover:bg-[var(--well)]";
 
 interface SelectionChipProps {
 	item: FurnitureItem;

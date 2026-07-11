@@ -233,7 +233,7 @@ function ChipWidthField({
 	const cancelledRef = useRef(false);
 	useEffect(() => setText(value), [value]);
 	return (
-		<span className="flex items-center gap-1 whitespace-nowrap font-mono text-[#aebdf9] text-[12.5px]">
+		<span className="flex items-center gap-1 whitespace-nowrap font-mono text-[12.5px] text-[var(--ink-400)]">
 			W
 			<input
 				type="text"
@@ -259,7 +259,7 @@ function ChipWidthField({
 						event.currentTarget.blur();
 					}
 				}}
-				className="pointer-events-auto w-[52px] rounded-md bg-white/[0.06] px-1.5 py-0.5 text-center font-mono text-[#aebdf9] text-[12.5px] outline-none focus:bg-white/[0.12] focus:shadow-[0_0_0_1px_rgba(58,91,240,0.45)]"
+				className="pointer-events-auto w-[52px] rounded-[6px] bg-[var(--well)] px-1.5 py-0.5 text-center font-mono text-[12.5px] text-[var(--ink-900)] outline-none focus:shadow-[0_0_0_1px_var(--blue)]"
 			/>
 			{unit}
 		</span>
@@ -289,16 +289,20 @@ function OpeningChip({
 			style={{ pointerEvents: "none" }}
 		>
 			<div className="pointer-events-none flex -translate-x-1/2 -translate-y-full flex-col items-center">
-				<div className="mb-1.5 whitespace-nowrap rounded-full border border-[rgba(58,91,240,0.5)] bg-white/90 px-3 py-[5px] font-semibold text-[#3a5bf0] text-[12.5px] shadow-[0_8px_20px_rgba(15,27,61,0.12)]">
+				<div className="mb-1.5 flex items-center gap-[7px] whitespace-nowrap rounded-[9px] border border-[var(--control-border)] bg-white px-3 py-[5px] font-semibold text-[12.5px] text-[var(--ink-900)] shadow-[0_8px_20px_rgba(15,27,61,0.10)]">
+					<span
+						aria-hidden="true"
+						className="h-[7px] w-[7px] rounded-[2px] bg-[var(--blue)]"
+					/>
 					{hole.kind === "door" ? "Door" : "Window"}
 				</div>
-				<div className="flex items-center gap-1.5 rounded-[13px] border border-[rgba(58,91,240,0.25)] bg-[rgba(13,22,48,0.94)] px-3 py-[9px] shadow-[0_16px_40px_rgba(13,22,48,0.35),0_0_22px_rgba(58,91,240,0.18)]">
+				<div className="flex items-center gap-1.5 rounded-[10px] border border-[var(--control-border)] bg-white px-2.5 py-[7px] shadow-[0_14px_34px_rgba(15,27,61,0.14)]">
 					{hole.kind === "door" && (
 						<Tooltip label="Flip hinge side" side="bottom">
 							<button
 								type="button"
 								aria-label="Flip hinge side"
-								className={`${ACTION_BUTTON_CLASS} text-[#9fb2d8]`}
+								className={`${ACTION_BUTTON_CLASS} text-[var(--ink-600)]`}
 								onClick={() => onFlipHinge(hole.id)}
 							>
 								<ArrowLeftRight size={17} strokeWidth={1.6} />
@@ -309,13 +313,13 @@ function OpeningChip({
 						<button
 							type="button"
 							aria-label="Delete opening"
-							className={`${ACTION_BUTTON_CLASS} text-[#f2a6a6]`}
+							className={`${ACTION_BUTTON_CLASS} text-[var(--danger)]`}
 							onClick={() => onDelete(hole.id)}
 						>
 							<Trash2 size={17} strokeWidth={1.6} />
 						</button>
 					</Tooltip>
-					<div className="mx-[3px] h-[22px] w-px bg-white/[0.14]" />
+					<div className="mx-[3px] h-[22px] w-px bg-[var(--hairline)]" />
 					<ChipWidthField
 						width={hole.width}
 						unit={unit}
