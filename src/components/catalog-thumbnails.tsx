@@ -198,7 +198,7 @@ export function CatalogThumbnail({
 		<div
 			aria-hidden
 			className={cn(
-				"relative h-[92px] overflow-hidden rounded-[10px] bg-[#F1F5F9]",
+				"relative h-[92px] overflow-hidden rounded-[8px] bg-[var(--well)]",
 				className,
 			)}
 		>

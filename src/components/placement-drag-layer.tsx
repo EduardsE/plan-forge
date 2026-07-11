@@ -58,22 +58,21 @@ export function PlacementDragLayer({
 			style={{ left: position.x, top: position.y }}
 		>
 			<div
-				className="w-[158px] rounded-[14px] bg-white p-2.5"
+				className="w-[150px] rounded-[12px] bg-white p-[9px]"
 				style={{
 					// Card rides up-left of the cursor, like the mockup's arrow
 					// sitting at the card's bottom-right corner.
 					transform:
 						"translate(calc(-100% + 18px), calc(-100% + 14px)) rotate(-4deg)",
-					border: "1.5px solid rgba(34, 211, 238, 0.7)",
-					boxShadow:
-						"0 34px 70px rgba(15, 27, 61, 0.30), 0 0 26px rgba(34, 211, 238, 0.25)",
+					border: "1px solid rgba(58, 91, 240, 0.55)",
+					boxShadow: "var(--shadow-drag)",
 				}}
 			>
-				<CatalogThumbnail catalogId={item.id} />
-				<div className="mt-[9px] font-semibold text-[13.5px] text-[#22304F]">
+				<CatalogThumbnail catalogId={item.id} className="h-[78px]" />
+				<div className="mt-2 font-semibold text-[13px] text-[var(--ink-900)]">
 					{item.name}
 				</div>
-				<div className="font-mono text-[11px] text-[#8A97B1]">
+				<div className="mt-px font-mono text-[11px] text-[var(--ink-400)]">
 					{formatSizeCm(item.footprint)}
 				</div>
 			</div>

@@ -12,9 +12,10 @@ import {
 import { cn } from "#/lib/utils";
 
 /**
- * The objects panel (mockup screen 1d): searchable, category-filtered
- * furniture catalog whose cards drag out onto the canvas. Every color,
- * radius and shadow is lifted from the mockup's panel markup.
+ * The objects library (screen 2d): a 306px column docked between the rail
+ * and the canvas — searchable, category-filtered furniture catalog whose
+ * cards drag out onto the floor. Paper chrome: panel surface, hairline
+ * seams, white cards, solid-blue active chip.
  *
  * Dragging is pointer-based, not HTML5 drag-and-drop: pointerdown on a card
  * starts a placement session owned by the route (the card flips to its
@@ -29,7 +30,7 @@ export interface ObjectsPanelProps {
 	onClose: () => void;
 }
 
-/** Chip order, straight from the mockup's two chip rows. */
+/** Chip order, straight from the mockup's chip rows. */
 const CHIP_ORDER: CatalogCategory[] = [
 	"seating",
 	"tables",
@@ -53,43 +54,47 @@ export function ObjectsPanel({
 
 	return (
 		<div
-			className="absolute inset-y-6 left-6 flex w-[340px] animate-panel-in flex-col gap-4 rounded-[20px] p-6"
-			style={{
-				background: "rgba(255, 255, 255, 0.84)",
-				backdropFilter: "blur(20px)",
-				border: "1px solid rgba(15, 27, 61, 0.08)",
-				boxShadow: "0 30px 80px rgba(15, 27, 61, 0.16)",
-			}}
+			className="flex min-h-0 flex-col border-[var(--hairline)] border-r bg-[var(--panel)]"
+			style={{ gridArea: "library" }}
 		>
-			<div className="flex items-center justify-between">
-				<span className="font-bold text-[21px] text-[#0F1B3D]">Objects</span>
+			<div className="flex items-center justify-between px-[18px] pt-4 pb-3">
+				<div className="flex items-center gap-[9px]">
+					<span className="font-bold text-[17px] text-[var(--ink-900)]">
+						Objects
+					</span>
+					<span className="rounded-[6px] bg-[#edede9] px-2 py-[2px] font-mono text-[11px] text-[var(--ink-500)]">
+						{CATALOG.length}
+					</span>
+				</div>
 				<button
 					type="button"
 					aria-label="Close objects panel"
 					onClick={onClose}
-					className="cursor-pointer text-[#6B7A99]"
+					className="flex h-[26px] w-[26px] cursor-pointer items-center justify-center rounded-[7px] border border-[var(--control-border)] text-[var(--ink-500)] hover:bg-[var(--well)]"
 				>
-					<X width={20} height={20} strokeWidth={1.7} />
+					<X width={14} height={14} strokeWidth={1.7} />
 				</button>
 			</div>
 
-			<label className="flex items-center gap-[9px] rounded-xl bg-[#EEF2F7] px-3.5 py-[11px]">
-				<Search
-					width={17}
-					height={17}
-					strokeWidth={1.7}
-					className="shrink-0 text-[#8A97B1]"
-				/>
-				<input
-					type="search"
-					value={query}
-					onChange={(event) => setQuery(event.target.value)}
-					placeholder={`Search ${CATALOG.length} items`}
-					className="w-full bg-transparent text-[13.5px] text-[#0F1B3D] outline-none placeholder:text-[#8A97B1]"
-				/>
-			</label>
+			<div className="px-[18px] pb-3">
+				<label className="flex items-center gap-[9px] rounded-[9px] border border-[var(--control-border)] bg-[var(--well)] px-3 py-[9px]">
+					<Search
+						width={16}
+						height={16}
+						strokeWidth={1.7}
+						className="shrink-0 text-[var(--ink-400)]"
+					/>
+					<input
+						type="search"
+						value={query}
+						onChange={(event) => setQuery(event.target.value)}
+						placeholder={`Search ${CATALOG.length} items`}
+						className="w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
+					/>
+				</label>
+			</div>
 
-			<div className="flex flex-wrap gap-[7px]">
+			<div className="flex flex-wrap gap-1.5 px-[18px] pb-3.5">
 				{CHIP_ORDER.map((chip) => {
 					const active = category === chip;
 					return (
@@ -99,16 +104,11 @@ export function ObjectsPanel({
 							aria-pressed={active}
 							onClick={() => setCategory(active ? null : chip)}
 							className={cn(
-								"cursor-pointer rounded-full px-[13px] py-1.5 text-[12.5px]",
+								"cursor-pointer rounded-[7px] px-3 py-[5px] text-[12px]",
 								active
-									? "font-semibold text-white shadow-[0_3px_12px_rgba(20,184,166,0.4)]"
-									: "border border-[rgba(15,27,61,0.10)] bg-white text-[#33415C]",
+									? "bg-[var(--blue)] font-semibold text-white"
+									: "border border-[var(--control-border)] bg-[var(--frame)] text-[var(--ink-600)] hover:bg-[var(--well)]",
 							)}
-							style={
-								active
-									? { background: "linear-gradient(135deg, #22D3EE, #14B8A6)" }
-									: undefined
-							}
 						>
 							{CATALOG_CATEGORY_LABELS[chip]}
 						</button>
@@ -116,22 +116,22 @@ export function ObjectsPanel({
 				})}
 			</div>
 
-			<div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-3 overflow-y-auto">
+			<div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-3 overflow-y-auto px-[18px]">
 				{items.map((item) =>
 					item.id === placingId ? (
 						<div
 							key={item.id}
-							className="flex flex-col rounded-[14px] border-2 border-dashed border-[rgba(34,211,238,0.55)] bg-[rgba(34,211,238,0.05)] p-[9px]"
+							className="flex flex-col rounded-[12px] border-[1.5px] border-dashed border-[rgba(58,91,240,0.55)] bg-[rgba(58,91,240,0.05)] p-2.5"
 						>
-							<div className="flex h-[92px] items-center justify-center">
-								<span className="font-mono text-[11.5px] text-[#0F766E]">
+							<div className="flex h-[82px] items-center justify-center">
+								<span className="font-mono text-[11px] text-[var(--blue)]">
 									placing…
 								</span>
 							</div>
-							<div className="mt-[9px] font-semibold text-[13.5px] text-[#8A97B1]">
+							<div className="mt-[9px] font-semibold text-[13px] text-[var(--ink-400)]">
 								{item.name}
 							</div>
-							<div className="font-mono text-[11px] text-[#B6C2D9]">
+							<div className="mt-px font-mono text-[11px] text-[var(--ink-300)]">
 								{formatSizeCm(item.footprint)}
 							</div>
 						</div>
@@ -146,26 +146,27 @@ export function ObjectsPanel({
 								event.preventDefault();
 								onStartPlacing(item, { x: event.clientX, y: event.clientY });
 							}}
-							className="cursor-grab rounded-[14px] border border-[rgba(15,27,61,0.06)] bg-white p-2.5 text-left shadow-[0_6px_18px_rgba(15,27,61,0.06)]"
+							className="cursor-grab rounded-[12px] border border-[var(--control-border)] bg-[var(--frame)] p-2.5 text-left"
+							style={{ boxShadow: "var(--shadow-card)" }}
 						>
-							<CatalogThumbnail catalogId={item.id} />
-							<div className="mt-[9px] font-semibold text-[13.5px] text-[#22304F]">
+							<CatalogThumbnail catalogId={item.id} className="h-[82px]" />
+							<div className="mt-[9px] font-semibold text-[13px] text-[var(--ink-900)]">
 								{item.name}
 							</div>
-							<div className="font-mono text-[11px] text-[#8A97B1]">
+							<div className="mt-px font-mono text-[11px] text-[var(--ink-400)]">
 								{formatSizeCm(item.footprint)}
 							</div>
 						</button>
 					),
 				)}
 				{items.length === 0 && (
-					<div className="col-span-2 py-8 text-center text-[13px] text-[#8A97B1]">
+					<div className="col-span-2 py-8 text-center text-[13px] text-[var(--ink-400)]">
 						No items match your search.
 					</div>
 				)}
 			</div>
 
-			<div className="rounded-xl border border-[rgba(34,211,238,0.3)] bg-[rgba(34,211,238,0.08)] px-3.5 py-[11px] text-[12.5px] text-[#0F766E] leading-[1.45]">
+			<div className="mt-2 border-[var(--hairline)] border-t px-[18px] py-3.5 text-[12px] text-[var(--ink-500)] leading-[1.45]">
 				Drag an item onto the floor — it snaps to walls and other objects.
 			</div>
 		</div>

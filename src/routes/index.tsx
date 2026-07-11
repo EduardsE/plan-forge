@@ -451,19 +451,29 @@ function Planner() {
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [historyActive, undoRoom, redoRoom]);
 
-	// Screen 2d: the objects library docks as its own column (R4); until then
-	// the panel still overlays the canvas cell.
+	// Screen 2d: in objects mode the library docks as its own column between
+	// rail and canvas, and the inspector yields the right edge to give the
+	// canvas room (the header spans across instead).
 	const objectsOpen = viewMode === "objects";
 
 	return (
 		<div
 			className="grid h-screen w-screen overflow-hidden bg-[var(--frame)]"
-			style={{
-				gridTemplateColumns: "64px 1fr 320px",
-				gridTemplateRows: "56px 1fr 38px",
-				gridTemplateAreas:
-					"'rail header inspector' 'rail canvas inspector' 'rail status inspector'",
-			}}
+			style={
+				objectsOpen
+					? {
+							gridTemplateColumns: "64px 306px 1fr",
+							gridTemplateRows: "56px 1fr 38px",
+							gridTemplateAreas:
+								"'rail header header' 'rail library canvas' 'rail library status'",
+						}
+					: {
+							gridTemplateColumns: "64px 1fr 320px",
+							gridTemplateRows: "56px 1fr 38px",
+							gridTemplateAreas:
+								"'rail header inspector' 'rail canvas inspector' 'rail status inspector'",
+						}
+			}
 		>
 			<NavRail activeMode={viewMode} onSelectMode={setViewMode} />
 			<WorkspaceHeader
@@ -527,13 +537,6 @@ function Planner() {
 				{viewMode === "2d" && (
 					<OpeningToolStack tool={openingTool} onToolChange={setOpeningTool} />
 				)}
-				{objectsOpen && (
-					<ObjectsPanel
-						placingId={placing?.item.id ?? null}
-						onStartPlacing={startPlacing}
-						onClose={() => setViewMode("3d")}
-					/>
-				)}
 				<ZoomPill
 					cameraReadout={readoutStore}
 					onZoomIn={() => cameraApiRef.current?.zoomIn()}
@@ -563,21 +566,29 @@ function Planner() {
 				placingName={placing?.item.name ?? null}
 				openingTool={openingTool}
 			/>
-			<Inspector
-				room={room}
-				unit={unit}
-				mode={viewMode}
-				selectedItem={selectedItem}
-				draftCornerCount={draft.corners.length}
-				draftClosed={draft.closed}
-				onResize={resizeSelected}
-				onRotateTo={rotateSelectedTo}
-				onElevate={elevateSelected}
-				onMoveTo={moveSelectedTo}
-				onRotate90={rotateSelected90}
-				onClone={cloneSelected}
-				onDelete={deleteSelected}
-			/>
+			{objectsOpen ? (
+				<ObjectsPanel
+					placingId={placing?.item.id ?? null}
+					onStartPlacing={startPlacing}
+					onClose={() => setViewMode("3d")}
+				/>
+			) : (
+				<Inspector
+					room={room}
+					unit={unit}
+					mode={viewMode}
+					selectedItem={selectedItem}
+					draftCornerCount={draft.corners.length}
+					draftClosed={draft.closed}
+					onResize={resizeSelected}
+					onRotateTo={rotateSelectedTo}
+					onElevate={elevateSelected}
+					onMoveTo={moveSelectedTo}
+					onRotate90={rotateSelected90}
+					onClone={cloneSelected}
+					onDelete={deleteSelected}
+				/>
+			)}
 		</div>
 	);
 }
