@@ -25,6 +25,7 @@ import { DrawScene } from "#/components/draw-scene";
 import type { DrawTool } from "#/components/draw-tool-stack";
 import { PlacementGhost } from "#/components/placement-ghost";
 import { PlanScene } from "#/components/plan-scene";
+import { PropertiesCard } from "#/components/properties-card";
 import { RoomScene } from "#/components/room-scene";
 import { WallMountGhost } from "#/components/wall-mount-ghost";
 import {
@@ -43,6 +44,7 @@ import {
 	addOpening,
 	type CatalogItem,
 	duplicateFurniture,
+	type Footprint,
 	type FurnitureUpdate,
 	flipDoorHinge,
 	isWallItem,
@@ -55,9 +57,13 @@ import {
 	removeFurniture,
 	removeOpening,
 	rotateFurniture,
+	setFurnitureFootprint,
+	setFurnitureRotation,
+	setMountElevation,
 	updateFurniture,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
+import { resizeOpening } from "#/lib/opening-place";
 import { furnitureObstacle } from "#/lib/place";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
@@ -656,6 +662,10 @@ export function PlannerCanvas({
 		[room.furniture],
 	);
 
+	// The docked properties card needs the selected item itself, not just the id.
+	const selectedItem =
+		room.furniture.find((item) => item.id === selectedId) ?? null;
+
 	const selectItem = useCallback((id: string) => {
 		setSelectedId(id);
 		setSelectedOpeningId(null);
@@ -680,6 +690,30 @@ export function PlannerCanvas({
 		(id: string, update: FurnitureUpdate) =>
 			onRoomPreview(updateFurniture(room, id, update)),
 		[room, onRoomPreview],
+	);
+	// Properties-card commits: absolute size / angle / elevation setters, one
+	// history step each. The setters return the room unchanged (same reference)
+	// for no-ops, which must not become empty undo steps.
+	const resizeItem = useCallback(
+		(id: string, footprint: Footprint) => {
+			const next = setFurnitureFootprint(room, id, footprint);
+			if (next !== room) onRoomChange(containRoomFurniture(next, id));
+		},
+		[room, onRoomChange],
+	);
+	const rotateItemTo = useCallback(
+		(id: string, deg: number) => {
+			const next = setFurnitureRotation(room, id, deg);
+			if (next !== room) onRoomChange(containRoomFurniture(next, id));
+		},
+		[room, onRoomChange],
+	);
+	const elevateItem = useCallback(
+		(id: string, elevation: number) => {
+			const next = setMountElevation(room, id, elevation);
+			if (next !== room) onRoomChange(next);
+		},
+		[room, onRoomChange],
 	);
 	const duplicateItem = useCallback(
 		(id: string) => {
@@ -724,6 +758,15 @@ export function PlannerCanvas({
 	);
 	const flipHinge = useCallback(
 		(id: string) => onRoomChange(flipDoorHinge(room, id)),
+		[room, onRoomChange],
+	);
+	const resizeOpeningTo = useCallback(
+		// A committed width from the opening chip's field; `resizeOpening` owns
+		// the clamping and returns the same room for no-ops (no empty undo step).
+		(id: string, width: number) => {
+			const next = resizeOpening(room, id, width);
+			if (next !== room) onRoomChange(next);
+		},
 		[room, onRoomChange],
 	);
 	const deleteOpening = useCallback(
@@ -891,6 +934,7 @@ export function PlannerCanvas({
 							onMoveOpening={moveOpeningTo}
 							onFlipDoorHinge={flipHinge}
 							onDeleteOpening={deleteOpening}
+							onResizeOpening={resizeOpeningTo}
 						/>
 					)
 				) : (
@@ -931,6 +975,15 @@ export function PlannerCanvas({
 					</>
 				)}
 			</Canvas>
+			{selectedItem && !drawing && (
+				<PropertiesCard
+					item={selectedItem}
+					unit={unit}
+					onResize={(footprint) => resizeItem(selectedItem.id, footprint)}
+					onRotateTo={(deg) => rotateItemTo(selectedItem.id, deg)}
+					onElevate={(elevation) => elevateItem(selectedItem.id, elevation)}
+				/>
+			)}
 		</div>
 	);
 }

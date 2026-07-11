@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createSampleRoom } from "#/lib/model";
 import {
+	MIN_OPENING_WIDTH,
 	offsetAlongWall,
 	openingCornerGuides,
+	resizeOpening,
 	slideOpening,
 } from "#/lib/opening-place";
 import { buildWallSolids } from "#/lib/room-scene";
@@ -85,5 +87,55 @@ describe("openingCornerGuides", () => {
 		const guides = openingCornerGuides(right, 3.6, 0.95, 0.18);
 		expect(guides[0].from).toEqual({ x: 6.4 - 0.18, y: 0 });
 		expect(guides[0].to).toEqual({ x: 6.4 - 0.18, y: 3.6 });
+	});
+});
+
+describe("resizeOpening", () => {
+	// Sample fixtures: window-1 on the top wall (offset 3.5, width 2.1, wall
+	// 6.4 m), door-1 on the right wall (offset 3.6, width 0.95, wall 5.2 m).
+	it("widens about the center when the wall has room", () => {
+		const room = resizeOpening(createSampleRoom(), "door-1", 1.55);
+		const door = room.openings.find((o) => o.id === "door-1");
+		expect(door?.width).toBeCloseTo(1.55);
+		// Center stays at 3.6 + 0.95 / 2 = 4.075.
+		expect(door?.offset).toBeCloseTo(4.075 - 1.55 / 2);
+	});
+
+	it("clamps the width to the wall and slides flush to the corners", () => {
+		const room = resizeOpening(createSampleRoom(), "door-1", 12);
+		const door = room.openings.find((o) => o.id === "door-1");
+		expect(door?.width).toBeCloseTo(5.2);
+		expect(door?.offset).toBeCloseTo(0);
+	});
+
+	it("clamps against a neighboring opening on the same wall", () => {
+		let room = createSampleRoom();
+		// A second window right of the first: gap [0, 3.5] holds the resize
+		// target once the first window moves there.
+		room = {
+			...room,
+			openings: [
+				...room.openings,
+				{ id: "window-2", kind: "window", wallIndex: 0, offset: 1, width: 1 },
+			],
+		};
+		const next = resizeOpening(room, "window-1", 6);
+		const win = next.openings.find((o) => o.id === "window-1");
+		// Free gap is [2, 6.4] (after window-2's far edge), so 4.4 max.
+		expect(win?.width).toBeCloseTo(4.4);
+		expect(win?.offset).toBeCloseTo(2);
+	});
+
+	it("enforces the minimum width", () => {
+		const room = resizeOpening(createSampleRoom(), "door-1", 0.05);
+		expect(room.openings.find((o) => o.id === "door-1")?.width).toBeCloseTo(
+			MIN_OPENING_WIDTH,
+		);
+	});
+
+	it("returns the room unchanged for unknown ids and no-op widths", () => {
+		const room = createSampleRoom();
+		expect(resizeOpening(room, "nope", 1)).toBe(room);
+		expect(resizeOpening(room, "door-1", 0.95)).toBe(room);
 	});
 });

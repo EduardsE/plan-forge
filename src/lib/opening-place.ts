@@ -1,4 +1,4 @@
-import type { OpeningKind, Point } from "#/lib/model";
+import { type OpeningKind, type Point, type Room, wallsOf } from "#/lib/model";
 import type { PlacementGuide } from "#/lib/place";
 import { PLACEMENT_GRID } from "#/lib/place";
 import { wallPoint } from "#/lib/plan-scene";
@@ -93,6 +93,55 @@ export function slideOpening(
 		}
 	}
 	return best;
+}
+
+/** Narrowest width the chip's field accepts for a door or window, meters. */
+export const MIN_OPENING_WIDTH = 0.3;
+
+/**
+ * Set an opening's width from the chip's field, keeping its center where it
+ * is as far as the wall allows. The width clamps into the free stretch the
+ * opening currently occupies (its wall minus the other openings there), and
+ * the near-edge offset re-clamps so nothing overlaps. Unknown ids and
+ * non-finite widths return the room unchanged.
+ */
+export function resizeOpening(room: Room, id: string, width: number): Room {
+	const opening = room.openings.find((entry) => entry.id === id);
+	if (!opening || !Number.isFinite(width)) return room;
+	const wall = wallsOf(room.outline).find((w) => w.index === opening.wallIndex);
+	if (!wall) return room;
+	const wallLength = Math.hypot(
+		wall.end.x - wall.start.x,
+		wall.end.y - wall.start.y,
+	);
+	// The free gap around the opening: from the nearest neighbor edge (or wall
+	// corner) on each side.
+	let gapStart = 0;
+	let gapEnd = wallLength;
+	for (const other of room.openings) {
+		if (other.id === id || other.wallIndex !== opening.wallIndex) continue;
+		const end = other.offset + other.width;
+		if (end <= opening.offset + EPS) gapStart = Math.max(gapStart, end);
+		if (other.offset + EPS >= opening.offset + opening.width) {
+			gapEnd = Math.min(gapEnd, other.offset);
+		}
+	}
+	const clampedWidth = Math.min(
+		Math.max(width, MIN_OPENING_WIDTH),
+		gapEnd - gapStart,
+	);
+	const center = opening.offset + opening.width / 2;
+	const offset = Math.min(
+		Math.max(center - clampedWidth / 2, gapStart),
+		gapEnd - clampedWidth,
+	);
+	if (clampedWidth === opening.width && offset === opening.offset) return room;
+	return {
+		...room,
+		openings: room.openings.map((entry) =>
+			entry.id === id ? { ...entry, offset, width: clampedWidth } : entry,
+		),
+	};
 }
 
 /**

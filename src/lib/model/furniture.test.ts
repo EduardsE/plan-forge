@@ -6,8 +6,12 @@ import {
 	footprintCorners,
 	formatFootprintCm,
 	furnitureDisplayName,
+	MIN_FOOTPRINT_SIZE,
 	removeFurniture,
 	rotateFurniture,
+	setFurnitureFootprint,
+	setFurnitureRotation,
+	setMountElevation,
 	updateFurniture,
 } from "./furniture";
 import { createSampleRoom } from "./sample-room";
@@ -139,6 +143,159 @@ describe("updateFurniture", () => {
 		expect(
 			updateFurniture(room, "nope", { position: { x: 1, y: 1 } }).furniture,
 		).toEqual(room.furniture);
+	});
+});
+
+describe("setFurnitureFootprint", () => {
+	it("patches the footprint about the center (position untouched)", () => {
+		const room = createSampleRoom();
+		const next = setFurnitureFootprint(room, "desk-1", {
+			width: 1.8,
+			depth: 0.85,
+			height: 1.12,
+		});
+		const desk = next.furniture.find((item) => item.id === "desk-1");
+		expect(desk?.footprint).toEqual({ width: 1.8, depth: 0.85, height: 1.12 });
+		expect(desk?.position).toEqual({ x: 4.7, y: 0.73 });
+		expect(
+			room.furniture.find((item) => item.id === "desk-1")?.footprint.width,
+		).toBe(2.2);
+	});
+
+	it("clamps an edited dimension to the minimum size", () => {
+		const room = createSampleRoom();
+		const next = setFurnitureFootprint(room, "plant-1", {
+			width: 0.02,
+			depth: 0.45,
+			height: 1.2,
+		});
+		expect(
+			next.furniture.find((item) => item.id === "plant-1")?.footprint.width,
+		).toBe(MIN_FOOTPRINT_SIZE);
+	});
+
+	it("leaves an untouched sub-minimum dimension alone (a rug's height)", () => {
+		const room = createSampleRoom();
+		const next = setFurnitureFootprint(room, "rug-1", {
+			width: 3.2,
+			depth: 2,
+			height: 0.01,
+		});
+		const rug = next.furniture.find((item) => item.id === "rug-1");
+		expect(rug?.footprint).toEqual({ width: 3.2, depth: 2, height: 0.01 });
+	});
+
+	it("re-derives a mounted item's transform and keeps it on its wall", () => {
+		const room = createSampleRoom();
+		const source = room.furniture.find((item) => item.mount);
+		if (!source?.mount) throw new Error("no mounted fixture");
+		const footprint = { width: 1.4, depth: 0.06, height: 0.7 };
+		const next = setFurnitureFootprint(room, source.id, footprint);
+		const frame = wallFrames(room.outline).find(
+			(f) => f.index === source.mount?.wallIndex,
+		);
+		if (!frame) throw new Error("host wall missing");
+		const item = next.furniture.find((entry) => entry.id === source.id);
+		expect(item?.footprint).toEqual(footprint);
+		expect(item?.mount?.offset).toBe(source.mount.offset);
+		const expected = deriveMountTransform(
+			frame,
+			source.mount.offset,
+			footprint,
+		);
+		expect(item?.position.x).toBeCloseTo(expected.position.x);
+		expect(item?.position.y).toBeCloseTo(expected.position.y);
+		expect(item?.rotation).toBeCloseTo(expected.rotation);
+	});
+
+	it("re-clamps a mounted item's width and offset to its host wall", () => {
+		const room = createSampleRoom();
+		const source = room.furniture.find((item) => item.mount);
+		if (!source?.mount) throw new Error("no mounted fixture");
+		// The left wall is 5.2 m; a 6 m frame clamps to it, offset slides to 0.
+		const next = setFurnitureFootprint(room, source.id, {
+			...source.footprint,
+			width: 6,
+		});
+		const item = next.furniture.find((entry) => entry.id === source.id);
+		expect(item?.footprint.width).toBe(5.2);
+		expect(item?.mount?.offset).toBe(0);
+	});
+
+	it("lifts a mounted item's elevation clear of the floor on a tall resize", () => {
+		const room = createSampleRoom();
+		const source = room.furniture.find((item) => item.mount);
+		if (!source?.mount) throw new Error("no mounted fixture");
+		const next = setFurnitureFootprint(room, source.id, {
+			...source.footprint,
+			height: 3.4,
+		});
+		expect(
+			next.furniture.find((entry) => entry.id === source.id)?.mount?.elevation,
+		).toBe(1.7);
+	});
+
+	it("returns the room unchanged for an unknown id", () => {
+		const room = createSampleRoom();
+		expect(
+			setFurnitureFootprint(room, "nope", { width: 1, depth: 1, height: 1 }),
+		).toBe(room);
+	});
+});
+
+describe("setFurnitureRotation", () => {
+	it("sets an absolute normalized angle on the target item only", () => {
+		const room = createSampleRoom();
+		const next = setFurnitureRotation(room, "desk-1", -90);
+		expect(next.furniture.find((item) => item.id === "desk-1")?.rotation).toBe(
+			270,
+		);
+		expect(
+			next.furniture.find((item) => item.id === "credenza-1")?.rotation,
+		).toBe(90);
+	});
+
+	it("returns the room unchanged for a no-op angle", () => {
+		const room = createSampleRoom();
+		expect(setFurnitureRotation(room, "desk-1", 360)).toBe(room);
+	});
+
+	it("refuses mounted items (rotation is derived from the wall)", () => {
+		const room = createSampleRoom();
+		expect(setFurnitureRotation(room, "picture-frame-1", 45)).toBe(room);
+	});
+
+	it("returns the room unchanged for an unknown id or non-finite angle", () => {
+		const room = createSampleRoom();
+		expect(setFurnitureRotation(room, "nope", 45)).toBe(room);
+		expect(setFurnitureRotation(room, "desk-1", Number.NaN)).toBe(room);
+	});
+});
+
+describe("setMountElevation", () => {
+	it("sets the mount's center elevation", () => {
+		const room = createSampleRoom();
+		const next = setMountElevation(room, "picture-frame-1", 1.8);
+		expect(
+			next.furniture.find((item) => item.id === "picture-frame-1")?.mount
+				?.elevation,
+		).toBe(1.8);
+	});
+
+	it("clamps so the body stays above the floor", () => {
+		const room = createSampleRoom();
+		// The frame is 0.7 m tall, so its center can't go below 0.35.
+		const next = setMountElevation(room, "picture-frame-1", 0.1);
+		expect(
+			next.furniture.find((item) => item.id === "picture-frame-1")?.mount
+				?.elevation,
+		).toBe(0.35);
+	});
+
+	it("returns the room unchanged for floor items and no-op values", () => {
+		const room = createSampleRoom();
+		expect(setMountElevation(room, "desk-1", 1.2)).toBe(room);
+		expect(setMountElevation(room, "picture-frame-1", 1.5)).toBe(room);
 	});
 });
 

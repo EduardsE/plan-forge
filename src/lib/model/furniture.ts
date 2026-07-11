@@ -104,6 +104,119 @@ export function updateFurniture(
 	};
 }
 
+/** Smallest editable footprint dimension (meters) — the properties card's floor. */
+export const MIN_FOOTPRINT_SIZE = 0.1;
+
+/** Clamp an edited dimension to the minimum; an untouched one passes through
+ * as-is, so e.g. a rug's 0.01 m height survives a width edit. */
+function clampDimension(value: number, current: number): number {
+	if (value === current) return value;
+	return Math.max(value, MIN_FOOTPRINT_SIZE);
+}
+
+/**
+ * Replace an item's footprint (the properties card's size fields). `position`
+ * is the footprint center, so a floor item scales about its center for free.
+ * A wall-mounted item stays flush on its host wall: width clamps to the wall,
+ * the near-edge offset re-clamps so the item still fits, position/rotation
+ * re-derive from the mount, and the elevation lifts if the new height would
+ * dip the body below the floor. Unknown ids return the room unchanged.
+ */
+export function setFurnitureFootprint(
+	room: Room,
+	id: string,
+	footprint: Footprint,
+): Room {
+	const item = room.furniture.find((entry) => entry.id === id);
+	if (!item) return room;
+	let next: FurnitureItem = {
+		...item,
+		footprint: {
+			width: clampDimension(footprint.width, item.footprint.width),
+			depth: clampDimension(footprint.depth, item.footprint.depth),
+			height: clampDimension(footprint.height, item.footprint.height),
+		},
+	};
+	if (item.mount) {
+		const frame = wallFrames(room.outline).find(
+			(f) => f.index === item.mount?.wallIndex,
+		);
+		if (frame) {
+			const resized = {
+				...next.footprint,
+				width: Math.min(next.footprint.width, frame.length),
+			};
+			const offset = Math.min(
+				Math.max(item.mount.offset, 0),
+				frame.length - resized.width,
+			);
+			const elevation = Math.max(item.mount.elevation, resized.height / 2);
+			const { position, rotation } = deriveMountTransform(
+				frame,
+				offset,
+				resized,
+			);
+			next = {
+				...next,
+				footprint: resized,
+				position,
+				rotation,
+				mount: { wallIndex: frame.index, offset, elevation },
+			};
+		}
+	}
+	return {
+		...room,
+		furniture: room.furniture.map((entry) => (entry.id === id ? next : entry)),
+	};
+}
+
+/**
+ * Set an item's rotation to an absolute angle (the properties card's degrees
+ * field), normalized to [0, 360). Mounted items (rotation is derived from the
+ * wall), unknown ids and no-op angles return the room unchanged.
+ */
+export function setFurnitureRotation(
+	room: Room,
+	id: string,
+	deg: number,
+): Room {
+	const item = room.furniture.find((entry) => entry.id === id);
+	if (!item || item.mount || !Number.isFinite(deg)) return room;
+	const rotation = normalizeDeg(deg);
+	if (rotation === item.rotation) return room;
+	return {
+		...room,
+		furniture: room.furniture.map((entry) =>
+			entry.id === id ? { ...entry, rotation } : entry,
+		),
+	};
+}
+
+/**
+ * Set a wall-mounted item's center elevation, clamped so the body stays above
+ * the floor. The ceiling clamp is the caller's — wall height is a rendering
+ * constant, not model data. Floor items and unknown ids return the room
+ * unchanged.
+ */
+export function setMountElevation(
+	room: Room,
+	id: string,
+	elevation: number,
+): Room {
+	const item = room.furniture.find((entry) => entry.id === id);
+	if (!item?.mount || !Number.isFinite(elevation)) return room;
+	const clamped = Math.max(elevation, item.footprint.height / 2);
+	if (clamped === item.mount.elevation) return room;
+	const mount = { ...item.mount, elevation: clamped };
+	return {
+		...room,
+		furniture: room.furniture.map((entry) =>
+			entry.id === id ? { ...entry, mount } : entry,
+		),
+	};
+}
+
 export function removeFurniture(room: Room, id: string): Room {
 	return {
 		...room,

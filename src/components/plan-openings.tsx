@@ -25,7 +25,7 @@ import {
 	type WallHole,
 	type WallSolid,
 } from "#/lib/room-scene";
-import { formatLength, type Unit } from "#/lib/units";
+import { formatLengthValue, parseLength, type Unit } from "#/lib/units";
 
 /**
  * Door/window editing on the 2D plan lens: existing openings pick like the
@@ -214,19 +214,73 @@ function OpeningTarget({
 	);
 }
 
-/** The selected opening's chip: flip hinge (doors), delete, width readout. */
+/**
+ * The chip's editable width: same commit-on-blur/⏎, esc-reverts contract as
+ * the properties card's fields, restyled for the dark chip. The canonical
+ * width re-seeds the field whenever a commit (possibly clamped) lands.
+ */
+function ChipWidthField({
+	width,
+	unit,
+	onCommit,
+}: {
+	width: number;
+	unit: Unit;
+	onCommit: (width: number) => void;
+}) {
+	const value = formatLengthValue(width, unit);
+	const [text, setText] = useState(value);
+	const cancelledRef = useRef(false);
+	useEffect(() => setText(value), [value]);
+	return (
+		<span className="flex items-center gap-1 whitespace-nowrap font-mono text-[#7ee9e1] text-[12.5px]">
+			W
+			<input
+				type="text"
+				inputMode="decimal"
+				aria-label="Opening width"
+				value={text}
+				onChange={(event) => setText(event.target.value)}
+				onFocus={(event) => event.currentTarget.select()}
+				onBlur={() => {
+					if (!cancelledRef.current && text !== value) {
+						const meters = parseLength(text, unit);
+						if (meters !== null) onCommit(meters);
+					}
+					cancelledRef.current = false;
+					setText(value);
+				}}
+				onKeyDown={(event) => {
+					if (event.key === "Enter") {
+						event.currentTarget.blur();
+					} else if (event.key === "Escape") {
+						cancelledRef.current = true;
+						setText(value);
+						event.currentTarget.blur();
+					}
+				}}
+				className="pointer-events-auto w-[52px] rounded-md bg-white/[0.06] px-1.5 py-0.5 text-center font-mono text-[#7ee9e1] text-[12.5px] outline-none focus:bg-white/[0.12] focus:shadow-[0_0_0_1px_rgba(94,234,212,0.45)]"
+			/>
+			{unit}
+		</span>
+	);
+}
+
+/** The selected opening's chip: flip hinge (doors), delete, editable width. */
 function OpeningChip({
 	solid,
 	hole,
 	unit,
 	onFlipHinge,
 	onDelete,
+	onResize,
 }: {
 	solid: WallSolid;
 	hole: WallHole;
 	unit: Unit;
 	onFlipHinge: (id: string) => void;
 	onDelete: (id: string) => void;
+	onResize: (id: string, width: number) => void;
 }) {
 	const mid = wallPoint(solid, hole.start + hole.width / 2, WALL_THICKNESS / 2);
 	return (
@@ -262,9 +316,11 @@ function OpeningChip({
 						</button>
 					</Tooltip>
 					<div className="mx-[3px] h-[22px] w-px bg-white/[0.14]" />
-					<span className="whitespace-nowrap font-mono text-[#7ee9e1] text-[12.5px]">
-						W {formatLength(hole.width, unit)}
-					</span>
+					<ChipWidthField
+						width={hole.width}
+						unit={unit}
+						onCommit={(width) => onResize(hole.id, width)}
+					/>
 				</div>
 				<div className="h-[26px] w-[1.5px] bg-gradient-to-b from-[rgba(45,212,238,0.8)] to-transparent" />
 			</div>
@@ -501,6 +557,8 @@ export interface PlanOpeningsProps {
 	onMove: (id: string, offset: number) => void;
 	onFlipHinge: (id: string) => void;
 	onDelete: (id: string) => void;
+	/** A committed width from the chip's field (the clamping is the caller's). */
+	onResize: (id: string, width: number) => void;
 	/** An opening drag started/ended — the canvas locks pan/zoom meanwhile. */
 	onDragActiveChange: (active: boolean) => void;
 }
@@ -515,6 +573,7 @@ export function PlanOpenings({
 	onMove,
 	onFlipHinge,
 	onDelete,
+	onResize,
 	onDragActiveChange,
 }: PlanOpeningsProps) {
 	const [drag, setDrag] = useState<OpeningDrag | null>(null);
@@ -575,6 +634,7 @@ export function PlanOpenings({
 					unit={unit}
 					onFlipHinge={onFlipHinge}
 					onDelete={onDelete}
+					onResize={onResize}
 				/>
 			)}
 			{drag && dragSolid && (

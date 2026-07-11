@@ -697,6 +697,8 @@ export interface PlanSceneProps {
 	onMoveOpening: (id: string, offset: number) => void;
 	onFlipDoorHinge: (id: string) => void;
 	onDeleteOpening: (id: string) => void;
+	/** A committed width from the opening chip's field. */
+	onResizeOpening: (id: string, width: number) => void;
 }
 
 export function PlanScene({
@@ -717,6 +719,7 @@ export function PlanScene({
 	onMoveOpening,
 	onFlipDoorHinge,
 	onDeleteOpening,
+	onResizeOpening,
 }: PlanSceneProps) {
 	const solids = useMemo(() => buildWallSolids(room), [room]);
 	const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
@@ -786,6 +789,7 @@ export function PlanScene({
 				onMove={onMoveOpening}
 				onFlipHinge={onFlipDoorHinge}
 				onDelete={onDeleteOpening}
+				onResize={onResizeOpening}
 				onDragActiveChange={onMoveActiveChange}
 			/>
 			{room.furniture.map((item) => (
