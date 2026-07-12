@@ -21,6 +21,12 @@ export const SLAB_THICKNESS = 0.18;
 export const DOOR_HEIGHT = 2.05;
 export const WINDOW_SILL = 0.36;
 export const WINDOW_HEAD = 1.94;
+/**
+ * Height of a cut-down wall in the dollhouse cutaway (Sims-style): occluding
+ * walls drop to this stub instead of hiding, tall enough to read as a wall
+ * (baseboard + a sliver of face), low enough to keep furniture visible.
+ */
+export const STUB_WALL_HEIGHT = 0.3;
 
 /** A rectangular cut in a wall face, in wall-local coordinates. */
 export interface WallHole {
@@ -247,6 +253,30 @@ export function wallPieces(solid: WallSolid): WallPiece[] {
     }
   }
   return pieces;
+}
+
+/**
+ * The stretches of a piece that its cut-down stub still covers: holes
+ * reaching below the stub top become full gaps — doors and portals keep
+ * reading as openings in the low wall — while windows (sill above the stub)
+ * don't cut it at all. Spans are wall-local, sorted, disjoint.
+ */
+export function stubSpans(piece: WallPiece): Span[] {
+  const gaps = [...piece.holes]
+    .filter((hole) => hole.bottom < STUB_WALL_HEIGHT)
+    .sort((a, b) => a.start - b.start);
+  const spans: Span[] = [];
+  let cursor = piece.start;
+  for (const gap of gaps) {
+    if (gap.start - cursor > MIN_HOLE_SIZE) {
+      spans.push({ start: cursor, end: gap.start });
+    }
+    cursor = Math.max(cursor, gap.start + gap.width);
+  }
+  if (piece.end - cursor > MIN_HOLE_SIZE) {
+    spans.push({ start: cursor, end: piece.end });
+  }
+  return spans;
 }
 
 /**

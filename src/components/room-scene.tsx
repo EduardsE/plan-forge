@@ -42,6 +42,8 @@ import {
   buildWallSolids,
   cornerPosts,
   SLAB_THICKNESS,
+  STUB_WALL_HEIGHT,
+  stubSpans,
   WALL_THICKNESS,
   type WallSolid,
   wallPieces,
@@ -55,9 +57,10 @@ import type { Unit } from "#/lib/units";
  * footprints. Every color below is lifted from the mockup's 3D scene
  * (`design/planforge-mockups.html`, screen 1a), not invented.
  *
- * Walls between the camera and the interior hide themselves each frame
- * (classic dollhouse cutaway) — that is how the mockup shows only the two
- * far walls at the initial 38°/62° orbit.
+ * Walls between the camera and the interior cut themselves down to a low
+ * stub each frame (Sims-style dollhouse cutaway — the wall line stays
+ * legible while furniture shows), and shared party walls stay cut down at
+ * every orbit since they always occlude one of their two rooms.
  */
 
 /** Everything sits a hair above the y=0 grid plane to avoid z-fighting. */
@@ -90,10 +93,10 @@ const noRaycast = () => null;
 
 /**
  * Cutaway threshold on the wall-to-camera facing dot: slightly negative so
- * near-edge-on walls hide too instead of lingering as slivers.
+ * near-edge-on walls cut down too instead of lingering as slivers.
  */
 const HIDE_FACING_THRESHOLD = -0.06;
-/** Above this upness the camera is plan-like and every wall stays visible. */
+/** Above this upness the camera is plan-like and every wall stays full. */
 const PLAN_UPNESS = 0.94;
 
 function makeTexture(
@@ -347,19 +350,35 @@ function WindowDressing({
   );
 }
 
+/**
+ * The four per-frame display groups of one wall: seam (shared) and plain
+ * stretches cut down independently, each flipping between its full-height
+ * and stub rendition. The frame loop writes `visible` straight onto these.
+ */
+interface WallDisplay {
+  plainFull: Group | null;
+  plainStub: Group | null;
+  seamFull: Group | null;
+  seamStub: Group | null;
+}
+
 function WallMesh({
   solid,
   wallHeight,
-  groupRef,
+  display,
 }: {
   solid: WallSolid;
   wallHeight: number;
-  groupRef: (group: Group | null) => void;
+  /** Owned by `Walls`; the group refs below register themselves into it. */
+  display: WallDisplay;
 }) {
   const wall = wallTexture(wallHeight);
   // One extrusion per constant-thickness piece: shared (seam) stretches are
   // half as thick — the abutting room extrudes the other half on its side of
   // the wall line, so together the party wall reads as one, not doubled.
+  // Each piece also builds its cut-down stub: the same footprint at stub
+  // height, with door/portal holes widened into full gaps (`stubSpans`).
+  // The stub reuses the full wall texture, so it keeps the real baseboard.
   const pieces = useMemo(
     () =>
       wallPieces(solid).map((piece) => {
@@ -379,6 +398,15 @@ function WallMesh({
           shape.holes.push(path);
         }
         const thickness = piece.seam ? WALL_THICKNESS / 2 : WALL_THICKNESS;
+        const stubShapes = stubSpans(piece).map((span) => {
+          const stub = new Shape();
+          stub.moveTo(span.start, 0);
+          stub.lineTo(span.end, 0);
+          stub.lineTo(span.end, STUB_WALL_HEIGHT);
+          stub.lineTo(span.start, STUB_WALL_HEIGHT);
+          stub.closePath();
+          return stub;
+        });
         return {
           start: piece.start,
           seam: piece.seam,
@@ -387,6 +415,13 @@ function WallMesh({
             depth: thickness,
             bevelEnabled: false,
           }),
+          stubGeometry:
+            stubShapes.length > 0
+              ? new ExtrudeGeometry(stubShapes, {
+                  depth: thickness,
+                  bevelEnabled: false,
+                })
+              : null,
         };
       }),
     [solid, wallHeight],
@@ -406,37 +441,84 @@ function WallMesh({
       (span) => span.start <= mid && mid <= span.end,
     );
   };
+  const pieceMesh = (
+    piece: (typeof pieces)[number],
+    geometry: ExtrudeGeometry,
+  ) => (
+    <mesh
+      key={piece.start}
+      geometry={geometry}
+      position-z={zOffset(piece.thickness)}
+      raycast={noRaycast}
+    >
+      <meshLambertMaterial attach="material-0" map={wall} />
+      <meshLambertMaterial attach="material-1" color={WALL_EDGE_COLOR} />
+    </mesh>
+  );
+  // Window dressing (frame + glowing pane + light) rides in its stretch's
+  // full-height group: a cut-down wall can't host a floating window. A
+  // phantom window is a neighbor's portal — the owning side draws the one
+  // frame, centered on the seam so it spans both halves.
+  const dressings = (seam: boolean) =>
+    solid.holes
+      .filter(
+        (hole) =>
+          hole.kind === "window" && !hole.phantom && onSeam(hole) === seam,
+      )
+      .map((hole) => (
+        <WindowDressing
+          key={hole.start}
+          hole={hole}
+          zCenter={seam ? 0 : zOffset(WALL_THICKNESS) + WALL_THICKNESS / 2}
+        />
+      ));
 
   return (
-    <group
-      ref={groupRef}
-      position={[solid.start.x, 0, solid.start.y]}
-      rotation-y={rotationY}
-    >
-      {pieces.map((piece) => (
-        <mesh
-          key={piece.start}
-          geometry={piece.geometry}
-          position-z={zOffset(piece.thickness)}
-          raycast={noRaycast}
-        >
-          <meshLambertMaterial attach="material-0" map={wall} />
-          <meshLambertMaterial attach="material-1" color={WALL_EDGE_COLOR} />
-        </mesh>
-      ))}
-      {solid.holes
-        // A phantom window is a neighbor's portal — the owning side draws
-        // the one frame, centered on the seam so it spans both halves.
-        .filter((hole) => hole.kind === "window" && !hole.phantom)
-        .map((hole) => (
-          <WindowDressing
-            key={hole.start}
-            hole={hole}
-            zCenter={
-              onSeam(hole) ? 0 : zOffset(WALL_THICKNESS) + WALL_THICKNESS / 2
-            }
-          />
-        ))}
+    <group position={[solid.start.x, 0, solid.start.y]} rotation-y={rotationY}>
+      <group
+        ref={(group) => {
+          display.plainFull = group;
+        }}
+      >
+        {pieces
+          .filter((piece) => !piece.seam)
+          .map((piece) => pieceMesh(piece, piece.geometry))}
+        {dressings(false)}
+      </group>
+      <group
+        ref={(group) => {
+          display.seamFull = group;
+        }}
+      >
+        {pieces
+          .filter((piece) => piece.seam)
+          .map((piece) => pieceMesh(piece, piece.geometry))}
+        {dressings(true)}
+      </group>
+      <group
+        ref={(group) => {
+          display.plainStub = group;
+        }}
+        visible={false}
+      >
+        {pieces
+          .filter((piece) => !piece.seam && piece.stubGeometry)
+          .map((piece) =>
+            pieceMesh(piece, piece.stubGeometry as ExtrudeGeometry),
+          )}
+      </group>
+      <group
+        ref={(group) => {
+          display.seamStub = group;
+        }}
+        visible={false}
+      >
+        {pieces
+          .filter((piece) => piece.seam && piece.stubGeometry)
+          .map((piece) =>
+            pieceMesh(piece, piece.stubGeometry as ExtrudeGeometry),
+          )}
+      </group>
     </group>
   );
 }
@@ -454,12 +536,34 @@ function Walls({ room, seamData }: { room: Room; seamData?: RoomSeamData }) {
     () => new Map(solids.map((solid, i) => [solid.index, i])),
     [solids],
   );
-  const wallRefs = useRef<(Group | null)[]>([]);
-  const postRefs = useRef<(Mesh | null)[]>([]);
-  const visibleRef = useRef<boolean[]>([]);
+  /** Which stretch kinds each wall has (drives the tall-post decision). */
+  const stretchKinds = useMemo(
+    () =>
+      solids.map((solid) => {
+        const pieces = wallPieces(solid);
+        return {
+          hasPlain: pieces.some((piece) => !piece.seam),
+          hasSeam: pieces.some((piece) => piece.seam),
+        };
+      }),
+    [solids],
+  );
+  const displays = useMemo<WallDisplay[]>(
+    () =>
+      solids.map(() => ({
+        plainFull: null,
+        plainStub: null,
+        seamFull: null,
+        seamStub: null,
+      })),
+    [solids],
+  );
+  const postFullRefs = useRef<(Mesh | null)[]>([]);
+  const postStubRefs = useRef<(Mesh | null)[]>([]);
+  const tallRef = useRef<boolean[]>([]);
 
   useFrame(({ camera }) => {
-    const visible = visibleRef.current;
+    const tall = tallRef.current;
     for (const [i, solid] of solids.entries()) {
       const midX = solid.start.x + (solid.dir.x * solid.length) / 2;
       const midZ = solid.start.y + (solid.dir.y * solid.length) / 2;
@@ -469,20 +573,33 @@ function Walls({ room, seamData }: { room: Room; seamData?: RoomSeamData }) {
       const distance = Math.hypot(toCamX, toCamY, toCamZ) || 1;
       const facing =
         (toCamX * solid.outward.x + toCamZ * solid.outward.y) / distance;
-      // Straight-down (plan) views keep every wall; the cutaway only
-      // applies while orbiting.
-      visible[i] =
-        toCamY / distance > PLAN_UPNESS || facing < HIDE_FACING_THRESHOLD;
-      const group = wallRefs.current[i];
-      if (group) group.visible = visible[i];
+      // Straight-down (plan) views keep every wall full; the cutaway only
+      // applies while orbiting. Plain stretches cut down when they face the
+      // camera; shared (seam) stretches cut down at every orbit — a party
+      // wall always occludes one of its two rooms.
+      const planLike = toCamY / distance > PLAN_UPNESS;
+      const plainFull = planLike || facing < HIDE_FACING_THRESHOLD;
+      const seamFull = planLike;
+      const display = displays[i];
+      if (display.plainFull) display.plainFull.visible = plainFull;
+      if (display.plainStub) display.plainStub.visible = !plainFull;
+      if (display.seamFull) display.seamFull.visible = seamFull;
+      if (display.seamStub) display.seamStub.visible = !seamFull;
+      tall[i] =
+        (stretchKinds[i].hasPlain && plainFull) ||
+        (stretchKinds[i].hasSeam && seamFull);
     }
     for (const [i, post] of posts.entries()) {
-      const mesh = postRefs.current[i];
-      if (!mesh) continue;
       const a = solidPosition.get(post.walls[0]);
       const b = solidPosition.get(post.walls[1]);
-      mesh.visible =
-        (a !== undefined && visible[a]) || (b !== undefined && visible[b]);
+      // A post stands full only next to a wall that still stands full;
+      // between two stubs it cuts down with them.
+      const postTall =
+        (a !== undefined && tall[a]) || (b !== undefined && tall[b]);
+      const full = postFullRefs.current[i];
+      const stub = postStubRefs.current[i];
+      if (full) full.visible = postTall;
+      if (stub) stub.visible = !postTall;
     }
   });
 
@@ -493,23 +610,38 @@ function Walls({ room, seamData }: { room: Room; seamData?: RoomSeamData }) {
           key={solid.index}
           solid={solid}
           wallHeight={wallHeight}
-          groupRef={(group) => {
-            wallRefs.current[i] = group;
-          }}
+          display={displays[i]}
         />
       ))}
       {posts.map((post, i) => (
-        <mesh
+        <group
           key={`${post.walls[0]}-${post.walls[1]}`}
-          ref={(mesh) => {
-            postRefs.current[i] = mesh;
-          }}
-          position={[post.center.x, wallHeight / 2, post.center.y]}
-          raycast={noRaycast}
+          position={[post.center.x, 0, post.center.y]}
         >
-          <boxGeometry args={[WALL_THICKNESS, wallHeight, WALL_THICKNESS]} />
-          <meshLambertMaterial color={WALL_EDGE_COLOR} />
-        </mesh>
+          <mesh
+            ref={(mesh) => {
+              postFullRefs.current[i] = mesh;
+            }}
+            position-y={wallHeight / 2}
+            raycast={noRaycast}
+          >
+            <boxGeometry args={[WALL_THICKNESS, wallHeight, WALL_THICKNESS]} />
+            <meshLambertMaterial color={WALL_EDGE_COLOR} />
+          </mesh>
+          <mesh
+            ref={(mesh) => {
+              postStubRefs.current[i] = mesh;
+            }}
+            position-y={STUB_WALL_HEIGHT / 2}
+            raycast={noRaycast}
+            visible={false}
+          >
+            <boxGeometry
+              args={[WALL_THICKNESS, STUB_WALL_HEIGHT, WALL_THICKNESS]}
+            />
+            <meshLambertMaterial color={WALL_EDGE_COLOR} />
+          </mesh>
+        </group>
       ))}
     </group>
   );

@@ -4,6 +4,8 @@ import {
   buildWallSolids,
   cornerPosts,
   DOOR_HEIGHT,
+  STUB_WALL_HEIGHT,
+  stubSpans,
   WALL_HEIGHT,
   WINDOW_HEAD,
   WINDOW_SILL,
@@ -188,6 +190,63 @@ describe("buildWallSolids with seam data", () => {
     // The other walls stay untouched, without seam spans.
     expect(solids[0].holes).toEqual([]);
     expect(solids[0].seams).toBeUndefined();
+  });
+});
+
+describe("stubSpans", () => {
+  const piece = (
+    holes: Array<{ start: number; width: number; bottom: number }>,
+    span = { start: 0, end: 5.2 },
+  ) => ({
+    ...span,
+    seam: false,
+    holes: holes.map((h, i) => ({
+      id: `h-${i}`,
+      kind: "door" as const,
+      top: DOOR_HEIGHT,
+      ...h,
+    })),
+  });
+
+  it("covers a hole-free piece with one span", () => {
+    expect(stubSpans(piece([]))).toEqual([{ start: 0, end: 5.2 }]);
+  });
+
+  it("turns a door hole into a full gap through the stub", () => {
+    expect(stubSpans(piece([{ start: 2, width: 0.9, bottom: 0 }]))).toEqual([
+      { start: 0, end: 2 },
+      { start: 2.9, end: 5.2 },
+    ]);
+  });
+
+  it("ignores windows: their sill sits above the stub top", () => {
+    expect(WINDOW_SILL).toBeGreaterThan(STUB_WALL_HEIGHT);
+    expect(
+      stubSpans(piece([{ start: 3, width: 1.5, bottom: WINDOW_SILL }])),
+    ).toEqual([{ start: 0, end: 5.2 }]);
+  });
+
+  it("drops spans that a piece-edge hole leaves degenerate", () => {
+    // A door flush with the piece start (e.g. clipped at a seam boundary).
+    expect(
+      stubSpans(
+        piece([{ start: 1, width: 0.8, bottom: 0 }], { start: 1, end: 4 }),
+      ),
+    ).toEqual([{ start: 1.8, end: 4 }]);
+  });
+
+  it("merges the cursor past overlapping gaps", () => {
+    expect(
+      stubSpans(
+        piece([
+          { start: 1, width: 1, bottom: 0 },
+          { start: 1.5, width: 1, bottom: 0 },
+        ]),
+      ),
+    ).toEqual([
+      { start: 0, end: 1 },
+      { start: 2.5, end: 5.2 },
+    ]);
   });
 });
 
