@@ -286,8 +286,8 @@ function AngleBadge({
 }
 
 /** In-scene feedback for a lock onto another room: a dashed overlay along
- * the matched wall, a ring on the matched corner, or an alignment guide
- * from the matched corner to the snapped point. */
+ * the matched wall, or an alignment guide from the matched corner to the
+ * snapped point. */
 function FloorSnapMarker({ snap, at }: { snap: FloorSnap; at: Point }) {
   const dashes = useMemo(
     () =>
@@ -299,28 +299,17 @@ function FloorSnapMarker({ snap, at }: { snap: FloorSnap; at: Point }) {
   if (snap.kind === "align") {
     return <AlignmentGuide from={snap.at} to={at} startAligned={false} />;
   }
-  if (snap.kind === "wall") {
-    if (dashes.length === 0) return null;
-    return (
-      <Line
-        segments
-        points={dashes.map((p) => v3(p, GUIDE_Y))}
-        color={SNAP_COLOR}
-        lineWidth={2.5}
-        transparent
-        opacity={0.6}
-        alphaToCoverage={false}
-      />
-    );
-  }
+  if (dashes.length === 0) return null;
   return (
-    <Html
-      position={v3(snap.at, LABEL_Y)}
-      center
-      style={{ pointerEvents: "none" }}
-    >
-      <div className="h-3.5 w-3.5 rounded-full border-2 border-[#3a5bf0] bg-[rgba(58,91,240,0.35)] shadow-[0_0_0_5px_rgba(58,91,240,0.2)]" />
-    </Html>
+    <Line
+      segments
+      points={dashes.map((p) => v3(p, GUIDE_Y))}
+      color={SNAP_COLOR}
+      lineWidth={2.5}
+      transparent
+      opacity={0.6}
+      alphaToCoverage={false}
+    />
   );
 }
 

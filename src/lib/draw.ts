@@ -73,7 +73,6 @@ export function snapTargetsOf(rooms: Room[]): SnapTargets {
 
 /** How the snapped point locked onto another room, for in-scene feedback. */
 export type FloorSnap =
-  | { kind: "corner"; at: Point }
   | { kind: "wall"; wall: Wall }
   /** Aligned with a room corner's x or y beyond its walls' spans. */
   | { kind: "align"; at: Point; axis: "x" | "y" };
@@ -85,10 +84,14 @@ const AXIS_EPS = 1e-9;
  * the wall's own span, then corner coordinates (alignment past a span). The
  * whole rendered thickness captures — a cursor anywhere on the slab (line to
  * `WALL_THICKNESS` outward, padded by `tolerance` on both sides) snaps to the
- * wall line, so clicking any part of an existing wall means "share this
- * wall" and always yields the flush (gap 0) seam. Slab hits rank above
- * corner alignments; back-to-back twin walls (coincident slabs) tie-break to
- * the nearer wall line.
+ * slab's **outer face**, so clicking any part of an existing wall means
+ * "attach to this wall": the drawn outline lands back-to-back (gap 0.1 seam),
+ * the existing wall doesn't move, and the two interiors stay one real wall
+ * apart. (Flush gap-0 seams stay *supported* — snapping just doesn't produce
+ * them: on partial-span seams their halved rendering re-centers the shared
+ * stretch, jogging against the wall's unshared remainder.) Slab hits rank
+ * above corner alignments; back-to-back twin walls (coincident slabs)
+ * tie-break to the nearer face.
  */
 export function targetAxisCandidate(
   targets: SnapTargets,
@@ -98,8 +101,8 @@ export function targetAxisCandidate(
 ): { value: number; distance: number; snap: FloorSnap } | null {
   const cross: "x" | "y" = axis === "x" ? "y" : "x";
   let best: { value: number; distance: number; snap: FloorSnap } | null = null;
-  /** Among equal-distance (on-slab) hits, the nearer wall line wins. */
-  let bestLineDistance = Number.POSITIVE_INFINITY;
+  /** Among equal-distance (on-slab) hits, the nearer outer face wins. */
+  let bestFaceDistance = Number.POSITIVE_INFINITY;
   for (const wall of targets.walls) {
     // Only walls running along the cross axis pin this coordinate.
     if (Math.abs(wall.start[axis] - wall.end[axis]) > AXIS_EPS) continue;
@@ -107,19 +110,22 @@ export function targetAxisCandidate(
     const hi = Math.max(wall.start[cross], wall.end[cross]) + tolerance;
     if (cursor[cross] < lo || cursor[cross] > hi) continue;
     const line = wall.start[axis];
+    const side = wall.outward[axis] || 1;
     // Signed offset along outward: [0, WALL_THICKNESS] is on the slab.
-    const along = (cursor[axis] - line) * (wall.outward[axis] || 1);
+    const along = (cursor[axis] - line) * side;
     const distance =
       along < 0 ? -along : along > WALL_THICKNESS ? along - WALL_THICKNESS : 0;
-    const lineDistance = Math.abs(cursor[axis] - line);
+    // Sub-millimeter re-round: line + 0.1 leaks float junk into labels.
+    const face = Math.round((line + WALL_THICKNESS * side) * 1e4) / 1e4;
+    const faceDistance = Math.abs(cursor[axis] - face);
     if (
       distance < tolerance &&
       (!best ||
         distance < best.distance ||
-        (distance === best.distance && lineDistance < bestLineDistance))
+        (distance === best.distance && faceDistance < bestFaceDistance))
     ) {
-      best = { value: line, distance, snap: { kind: "wall", wall } };
-      bestLineDistance = lineDistance;
+      best = { value: face, distance, snap: { kind: "wall", wall } };
+      bestFaceDistance = faceDistance;
     }
   }
   for (const corner of targets.corners) {
@@ -130,31 +136,6 @@ export function targetAxisCandidate(
         distance,
         snap: { kind: "align", at: corner, axis },
       };
-    }
-  }
-  return best;
-}
-
-/** The nearest target corner within `tolerance` on *both* axes, if any —
- * the strongest snap: the new corner meets the existing room exactly. */
-export function nearestTargetCorner(
-  corners: Point[],
-  cursor: Point,
-  tolerance: number,
-): Point | null {
-  let best: Point | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const corner of corners) {
-    if (
-      Math.abs(cursor.x - corner.x) >= tolerance ||
-      Math.abs(cursor.y - corner.y) >= tolerance
-    ) {
-      continue;
-    }
-    const d = Math.hypot(cursor.x - corner.x, cursor.y - corner.y);
-    if (d < bestDistance) {
-      bestDistance = d;
-      best = corner;
     }
   }
   return best;
@@ -189,12 +170,12 @@ const quantize = quantizeToStep;
 
 /**
  * Snap the cursor while placing the next corner. Snaps compose in priority
- * order: first the cursor may land exactly on another room's corner (the
- * flush seam beats everything), else the segment from the last corner locks
- * to an axis (within `tolerance` meters), then the still-free coordinates
- * may pin to another room's wall line or corner coordinate, then align with
- * an earlier draft corner, and whatever remains free quantizes to
- * `DRAW_GRID_STEP`.
+ * order: the segment from the last corner locks to an axis (within
+ * `tolerance` meters), then the still-free coordinates pin to another room's
+ * wall slab (outer face) or corner coordinate — near a target's corner the
+ * per-axis pins compose into the *outer* corner, one wall thickness out —
+ * then align with an earlier draft corner, and whatever remains free
+ * quantizes to `DRAW_GRID_STEP`.
  *
  * With `snap` off (the snap toggle), the raw cursor passes straight through —
  * no axis lock, no alignment, no quantize — for free-hand corner placement.
@@ -225,19 +206,7 @@ export function snapDraftPoint(
 
   const last = corners.at(-1);
 
-  const exactCorner = nearestTargetCorner(targets.corners, cursor, tolerance);
-  if (exactCorner) {
-    x = exactCorner.x;
-    y = exactCorner.y;
-    xLocked = true;
-    yLocked = true;
-    floorSnap = { kind: "corner", at: exactCorner };
-    // The badge logic below still applies when the met corner happens to
-    // continue the draft at a right angle.
-    axisSnapped = last ? x === last.x || y === last.y : false;
-  }
-
-  if (!xLocked && !yLocked && last) {
+  if (last) {
     const dx = Math.abs(x - last.x);
     const dy = Math.abs(y - last.y);
     if (dy <= dx && dy < tolerance) {
@@ -252,21 +221,19 @@ export function snapDraftPoint(
   }
 
   // Free coordinates pin to another room's walls/corners before the draft's
-  // own alignment pass — flush against the neighbor beats internal guides.
-  if (!floorSnap) {
-    for (const axis of ["x", "y"] as const) {
-      if (axis === "x" ? xLocked : yLocked) continue;
-      const candidate = targetAxisCandidate(targets, axis, { x, y }, tolerance);
-      if (!candidate) continue;
-      if (axis === "x") {
-        x = candidate.value;
-        xLocked = true;
-      } else {
-        y = candidate.value;
-        yLocked = true;
-      }
-      if (!floorSnap) floorSnap = candidate.snap;
+  // own alignment pass — attaching to the neighbor beats internal guides.
+  for (const axis of ["x", "y"] as const) {
+    if (axis === "x" ? xLocked : yLocked) continue;
+    const candidate = targetAxisCandidate(targets, axis, { x, y }, tolerance);
+    if (!candidate) continue;
+    if (axis === "x") {
+      x = candidate.value;
+      xLocked = true;
+    } else {
+      y = candidate.value;
+      yLocked = true;
     }
+    if (!floorSnap) floorSnap = candidate.snap;
   }
 
   // Alignment with earlier corners (the last corner's alignments are the

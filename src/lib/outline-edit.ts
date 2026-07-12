@@ -2,7 +2,6 @@ import {
   DRAW_GRID_STEP,
   type FloorSnap,
   NO_SNAP_TARGETS,
-  nearestTargetCorner,
   quantizeToStep,
   type SnapTargets,
   targetAxisCandidate,
@@ -20,6 +19,7 @@ import {
 } from "#/lib/model";
 import { reanchorMount } from "#/lib/mount-place";
 import { slideOpening, type WallSpan } from "#/lib/opening-place";
+import { WALL_THICKNESS } from "#/lib/room-scene";
 
 /**
  * Pure geometry for editing an existing (closed) room outline in draw mode:
@@ -88,11 +88,11 @@ export interface CornerDragSnap {
 }
 
 /**
- * Snap corner `index` being dragged to `cursor`: the cursor may land exactly
- * on another room's corner (the flush seam beats everything); otherwise each
- * coordinate locks to the nearest of the other draft corners' matching
- * coordinate, another room's wall line, or another room's corner coordinate
- * within `tolerance` — and whatever stays free quantizes to the drawing grid.
+ * Snap corner `index` being dragged to `cursor`: each coordinate locks to
+ * the nearest of the other draft corners' matching coordinate, another
+ * room's wall slab (outer face — the dragged corner attaches back-to-back,
+ * same as `snapDraftPoint`), or another room's corner coordinate within
+ * `tolerance` — and whatever stays free quantizes to the drawing grid.
  *
  * With `snap` off (the snap toggle), the raw cursor passes straight through —
  * no corner alignment, no quantize — for free-hand corner dragging.
@@ -107,14 +107,6 @@ export function snapCornerDrag(
 ): CornerDragSnap {
   if (!snap) {
     return { point: { x: cursor.x, y: cursor.y }, guides: [], floorSnaps: [] };
-  }
-  const exactCorner = nearestTargetCorner(targets.corners, cursor, tolerance);
-  if (exactCorner) {
-    return {
-      point: { x: exactCorner.x, y: exactCorner.y },
-      guides: [],
-      floorSnaps: [{ kind: "corner", at: exactCorner }],
-    };
   }
   const point: Point = { x: cursor.x, y: cursor.y };
   const guides: CornerGuide[] = [];
@@ -180,11 +172,13 @@ export function splitPointOnWall(
 }
 
 /**
- * The point on wall `wallIndex` nearest to `cursor`: the projection onto the
- * wall, quantized along it and clamped into the segment (a cursor beyond an
- * end lands exactly on that corner). Unlike `splitPointOnWall` there is no
- * corner clearance — this locates where on the wall a new draw starts, and
- * starting flush at a corner is fine. Null only for invalid/degenerate walls.
+ * Where a new draw starts from a click on wall `wallIndex`: the projection
+ * onto the wall, quantized along it and clamped into the segment, then
+ * pushed one `WALL_THICKNESS` out along the wall's outward normal — the new
+ * room attaches back-to-back on the wall's outer face (same convention as
+ * `targetAxisCandidate`), so the clicked wall itself never moves. Unlike
+ * `splitPointOnWall` there is no corner clearance — starting at a wall end
+ * is fine. Null only for invalid/degenerate walls.
  */
 export function pointAlongWall(
   outline: Point[],
@@ -192,8 +186,9 @@ export function pointAlongWall(
   cursor: Point,
   grid: number = DRAW_GRID_STEP,
 ): Point | null {
+  const frame = wallFrames(outline).find((f) => f.index === wallIndex);
+  if (!frame) return null;
   const wall = wallsOf(outline)[wallIndex];
-  if (!wall) return null;
   const length = wallLength(wall);
   if (length < EPS) return null;
   const dir = {
@@ -210,9 +205,13 @@ export function pointAlongWall(
       ),
     ),
   );
+  const out = {
+    x: frame.outward.x * WALL_THICKNESS,
+    y: frame.outward.y * WALL_THICKNESS,
+  };
   return {
-    x: Math.round((wall.start.x + dir.x * along) * 1e4) / 1e4,
-    y: Math.round((wall.start.y + dir.y * along) * 1e4) / 1e4,
+    x: Math.round((wall.start.x + dir.x * along + out.x) * 1e4) / 1e4,
+    y: Math.round((wall.start.y + dir.y * along + out.y) * 1e4) / 1e4,
   };
 }
 

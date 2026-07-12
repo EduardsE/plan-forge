@@ -136,23 +136,25 @@ describe("snapCornerDrag", () => {
       }),
     ]);
 
-    it("lands exactly on a neighbor corner within tolerance", () => {
+    it("composes the neighbor's outer corner from both wall slabs", () => {
+      // On the kitchen's top-left corner post both axes capture a slab, so
+      // the dragged corner lands one wall thickness out on each —
+      // back-to-back against the left wall, clear of the top wall.
       const snap = snapCornerDrag(
         RECT,
         1,
-        { x: 6.45, y: 0.07 },
+        { x: 6.45, y: -0.03 },
         TOL,
         true,
         targets,
       );
-      expect(snap.point).toEqual({ x: 6.4, y: 0 });
+      expect(snap.point).toEqual({ x: 6.3, y: -0.1 });
       expect(snap.guides).toEqual([]);
-      expect(snap.floorSnaps).toEqual([
-        { kind: "corner", at: { x: 6.4, y: 0 } },
-      ]);
+      expect(snap.floorSnaps).toHaveLength(2);
+      expect(snap.floorSnaps.every((s) => s.kind === "wall")).toBe(true);
     });
 
-    it("pins an axis to the neighbor's wall when it is the closest match", () => {
+    it("pins an axis to the neighbor wall's outer face when closest", () => {
       const snap = snapCornerDrag(
         RECT,
         1,
@@ -161,7 +163,7 @@ describe("snapCornerDrag", () => {
         true,
         targets,
       );
-      expect(snap.point).toEqual({ x: 6.4, y: 2 });
+      expect(snap.point).toEqual({ x: 6.3, y: 2 });
       expect(snap.floorSnaps).toHaveLength(1);
       expect(snap.floorSnaps[0].kind).toBe("wall");
     });
@@ -279,9 +281,11 @@ describe("splitOutlineWall", () => {
 });
 
 describe("pointAlongWall", () => {
-  it("projects the cursor onto the wall and quantizes along it", () => {
+  it("projects onto the wall, quantized along it, on the outer face", () => {
+    // Wall 1 runs down the right side (line x = 6, outward +x): the start
+    // point lands one wall thickness out so the new room sits back-to-back.
     expect(pointAlongWall(RECT, 1, { x: 6.08, y: 2.53 })).toEqual({
-      x: 6,
+      x: 6.1,
       y: 2.55,
     });
   });
@@ -289,13 +293,19 @@ describe("pointAlongWall", () => {
   it("allows points all the way to the corners (no clearance)", () => {
     expect(pointAlongWall(RECT, 0, { x: 0.1, y: 0 })).toEqual({
       x: 0.1,
-      y: 0,
+      y: -0.1,
     });
   });
 
-  it("clamps a cursor beyond an end onto that corner", () => {
-    expect(pointAlongWall(RECT, 0, { x: -1, y: 0.2 })).toEqual({ x: 0, y: 0 });
-    expect(pointAlongWall(RECT, 0, { x: 7, y: -0.2 })).toEqual({ x: 6, y: 0 });
+  it("clamps a cursor beyond an end onto that corner's face point", () => {
+    expect(pointAlongWall(RECT, 0, { x: -1, y: 0.2 })).toEqual({
+      x: 0,
+      y: -0.1,
+    });
+    expect(pointAlongWall(RECT, 0, { x: 7, y: -0.2 })).toEqual({
+      x: 6,
+      y: -0.1,
+    });
   });
 
   it("returns null for invalid walls", () => {
