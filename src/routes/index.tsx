@@ -37,6 +37,7 @@ import {
   duplicateFurniture,
   type Floor,
   type Footprint,
+  floorBounds,
   nextRoomName,
   type OpeningKind,
   type Point,
@@ -764,6 +765,24 @@ function Planner() {
   // canvas room (the header spans across instead).
   const objectsOpen = viewMode === "objects";
 
+  // Studio pool sized to the whole-floor bbox: at fit zoom the model's
+  // on-screen extent scales with each plan axis over the diagonal, so the
+  // 3D lens's pool ellipse follows the same ratios (a wide flat gets a
+  // wide, flat pool). The 70/89 factors reproduce the mockup's 54vw × 56vh
+  // pool for its 6.40 × 5.20 room; absent bounds fall back to that in CSS.
+  const canvasStyle = useMemo(() => {
+    const style: Record<string, string> = { gridArea: "canvas" };
+    const bounds = floorBounds(floor);
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
+      const diagonal = Math.hypot(bounds.width, bounds.height);
+      const w = Math.round((70 * bounds.width) / diagonal);
+      const h = Math.round((89 * bounds.height) / diagonal);
+      style["--pool-w"] = `max(${w}vw, 540px)`;
+      style["--pool-h"] = `max(${h}vh, 400px)`;
+    }
+    return style;
+  }, [floor]);
+
   return (
     <div
       className="grid h-screen w-screen overflow-hidden bg-[var(--frame)]"
@@ -816,7 +835,7 @@ function Planner() {
       <div
         ref={workspaceRef}
         className="workspace-canvas relative min-h-0 min-w-0"
-        style={{ gridArea: "canvas" }}
+        style={canvasStyle}
         data-view-mode={viewMode}
       >
         {canvasReady && (

@@ -1,8 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createCameraReadoutStore } from "#/lib/camera";
-import { createSampleFloor, createSampleRoom, type Floor } from "#/lib/model";
+import { createSampleRoom, type Floor } from "#/lib/model";
 import { StatusBar } from "./status-bar";
+
+// The shipping sample floor is a two-room flat (M6); these tests pin a
+// one-room floor so the single-room readout stays covered.
+const oneRoomFloor = (): Floor => ({ rooms: [createSampleRoom()] });
 
 const twoRoomFloor = (): Floor => ({
   rooms: [
@@ -26,7 +30,7 @@ function renderBar(props: Partial<Parameters<typeof StatusBar>[0]>) {
   return render(
     <StatusBar
       mode="3d"
-      floor={createSampleFloor()}
+      floor={oneRoomFloor()}
       cameraReadout={createCameraReadoutStore()}
       unit="m"
       onUnitChange={() => {}}
@@ -104,7 +108,7 @@ describe("StatusBar", () => {
     rerender(
       <StatusBar
         mode="objects"
-        floor={createSampleFloor()}
+        floor={oneRoomFloor()}
         cameraReadout={createCameraReadoutStore()}
         unit="m"
         onUnitChange={() => {}}

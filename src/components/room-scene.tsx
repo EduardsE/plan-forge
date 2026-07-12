@@ -30,13 +30,14 @@ import {
   partHullScale,
   partScale,
 } from "#/lib/furniture-parts";
-import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
-import {
-  floorBounds,
-  outlineBounds,
-  stackSurfaceHeight,
-  wallHeightOf,
+import type {
+  Bounds,
+  FurnitureItem,
+  FurnitureUpdate,
+  Point,
+  Room,
 } from "#/lib/model";
+import { floorBounds, stackSurfaceHeight, wallHeightOf } from "#/lib/model";
 import {
   buildWallSolids,
   cornerPosts,
@@ -232,7 +233,7 @@ function BlobShadow({
   );
 }
 
-/** Floor slab: plank top, navy skirt, soft drop shadow onto the canvas. */
+/** Floor slab: plank top, navy skirt. */
 function Platform({ outline }: { outline: Point[] }) {
   const { plank } = sharedTextures();
   const geometry = useMemo(() => {
@@ -242,11 +243,8 @@ function Platform({ outline }: { outline: Point[] }) {
       bevelEnabled: false,
     });
   }, [outline]);
-  const bounds = useMemo(() => outlineBounds(outline), [outline]);
 
-  if (!geometry || !bounds) return null;
-  const centerX = (bounds.min.x + bounds.max.x) / 2;
-  const centerZ = (bounds.min.y + bounds.max.y) / 2;
+  if (!geometry) return null;
   return (
     <group>
       {/* Extrusion runs up from the shape plane; sink it so the plank cap
@@ -260,17 +258,31 @@ function Platform({ outline }: { outline: Point[] }) {
         <meshLambertMaterial attach="material-0" map={plank} />
         <meshLambertMaterial attach="material-1" color={SLAB_SIDE_COLOR} />
       </mesh>
-      <group position={[centerX, 0, centerZ]}>
-        {/* Studio contact shadow grounding the model in the spotlight pool
-				    (screen 3d: rgba(18,24,44,.30)). */}
-        <BlobShadow
-          width={bounds.width * 1.28}
-          depth={bounds.height * 1.18}
-          y={FLOOR_TOP - SLAB_THICKNESS - 0.004}
-          color="#12182c"
-          opacity={0.3}
-        />
-      </group>
+    </group>
+  );
+}
+
+/**
+ * Studio contact shadow grounding the model in the spotlight pool (screen
+ * 3d: rgba(18,24,44,.30)). One shadow for the whole floor — per-room blobs
+ * would overlap into dark seams under a multi-room flat.
+ */
+function FloorContactShadow({ bounds }: { bounds: Bounds }) {
+  return (
+    <group
+      position={[
+        (bounds.min.x + bounds.max.x) / 2,
+        0,
+        (bounds.min.y + bounds.max.y) / 2,
+      ]}
+    >
+      <BlobShadow
+        width={bounds.width * 1.28}
+        depth={bounds.height * 1.18}
+        y={FLOOR_TOP - SLAB_THICKNESS - 0.004}
+        color="#12182c"
+        opacity={0.3}
+      />
     </group>
   );
 }
@@ -806,6 +818,7 @@ export function RoomScene({
         color="#e8eef7"
         intensity={0.45}
       />
+      {bounds && <FloorContactShadow bounds={bounds} />}
       {rooms.map((room) => (
         <RoomLayer
           key={room.id}

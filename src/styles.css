@@ -169,13 +169,16 @@ body {
 
 /*
  * 3D lens: the studio spotlight pool (screen 3d) — plain studio grey with a
- * soft light pool behind the model, no dot grid. The room's contact shadow
- * is in-scene (see room-scene).
+ * soft light pool behind the model, no dot grid. The floor's contact shadow
+ * is in-scene (see room-scene). The pool ellipse follows the whole-floor
+ * bounding box: the route sets --pool-w/--pool-h from the floor's aspect
+ * (a wide multi-room flat gets a wide, flat pool); the fallbacks reproduce
+ * the mockup's single-room pool.
  */
 .workspace-canvas[data-view-mode='3d'] {
   background-color: var(--studio);
   background-image: radial-gradient(
-    max(54vw, 540px) max(56vh, 400px) at 47% 44%,
+    var(--pool-w, max(54vw, 540px)) var(--pool-h, max(56vh, 400px)) at 47% 44%,
     rgba(255, 255, 255, 0.95),
     rgba(214, 216, 222, 0.55) 62%,
     rgba(120, 126, 146, 0.3) 100%

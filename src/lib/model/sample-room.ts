@@ -106,7 +106,92 @@ export function createSampleRoom(): Room {
   };
 }
 
-/** The sample living room wrapped as the app's default one-room floor. */
+/**
+ * The kitchen abutting the living room's right wall (M6's shipping flat).
+ * Its left wall runs exactly along x = 6.4 over the living room's full
+ * right wall, so the whole party wall is a derived seam — and the living
+ * room's existing door on that wall becomes the connecting portal between
+ * the two rooms. Nothing about the connection is stored; it all falls out
+ * of `floorSeams`/`floorPortals` recomputing from the outlines.
+ *
+ * Furniture reuses catalog footprints (`catalog.ts`), placed clear of the
+ * walls and of each other (the overlap warning must be quiet on a fresh
+ * load). Derived wall indices: 0 = top, 1 = right, 2 = bottom, 3 = left
+ * (the party wall).
+ */
+export function createSampleKitchen(): Room {
+  return {
+    id: "kitchen",
+    name: "Kitchen",
+    outline: [
+      { x: 6.4, y: 0 },
+      { x: 9.4, y: 0 },
+      { x: 9.4, y: 5.2 },
+      { x: 6.4, y: 5.2 },
+    ],
+    openings: [
+      // Daylight over the dining table, on the exterior right wall.
+      {
+        id: "kitchen-window-1",
+        kind: "window",
+        wallIndex: 1,
+        offset: 1.7,
+        width: 1.4,
+      },
+    ],
+    furniture: [
+      // A counter run along the top wall (the credenza stands in for it).
+      {
+        id: "kitchen-counter-1",
+        catalogId: "credenza",
+        position: { x: 7.45, y: 0.33 },
+        rotation: 0,
+        footprint: { width: 1.5, depth: 0.65, height: 0.78 },
+      },
+      {
+        id: "dining-table-1",
+        catalogId: "dining-table",
+        position: { x: 8.35, y: 3.0 },
+        rotation: 90,
+        footprint: { width: 1.6, depth: 0.9, height: 0.75 },
+      },
+      {
+        id: "stool-1",
+        catalogId: "stool",
+        position: { x: 7.35, y: 2.55 },
+        rotation: 90,
+        footprint: { width: 0.42, depth: 0.42, height: 0.45 },
+      },
+      {
+        id: "stool-2",
+        catalogId: "stool",
+        position: { x: 7.35, y: 3.45 },
+        rotation: 90,
+        footprint: { width: 0.42, depth: 0.42, height: 0.45 },
+      },
+      {
+        id: "kitchen-shelf-1",
+        catalogId: "shelf",
+        position: { x: 7.4, y: 4.97 },
+        rotation: 180,
+        footprint: { width: 1.4, depth: 0.44, height: 1.7 },
+      },
+      {
+        id: "kitchen-plant-1",
+        catalogId: "plant",
+        position: { x: 9.05, y: 4.85 },
+        rotation: 0,
+        footprint: { width: 0.45, depth: 0.45, height: 1.2 },
+      },
+    ],
+  };
+}
+
+/**
+ * The app's default fixture: a small two-room flat — the mockup's living
+ * room plus a kitchen sharing its right wall, connected through the living
+ * room's door (a derived portal, see `createSampleKitchen`).
+ */
 export function createSampleFloor(): Floor {
-  return { rooms: [createSampleRoom()] };
+  return { rooms: [createSampleRoom(), createSampleKitchen()] };
 }

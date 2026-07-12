@@ -229,9 +229,10 @@ describe("floor totals", () => {
 });
 
 describe("createSampleFloor", () => {
-  it("wraps the sample room as a one-room floor", () => {
+  it("ships the two-room flat, living room first", () => {
     const floor = createSampleFloor();
-    expect(floor.rooms).toHaveLength(1);
+    expect(floor.rooms).toHaveLength(2);
     expect(floor.rooms[0]).toEqual(createSampleRoom());
+    expect(floor.rooms[1].name).toBe("Kitchen");
   });
 });
