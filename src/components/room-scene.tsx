@@ -32,13 +32,11 @@ import {
 } from "#/lib/furniture-parts";
 import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
 import {
-  canHostStack,
   floorBounds,
   outlineBounds,
   stackSurfaceHeight,
   wallHeightOf,
 } from "#/lib/model";
-import { furnitureObstacle } from "#/lib/place";
 import {
   buildWallSolids,
   cornerPosts,
@@ -713,7 +711,7 @@ function RoomLayer({
   ) => void;
 }) {
   // Overlap warnings and stack lifts are per-room concerns: furniture
-  // belongs to exactly one room (cross-room adjacency is M5's business).
+  // belongs to exactly one room, and containment keeps footprints inside it.
   const warnings = useMemo(
     () => overlappingFurnitureIds(room.furniture),
     [room.furniture],
@@ -749,8 +747,14 @@ export interface RoomSceneProps {
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
   snapEnabled: boolean;
   onSelectItem: (id: string) => void;
-  /** Live update during a move drag (already snapped; wall items carry mount). */
-  onMoveItem: (id: string, update: FurnitureUpdate) => void;
+  /** Live update during a move drag (already snapped; wall items carry
+   * mount). `targetRoomId` set and different from the item's current room
+   * reparents it there — the drag crossed a seam. */
+  onMoveItem: (
+    id: string,
+    update: FurnitureUpdate,
+    targetRoomId?: string,
+  ) => void;
   /** A move drag started/ended — the canvas locks orbit while it runs. */
   onMoveActiveChange: (active: boolean) => void;
 }
@@ -775,7 +779,7 @@ export function RoomScene({
     ? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
     : [0, 0, 0];
   // Selection and drags are floor-wide; the owning room is derived from the
-  // item id, and a drag stays inside its item's room (M5 adds seams).
+  // item id, and a drag crossing a seam reparents the item (M5).
   const selectedRoom = selectedId
     ? rooms.find((room) =>
         room.furniture.some((item) => item.id === selectedId),
@@ -792,26 +796,6 @@ export function RoomScene({
   );
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
-  const dragRoom = drag
-    ? rooms.find((room) => room.furniture.some((item) => item.id === drag.id))
-    : undefined;
-  // Every placed item of the drag's room except the dragged one is a snap
-  // neighbor — stacked riders sit above the floor and don't block it.
-  const moveObstacles = useMemo(
-    () =>
-      (dragRoom?.furniture ?? [])
-        .filter((item) => item.id !== drag?.id && !item.stack)
-        .map(furnitureObstacle),
-    [dragRoom?.furniture, drag?.id],
-  );
-  // Furniture a dragged rider may land on.
-  const stackHosts = useMemo(
-    () =>
-      (dragRoom?.furniture ?? []).filter(
-        (item) => item.id !== drag?.id && canHostStack(item),
-      ),
-    [dragRoom?.furniture, drag?.id],
-  );
   return (
     <group>
       <ambientLight color="#fff2de" intensity={1.15} />
@@ -829,7 +813,9 @@ export function RoomScene({
           seamData={seamData.get(room.id)}
           selectedId={selectedId}
           onSelectItem={onSelectItem}
-          onDragStart={beginDrag}
+          onDragStart={(item, grabPoint, screen, grabHeight) =>
+            beginDrag(item, room.id, grabPoint, screen, grabHeight)
+          }
         />
       ))}
       {selectedItem && (
@@ -859,15 +845,15 @@ export function RoomScene({
           }
         />
       )}
-      {drag && dragRoom && (
+      {drag && (
         <MoveDragSession
-          outline={dragRoom.outline}
-          obstacles={moveObstacles}
-          hosts={stackHosts}
+          rooms={rooms}
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}
-          onMove={(update) => onMoveItem(drag.id, update)}
+          onMove={(update, targetRoomId) =>
+            onMoveItem(drag.id, update, targetRoomId)
+          }
           onEnd={endDrag}
         />
       )}

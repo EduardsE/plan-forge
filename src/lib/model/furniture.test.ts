@@ -154,7 +154,12 @@ describe("updateFurniture", () => {
 
   it("applies rotation and mount when the update carries them", () => {
     const room = createSampleRoom();
-    const mount = { wallIndex: 2, offset: 1.1, elevation: 1.4 };
+    const mount = {
+      roomId: "living-room",
+      wallIndex: 2,
+      offset: 1.1,
+      elevation: 1.4,
+    };
     const next = updateFurniture(room, "desk-chair-1", {
       position: { x: 3, y: 5 },
       rotation: 180,

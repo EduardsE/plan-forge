@@ -27,14 +27,13 @@ import type {
   Room,
 } from "#/lib/model";
 import {
-  canHostStack,
   catalogItemById,
   floorArea,
   floorBounds,
   furnitureDisplayName,
   outlineBounds,
 } from "#/lib/model";
-import { furnitureObstacle, rotatedFootprintSize } from "#/lib/place";
+import { rotatedFootprintSize } from "#/lib/place";
 import {
   circlePoints,
   dashedPolyline,
@@ -829,7 +828,8 @@ export function PlanRoomLayer({
     return shapes;
   }, [solids]);
   // Overlap warnings are a per-room concern: furniture belongs to exactly
-  // one room, and cross-room adjacency is M5's business.
+  // one room, and containment keeps footprints inside it — items in
+  // different rooms can't overlap.
   const warnings = useMemo(
     () => overlappingFurnitureIds(room.furniture),
     [room.furniture],
@@ -934,8 +934,14 @@ export interface PlanSceneProps {
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
   snapEnabled: boolean;
   onSelectItem: (id: string) => void;
-  /** Live update during a move drag (already snapped; wall items carry mount). */
-  onMoveItem: (id: string, update: FurnitureUpdate) => void;
+  /** Live update during a move drag (already snapped; wall items carry
+   * mount). `targetRoomId` set and different from the item's current room
+   * reparents it there — the drag crossed a seam. */
+  onMoveItem: (
+    id: string,
+    update: FurnitureUpdate,
+    targetRoomId?: string,
+  ) => void;
   /** A move drag started/ended — the canvas locks pan/zoom while it runs. */
   onMoveActiveChange: (active: boolean) => void;
   onSelectOpening: (id: string) => void;
@@ -991,7 +997,7 @@ export function PlanScene({
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
   // The owning room is derived from the item id — selection and drags are
-  // floor-wide, but each drag stays inside its item's room (M5 adds seams).
+  // floor-wide; a drag crossing a seam reparents the item (M5).
   const selectedRoom = selectedId
     ? rooms.find((room) =>
         room.furniture.some((item) => item.id === selectedId),
@@ -999,26 +1005,6 @@ export function PlanScene({
     : undefined;
   const selectedItem =
     selectedRoom?.furniture.find((item) => item.id === selectedId) ?? null;
-  const dragRoom = drag
-    ? rooms.find((room) => room.furniture.some((item) => item.id === drag.id))
-    : undefined;
-  // Every placed item of the drag's room except the dragged one is a snap
-  // neighbor — stacked riders sit above the floor and don't block it.
-  const moveObstacles = useMemo(
-    () =>
-      (dragRoom?.furniture ?? [])
-        .filter((item) => item.id !== drag?.id && !item.stack)
-        .map(furnitureObstacle),
-    [dragRoom?.furniture, drag?.id],
-  );
-  // Furniture a dragged rider may land on.
-  const stackHosts = useMemo(
-    () =>
-      (dragRoom?.furniture ?? []).filter(
-        (item) => item.id !== drag?.id && canHostStack(item),
-      ),
-    [dragRoom?.furniture, drag?.id],
-  );
 
   if (!bounds) return null;
   const dimensionOffset = WALL_THICKNESS + DIMENSION_GAP;
@@ -1036,7 +1022,9 @@ export function PlanScene({
           selectedOpeningId={selectedOpeningId}
           openingTool={openingTool}
           onSelectItem={onSelectItem}
-          onDragStart={beginDrag}
+          onDragStart={(item, floorPoint, screen) =>
+            beginDrag(item, room.id, floorPoint, screen)
+          }
           onSelectOpening={onSelectOpening}
           onInsertOpening={onInsertOpening}
           onMoveOpening={onMoveOpening}
@@ -1073,15 +1061,15 @@ export function PlanScene({
           ]}
         />
       )}
-      {drag && dragRoom && (
+      {drag && (
         <MoveDragSession
-          outline={dragRoom.outline}
-          obstacles={moveObstacles}
-          hosts={stackHosts}
+          rooms={rooms}
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}
-          onMove={(update) => onMoveItem(drag.id, update)}
+          onMove={(update, targetRoomId) =>
+            onMoveItem(drag.id, update, targetRoomId)
+          }
           onEnd={endDrag}
         />
       )}

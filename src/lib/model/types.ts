@@ -59,6 +59,13 @@ export interface Footprint {
  * against the wall's interior face; renderers hang the body at `elevation`.
  */
 export interface WallMount {
+  /**
+   * Id of the room whose wall hosts the mount. Always the room whose
+   * furniture array holds the item — a mounted item belongs to the room it
+   * hangs in — so reshapes re-anchor against the correct outline even when
+   * another room's wall sits nearer (a party wall's far side).
+   */
+  roomId: string;
   /** Index of the host wall (see `Wall.index`). */
   wallIndex: number;
   /** Distance from the host wall's start corner to the mount's near edge. */

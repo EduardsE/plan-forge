@@ -2,7 +2,9 @@ import {
   deriveMountTransform,
   type MountFrame,
   type Point,
+  type Room,
   type WallMount,
+  wallFrames,
 } from "#/lib/model";
 import { slideOpening } from "#/lib/opening-place";
 import type { PlacementGuide } from "#/lib/place";
@@ -102,6 +104,7 @@ function clampOffset(
 }
 
 function resultFor(
+  roomId: string,
   frame: MountFrame,
   offset: number,
   footprint: { width: number; depth: number },
@@ -110,7 +113,7 @@ function resultFor(
 ): WallMountResult {
   const { position, rotation } = deriveMountTransform(frame, offset, footprint);
   return {
-    mount: { wallIndex: frame.index, offset, elevation },
+    mount: { roomId, wallIndex: frame.index, offset, elevation },
     position,
     rotation,
     guides,
@@ -118,12 +121,14 @@ function resultFor(
 }
 
 /**
- * Where a wall item dragged to `cursor` (a floor point) mounts: the nearest
- * wall that fits it, with the near-edge offset quantized (`snap`) or plain-
- * clamped to that wall. Walls too short for the item are skipped, so the mount
- * falls through to the next-nearest fitting wall. Null when no wall fits.
+ * Where a wall item dragged to `cursor` (a floor point) mounts within one
+ * room (`roomId` owns `frames`): the nearest wall that fits it, with the
+ * near-edge offset quantized (`snap`) or plain-clamped to that wall. Walls
+ * too short for the item are skipped, so the mount falls through to the
+ * next-nearest fitting wall. Null when no wall fits.
  */
 export function mountAt(
+  roomId: string,
   frames: MountFrame[],
   cursor: Point,
   footprint: { width: number; depth: number },
@@ -140,18 +145,58 @@ export function mountAt(
       : clampOffset(raw, frame.length, footprint.width);
     if (offset === null) continue;
     const guides = snap ? cornerGuides(frame, offset, footprint.width) : [];
-    return resultFor(frame, offset, footprint, elevation, guides);
+    return resultFor(roomId, frame, offset, footprint, elevation, guides);
   }
   return null;
 }
 
 /**
- * Re-anchor an existing mount after the outline is reshaped: keep it on the
- * geometrically nearest wall to its current `position` (robust to wall-index
- * shifts from splits), re-slid onto that wall. Null — meaning "drop it" — when
- * the nearest wall is now too short to hold the item. No guides.
+ * `mountAt` across every room of the floor: the candidate whose mounted
+ * position sits nearest the cursor wins (a wall index only means something
+ * within its own room, so the result's `mount.roomId` names the winner).
+ * This is how a wall-item drag crosses rooms — landing on another room's
+ * wall reparents the item there.
+ */
+export function mountAcrossRooms(
+  rooms: Room[],
+  cursor: Point,
+  footprint: { width: number; depth: number },
+  elevation: number,
+  snap = true,
+): WallMountResult | null {
+  let best: WallMountResult | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const room of rooms) {
+    const candidate = mountAt(
+      room.id,
+      wallFrames(room.outline),
+      cursor,
+      footprint,
+      elevation,
+      snap,
+    );
+    if (!candidate) continue;
+    const distance = Math.hypot(
+      candidate.position.x - cursor.x,
+      candidate.position.y - cursor.y,
+    );
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+/**
+ * Re-anchor an existing mount after `roomId`'s outline is reshaped: keep it
+ * on the geometrically nearest wall to its current `position` (robust to
+ * wall-index shifts from splits), re-slid onto that wall. Null — meaning
+ * "drop it" — when the nearest wall is now too short to hold the item. No
+ * guides.
  */
 export function reanchorMount(
+  roomId: string,
   frames: MountFrame[],
   position: Point,
   footprint: { width: number; depth: number },
@@ -173,5 +218,5 @@ export function reanchorMount(
     best.along - footprint.width / 2,
   );
   if (offset === null) return null;
-  return resultFor(best.frame, offset, footprint, elevation, []);
+  return resultFor(roomId, best.frame, offset, footprint, elevation, []);
 }

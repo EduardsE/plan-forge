@@ -241,7 +241,7 @@ export function setFurnitureFootprint(
         footprint: resized,
         position,
         rotation,
-        mount: { wallIndex: frame.index, offset, elevation },
+        mount: { ...item.mount, wallIndex: frame.index, offset, elevation },
       };
     }
   }

@@ -66,10 +66,20 @@ describe("serialize / deserialize round trip", () => {
   });
 });
 
+/** A room as pre-v5 saves stored it: mounts without a `roomId`. */
+const withLegacyMounts = (room: ReturnType<typeof createSampleRoom>) => ({
+  ...room,
+  furniture: room.furniture.map((item) => {
+    if (!item.mount) return item;
+    const { roomId: _dropped, ...mount } = item.mount;
+    return { ...item, mount };
+  }),
+});
+
 describe("legacy single-room saves (v1–v3)", () => {
-  /** A pre-v4 payload: `room` at the top level, no room id. */
+  /** A pre-v4 payload: `room` at the top level, no room id, no mount roomIds. */
   const legacyPayload = (version: number) => {
-    const { id: _dropped, ...room } = createSampleRoom();
+    const { id: _dropped, ...room } = withLegacyMounts(createSampleRoom());
     return JSON.stringify({
       version,
       room,
@@ -86,11 +96,48 @@ describe("legacy single-room saves (v1–v3)", () => {
       const { id, ...rest } = restored?.floor.rooms[0] ?? { id: "" };
       expect(typeof id).toBe("string");
       expect(id.length).toBeGreaterThan(0);
+      // Migration fills every mount's roomId with the generated room id.
+      const mounted = rest.furniture?.find((item) => item.mount);
+      expect(mounted?.mount?.roomId).toBe(id);
       const { id: _sample, ...sampleRest } = createSampleRoom();
-      expect(rest).toEqual(sampleRest);
+      expect(rest).toEqual({
+        ...sampleRest,
+        furniture: sampleRest.furniture.map((item) =>
+          item.mount ? { ...item, mount: { ...item.mount, roomId: id } } : item,
+        ),
+      });
       expect(restored?.unit).toBe("cm");
       expect(restored?.savedAt).toBe(1_750_000_000_000);
     }
+  });
+
+  it("migrates a v4 floor save, filling mount roomIds from the owning room", () => {
+    const room = withLegacyMounts(createSampleRoom());
+    const json = JSON.stringify({
+      version: 4,
+      floor: { rooms: [room] },
+      unit: "cm",
+      savedAt: 1_750_000_000_000,
+    });
+    const restored = deserializeSavedState(json);
+    expect(restored).not.toBeNull();
+    const mounted = restored?.floor.rooms[0].furniture.find(
+      (item) => item.mount,
+    );
+    expect(mounted?.mount?.roomId).toBe(room.id);
+  });
+
+  it("rejects a v5 mount whose roomId isn't the owning room's", () => {
+    const base = createSampleRoom();
+    const state = withRoom({
+      ...base,
+      furniture: base.furniture.map((item) =>
+        item.mount
+          ? { ...item, mount: { ...item.mount, roomId: "someone-else" } }
+          : item,
+      ),
+    });
+    expect(deserializeSavedState(serializeSavedState(state))).toBeNull();
   });
 
   it("still rejects a malformed legacy room", () => {
@@ -113,7 +160,7 @@ describe("deserializeSavedState rejection", () => {
 
   it("rejects an unreadable version", () => {
     const json = serializeSavedState(sampleState()).replace(
-      '"version":4',
+      '"version":5',
       '"version":99',
     );
     expect(deserializeSavedState(json)).toBeNull();

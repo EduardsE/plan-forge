@@ -330,7 +330,10 @@ export function applyOutlineDraft(
   const furniture: FurnitureItem[] = [];
   for (const item of room.furniture) {
     if (item.mount) {
+      // Re-anchor against this room's own reshaped walls — the mount's
+      // roomId is always the owning room (`WallMount.roomId` invariant).
       const result = reanchorMount(
+        room.id,
         frames,
         item.position,
         item.footprint,

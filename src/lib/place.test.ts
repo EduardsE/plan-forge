@@ -3,6 +3,7 @@ import type { FurnitureItem } from "./model";
 import {
   furnitureObstacle,
   type Obstacle,
+  outlineWallObstacles,
   rotatedFootprintSize,
   snapPlacement,
 } from "./place";
@@ -248,6 +249,47 @@ describe("furnitureObstacle", () => {
     expect(box.max.x).toBeCloseTo(3.25, 10);
     expect(box.min.y).toBeCloseTo(2, 10);
     expect(box.max.y).toBeCloseTo(4, 10);
+  });
+});
+
+describe("outlineWallObstacles", () => {
+  it("turns each axis-aligned wall into a degenerate obstacle", () => {
+    const obstacles = outlineWallObstacles(RECT);
+    expect(obstacles).toHaveLength(4);
+    // The top wall: flat on y, spanning the room's width.
+    expect(obstacles[0]).toEqual({
+      min: { x: 0, y: 0 },
+      max: { x: 6.4, y: 0 },
+    });
+    // The left wall: flat on x.
+    expect(obstacles[3]).toEqual({
+      min: { x: 0, y: 0 },
+      max: { x: 0, y: 5.2 },
+    });
+  });
+
+  it("skips non-axis walls, like every other snap path", () => {
+    const cut = [
+      { x: 0, y: 0 },
+      { x: 6.4, y: 0 },
+      { x: 6.4, y: 3.2 },
+      { x: 4.4, y: 5.2 }, // 45° cut
+      { x: 0, y: 5.2 },
+    ];
+    expect(outlineWallObstacles(cut)).toHaveLength(4);
+  });
+
+  it("snaps a mover flush against a neighbor room's wall", () => {
+    // A neighbor room protruding into the mover's room bounds at x=4:
+    // dragging toward it sticks flush instead of sliding over the wall.
+    const neighbor = outlineWallObstacles([
+      { x: 4, y: 2 },
+      { x: 8, y: 2 },
+      { x: 8, y: 6 },
+      { x: 4, y: 6 },
+    ]);
+    const snap = snapPlacement(RECT, SOFA, { x: 3.1, y: 3 }, neighbor);
+    expect(snap.center.x).toBeCloseTo(4 - SOFA.width / 2, 10);
   });
 });
 

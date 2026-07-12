@@ -3,6 +3,7 @@ import {
   addRoom,
   floorBounds,
   nextRoomName,
+  reparentFurniture,
   roomAtPoint,
   roomById,
   roomOfFurniture,
@@ -106,6 +107,81 @@ describe("owning-room resolution", () => {
     expect(roomOfOpening(floor, "kitchen-door")?.id).toBe("kitchen");
     expect(roomOfOpening(floor, "window-1")?.id).toBe("living-room");
     expect(roomOfOpening(floor, "ghost")).toBeUndefined();
+  });
+});
+
+describe("reparentFurniture", () => {
+  it("moves the item into the destination room at the updated position", () => {
+    const floor = twoRoomFloor();
+    const next = reparentFurniture(floor, "desk-chair-1", "kitchen", {
+      position: { x: 7.5, y: 1.5 },
+    });
+    expect(roomOfFurniture(next, "desk-chair-1")?.id).toBe("kitchen");
+    const moved = roomById(next, "kitchen")?.furniture.find(
+      (item) => item.id === "desk-chair-1",
+    );
+    expect(moved?.position).toEqual({ x: 7.5, y: 1.5 });
+    // Untouched rooms and the source floor stay as they were (pure).
+    expect(
+      roomById(floor, "living-room")?.furniture.some(
+        (item) => item.id === "desk-chair-1",
+      ),
+    ).toBe(true);
+  });
+
+  it("carries riders stacked on the item across with it", () => {
+    const floor = twoRoomFloor();
+    const living = floor.rooms[0];
+    floor.rooms[0] = {
+      ...living,
+      furniture: [
+        ...living.furniture,
+        {
+          id: "lamp-1",
+          catalogId: "table-lamp",
+          position: { x: 4.7, y: 0.73 },
+          rotation: 0,
+          footprint: { width: 0.2, depth: 0.2, height: 0.45 },
+          stack: { hostId: "desk-1", dx: 0, dy: 0 },
+        },
+      ],
+    };
+    const next = reparentFurniture(floor, "desk-1", "kitchen", {
+      position: { x: 7.5, y: 1.5 },
+    });
+    expect(roomOfFurniture(next, "lamp-1")?.id).toBe("kitchen");
+    // The rider's derived position followed its host into the new room.
+    const lamp = roomById(next, "kitchen")?.furniture.find(
+      (item) => item.id === "lamp-1",
+    );
+    expect(lamp?.position).toEqual({ x: 7.5, y: 1.5 });
+  });
+
+  it("reduces to a plain in-room update for a same-room target", () => {
+    const floor = twoRoomFloor();
+    const next = reparentFurniture(floor, "stool-1", "kitchen", {
+      position: { x: 8, y: 2 },
+    });
+    expect(roomById(next, "kitchen")?.furniture[0].position).toEqual({
+      x: 8,
+      y: 2,
+    });
+    // The other room rides along untouched (same reference).
+    expect(next.rooms[0]).toBe(floor.rooms[0]);
+  });
+
+  it("returns the same floor for unknown item or room ids", () => {
+    const floor = twoRoomFloor();
+    expect(
+      reparentFurniture(floor, "ghost", "kitchen", {
+        position: { x: 0, y: 0 },
+      }),
+    ).toBe(floor);
+    expect(
+      reparentFurniture(floor, "stool-1", "attic", {
+        position: { x: 0, y: 0 },
+      }),
+    ).toBe(floor);
   });
 });
 

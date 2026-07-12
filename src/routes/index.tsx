@@ -138,6 +138,13 @@ function Planner() {
       ),
     [],
   );
+  // A mid-drag state touching more than one room — a furniture drag
+  // reparenting its item across a seam. Streams like `previewRoom`.
+  const previewFloor = useCallback(
+    (next: Floor) =>
+      setFloorHistory((history) => previewHistory(history, next)),
+    [],
+  );
   const settleRoom = useCallback(() => setFloorHistory(settleHistory), []);
   const undoRoom = useCallback(() => setFloorHistory(undoHistory), []);
   const redoRoom = useCallback(() => setFloorHistory(redoHistory), []);
@@ -818,6 +825,7 @@ function Planner() {
               floor={floor}
               onRoomChange={commitRoom}
               onRoomPreview={previewRoom}
+              onFloorPreview={previewFloor}
               onRoomDragActiveChange={handleRoomDragActive}
               viewMode={viewMode}
               selectedId={selectedId}

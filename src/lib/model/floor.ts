@@ -1,3 +1,4 @@
+import { type FurnitureUpdate, updateFurniture } from "./furniture";
 import {
   floorArea,
   outlineBounds,
@@ -107,6 +108,55 @@ export function nextRoomName(floor: Floor): string {
     const name = `Room ${n}`;
     if (!taken.has(name)) return name;
   }
+}
+
+/**
+ * Move a furniture item into another room's array — a move-drag whose center
+ * crossed a seam — applying the drag's position/mount/stack update in the
+ * destination room. Riders stacked on the item cross with it (a host carries
+ * its riders, rooms included). Same-room targets reduce to a plain in-room
+ * update; unknown item or room ids return the floor unchanged (same
+ * reference), like every other no-op.
+ */
+export function reparentFurniture(
+  floor: Floor,
+  itemId: string,
+  toRoomId: string,
+  update: FurnitureUpdate,
+): Floor {
+  const from = roomOfFurniture(floor, itemId);
+  const to = roomById(floor, toRoomId);
+  if (!from || !to) return floor;
+  if (from.id === to.id) {
+    return updateRoomIn(floor, from.id, (room) =>
+      updateFurniture(room, itemId, update),
+    );
+  }
+  const moving = from.furniture.filter(
+    (item) => item.id === itemId || item.stack?.hostId === itemId,
+  );
+  const movingIds = new Set(moving.map((item) => item.id));
+  return {
+    ...floor,
+    rooms: floor.rooms.map((room) => {
+      if (room.id === from.id) {
+        return {
+          ...room,
+          furniture: room.furniture.filter((item) => !movingIds.has(item.id)),
+        };
+      }
+      if (room.id === to.id) {
+        // Land the items first, then apply the drag update in the new room
+        // so rider syncing sees host and riders together.
+        return updateFurniture(
+          { ...room, furniture: [...room.furniture, ...moving] },
+          itemId,
+          update,
+        );
+      }
+      return room;
+    }),
+  };
 }
 
 /**

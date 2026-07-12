@@ -53,6 +53,7 @@ import {
   type Point,
   type Room,
   removeOpening,
+  reparentFurniture,
   roomById,
   roomOfFurniture,
   roomOfOpening,
@@ -563,6 +564,9 @@ export interface PlannerCanvasProps {
   onRoomChange: (roomId: string, room: Room) => void;
   /** A mid-drag state: applied live but not a history step of its own. */
   onRoomPreview: (roomId: string, room: Room) => void;
+  /** A mid-drag state that touches more than one room — a drag reparenting
+   * its item across a seam. Streams like `onRoomPreview`. */
+  onFloorPreview: (floor: Floor) => void;
   /** A room drag began/ended (however) — the route settles the previews
    * into one step on end, and stands its keyboard editing down meanwhile. */
   onRoomDragActiveChange: (active: boolean) => void;
@@ -610,6 +614,7 @@ export function PlannerCanvas({
   floor,
   onRoomChange,
   onRoomPreview,
+  onFloorPreview,
   onRoomDragActiveChange,
   viewMode,
   selectedId,
@@ -686,12 +691,19 @@ export function PlannerCanvas({
   const moveItem = useCallback(
     // Streams per pointermove — a preview, folded into one history step
     // when the drag session releases the camera controls below. The owning
-    // room is derived from the item id (selection is floor-wide).
-    (id: string, update: FurnitureUpdate) => {
+    // room is derived from the item id (selection is floor-wide); a target
+    // room differing from it means the drag crossed a seam, and the item
+    // reparents into the destination room's furniture array.
+    (id: string, update: FurnitureUpdate, targetRoomId?: string) => {
       const owner = roomOfFurniture(floor, id);
-      if (owner) onRoomPreview(owner.id, updateFurniture(owner, id, update));
+      if (!owner) return;
+      if (targetRoomId === undefined || targetRoomId === owner.id) {
+        onRoomPreview(owner.id, updateFurniture(owner, id, update));
+        return;
+      }
+      onFloorPreview(reparentFurniture(floor, id, targetRoomId, update));
     },
-    [floor, onRoomPreview],
+    [floor, onRoomPreview, onFloorPreview],
   );
 
   const insertOpening = useCallback(
@@ -814,9 +826,10 @@ export function PlannerCanvas({
     ],
   );
   const placeMountedItem = useCallback(
-    (roomId: string, result: WallMountResult) => {
+    // The landing room is the mount's own (`mountAcrossRooms` resolved it).
+    (result: WallMountResult) => {
       if (!placingItem) return;
-      const owner = roomById(floor, roomId);
+      const owner = roomById(floor, result.mount.roomId);
       if (!owner) return;
       const id = crypto.randomUUID();
       onRoomChange(

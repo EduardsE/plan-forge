@@ -63,7 +63,11 @@ describe("host/rider predicates", () => {
   it("a placed host must stand free on the floor", () => {
     expect(canHostStack(host())).toBe(true);
     expect(
-      canHostStack(host({ mount: { wallIndex: 0, offset: 1, elevation: 1 } })),
+      canHostStack(
+        host({
+          mount: { roomId: "room", wallIndex: 0, offset: 1, elevation: 1 },
+        }),
+      ),
     ).toBe(false);
     expect(
       canHostStack(host({ stack: { hostId: "other", dx: 0, dy: 0 } })),

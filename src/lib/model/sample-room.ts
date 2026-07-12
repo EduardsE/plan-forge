@@ -95,7 +95,12 @@ export function createSampleRoom(): Room {
         position: { x: 0.03, y: 1.6 },
         rotation: 90,
         footprint: { width: 0.9, depth: 0.06, height: 0.7 },
-        mount: { wallIndex: 3, offset: 3.15, elevation: 1.5 },
+        mount: {
+          roomId: "living-room",
+          wallIndex: 3,
+          offset: 3.15,
+          elevation: 1.5,
+        },
       },
     ],
   };

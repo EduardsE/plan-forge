@@ -82,6 +82,36 @@ export function furnitureObstacle(item: FurnitureItem): Obstacle {
   };
 }
 
+/**
+ * A room outline's axis-aligned walls as degenerate (zero-thickness)
+ * obstacles — neighbor rooms enter the snap pipeline through these, so a
+ * piece dragged inside one room snaps flush against (rather than sliding
+ * over) an adjacent room's walls. Each wall is an AABB flat on its own axis;
+ * `objectFaces`' cross-overlap gate keeps the face scoped to the wall's real
+ * span. Non-axis walls are skipped, like every other snap path (axis-aligned
+ * rooms are the mainline).
+ */
+export function outlineWallObstacles(outline: Point[]): Obstacle[] {
+  const obstacles: Obstacle[] = [];
+  for (const wall of wallsOf(outline)) {
+    const dx = Math.abs(wall.start.x - wall.end.x);
+    const dy = Math.abs(wall.start.y - wall.end.y);
+    if (dx > AXIS_EPSILON && dy > AXIS_EPSILON) continue;
+    if (dx <= AXIS_EPSILON && dy <= AXIS_EPSILON) continue;
+    obstacles.push({
+      min: {
+        x: Math.min(wall.start.x, wall.end.x),
+        y: Math.min(wall.start.y, wall.end.y),
+      },
+      max: {
+        x: Math.max(wall.start.x, wall.end.x),
+        y: Math.max(wall.start.y, wall.end.y),
+      },
+    });
+  }
+  return obstacles;
+}
+
 function quantize(value: number, grid: number): number {
   return Math.round(value / grid) * grid;
 }
