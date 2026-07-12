@@ -83,6 +83,12 @@ export interface CornerPost {
   walls: [number, number];
 }
 
+/** A neighbor room's walls, as a cover source for `postCoveredByWalls`. */
+export interface NeighborWalls {
+  solids: WallSolid[];
+  wallHeight: number;
+}
+
 /** Twice the signed area; sign encodes winding (positive for the sample). */
 function signedDoubleArea(outline: Point[]): number {
   let sum = 0;
@@ -277,6 +283,68 @@ export function stubSpans(piece: WallPiece): Span[] {
     spans.push({ start: cursor, end: piece.end });
   }
   return spans;
+}
+
+const COVER_EPSILON = 1e-6;
+
+/**
+ * Whether a corner post's box lies entirely inside one of a neighbor room's
+ * wall solids. Two flush rooms both fill the shared junction — each room's
+ * post lands inside the other room's wall — and the coincident faces
+ * z-fight in the 3D lens, so a covered post is simply not rendered: the
+ * neighbor's wall already draws that volume. Coverage requires a
+ * full-thickness (non-seam) stretch at least as tall as the post with no
+ * hole overlapping the post's span — anything less leaves part of the post
+ * unfilled, so it stays.
+ */
+export function postCoveredByWalls(
+  post: CornerPost,
+  postHeight: number,
+  neighbor: NeighborWalls,
+  thickness = WALL_THICKNESS,
+): boolean {
+  if (neighbor.wallHeight < postHeight - COVER_EPSILON) return false;
+  const half = thickness / 2;
+  const corners = [
+    { x: post.center.x - half, y: post.center.y - half },
+    { x: post.center.x + half, y: post.center.y - half },
+    { x: post.center.x + half, y: post.center.y + half },
+    { x: post.center.x - half, y: post.center.y + half },
+  ];
+  for (const solid of neighbor.solids) {
+    // Wall-local coordinates: distance along the wall and outward offset.
+    const local = corners.map((corner) => {
+      const rx = corner.x - solid.start.x;
+      const ry = corner.y - solid.start.y;
+      return {
+        along: rx * solid.dir.x + ry * solid.dir.y,
+        off: rx * solid.outward.x + ry * solid.outward.y,
+      };
+    });
+    if (
+      local.some(
+        (p) => p.off < -COVER_EPSILON || p.off > thickness + COVER_EPSILON,
+      )
+    ) {
+      continue;
+    }
+    const alongMin = Math.min(...local.map((p) => p.along));
+    const alongMax = Math.max(...local.map((p) => p.along));
+    for (const piece of wallPieces(solid)) {
+      if (piece.seam) continue; // half thickness — can't fill the post box
+      if (
+        alongMin < piece.start - COVER_EPSILON ||
+        alongMax > piece.end + COVER_EPSILON
+      ) {
+        continue;
+      }
+      const blocked = piece.holes.some(
+        (hole) => hole.start < alongMax && hole.start + hole.width > alongMin,
+      );
+      if (!blocked) return true;
+    }
+  }
+  return false;
 }
 
 /**

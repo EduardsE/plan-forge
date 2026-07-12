@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { Opening, Room } from "#/lib/model";
 import { createSampleRoom } from "#/lib/model/sample-room";
+import { floorSeamData } from "#/lib/seams";
 import {
   buildWallSolids,
   cornerPosts,
   DOOR_HEIGHT,
+  postCoveredByWalls,
   STUB_WALL_HEIGHT,
   stubSpans,
   WALL_HEIGHT,
@@ -153,6 +156,107 @@ describe("cornerPosts", () => {
     expect(
       posts.find((p) => p.corner.x === 2 && p.corner.y === 2),
     ).toBeUndefined();
+  });
+});
+
+describe("postCoveredByWalls", () => {
+  const rect = (
+    id: string,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    openings: Opening[] = [],
+  ): Room => ({
+    id,
+    outline: [
+      { x: x0, y: y0 },
+      { x: x1, y: y0 },
+      { x: x1, y: y1 },
+      { x: x0, y: y1 },
+    ],
+    openings,
+    furniture: [],
+  });
+
+  /** Living room + flush kitchen sharing the wall line x = 6.4. */
+  const flat = (kitchenOpenings: Opening[] = []) => {
+    const living = rect("living", 0, 0, 6.4, 5.2);
+    const kitchen = rect("kitchen", 6.4, 0, 9.4, 5.2, kitchenOpenings);
+    const seamData = floorSeamData([living, kitchen]);
+    return {
+      livingPosts: cornerPosts(
+        buildWallSolids(living, WALL_HEIGHT, seamData.get("living")),
+      ),
+      kitchen: {
+        solids: buildWallSolids(kitchen, WALL_HEIGHT, seamData.get("kitchen")),
+        wallHeight: WALL_HEIGHT,
+      },
+    };
+  };
+  const postAt = (
+    posts: ReturnType<typeof cornerPosts>,
+    x: number,
+    y: number,
+  ) => {
+    const post = posts.find((p) => p.corner.x === x && p.corner.y === y);
+    if (!post) throw new Error(`no post at ${x},${y}`);
+    return post;
+  };
+
+  it("covers the junction posts that sit inside the flush neighbor's walls", () => {
+    const { livingPosts, kitchen } = flat();
+    // Both shared-wall junction posts land inside the kitchen's top/bottom
+    // wall solids; the exterior corners stay.
+    expect(
+      postCoveredByWalls(postAt(livingPosts, 6.4, 0), WALL_HEIGHT, kitchen),
+    ).toBe(true);
+    expect(
+      postCoveredByWalls(postAt(livingPosts, 6.4, 5.2), WALL_HEIGHT, kitchen),
+    ).toBe(true);
+    expect(
+      postCoveredByWalls(postAt(livingPosts, 0, 0), WALL_HEIGHT, kitchen),
+    ).toBe(false);
+    expect(
+      postCoveredByWalls(postAt(livingPosts, 0, 5.2), WALL_HEIGHT, kitchen),
+    ).toBe(false);
+  });
+
+  it("keeps the post when the neighbor's wall is shorter", () => {
+    const { livingPosts, kitchen } = flat();
+    expect(
+      postCoveredByWalls(postAt(livingPosts, 6.4, 0), WALL_HEIGHT, {
+        ...kitchen,
+        wallHeight: 2.2,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps the post when a neighbor hole overlaps its span", () => {
+    // A door flush with the kitchen's top-left corner: the wall doesn't
+    // fill the post's box there, so the post stays (it forms the jamb).
+    const { livingPosts, kitchen } = flat([
+      { id: "d", kind: "door", wallIndex: 0, offset: 0, width: 0.9 },
+    ]);
+    expect(
+      postCoveredByWalls(postAt(livingPosts, 6.4, 0), WALL_HEIGHT, kitchen),
+    ).toBe(false);
+    // The other junction post is untouched by the hole.
+    expect(
+      postCoveredByWalls(postAt(livingPosts, 6.4, 5.2), WALL_HEIGHT, kitchen),
+    ).toBe(true);
+  });
+
+  it("never counts a half-thickness seam stretch as cover", () => {
+    const { kitchen } = flat();
+    // A fabricated post inside the kitchen's left wall — that wall is fully
+    // shared, so it renders at half thickness and can't fill the box.
+    const post = {
+      corner: { x: 6.4, y: 2 },
+      center: { x: 6.35, y: 2 },
+      walls: [3, 0] as [number, number],
+    };
+    expect(postCoveredByWalls(post, WALL_HEIGHT, kitchen)).toBe(false);
   });
 });
 

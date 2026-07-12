@@ -41,6 +41,8 @@ import { floorBounds, stackSurfaceHeight, wallHeightOf } from "#/lib/model";
 import {
   buildWallSolids,
   cornerPosts,
+  type NeighborWalls,
+  postCoveredByWalls,
   SLAB_THICKNESS,
   STUB_WALL_HEIGHT,
   stubSpans,
@@ -48,7 +50,7 @@ import {
   type WallSolid,
   wallPieces,
 } from "#/lib/room-scene";
-import { floorSeamData, type RoomSeamData } from "#/lib/seams";
+import { floorSeamData } from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -523,14 +525,27 @@ function WallMesh({
   );
 }
 
+/** One room's walls, plus the neighbor rooms' as a post-cover source. */
+interface RoomWalls extends NeighborWalls {
+  neighbors: NeighborWalls[];
+}
+
 /** Walls + corner posts with the per-frame dollhouse cutaway. */
-function Walls({ room, seamData }: { room: Room; seamData?: RoomSeamData }) {
-  const wallHeight = wallHeightOf(room);
-  const solids = useMemo(
-    () => buildWallSolids(room, wallHeightOf(room), seamData),
-    [room, seamData],
+function Walls({ walls }: { walls: RoomWalls }) {
+  const { solids, wallHeight, neighbors } = walls;
+  // A junction post that sits entirely inside a flush neighbor's wall is
+  // dropped — the neighbor draws that volume, and the duplicate's coincident
+  // faces would z-fight as a patchy strip on the shared wall.
+  const posts = useMemo(
+    () =>
+      cornerPosts(solids).filter(
+        (post) =>
+          !neighbors.some((other) =>
+            postCoveredByWalls(post, wallHeight, other),
+          ),
+      ),
+    [solids, wallHeight, neighbors],
   );
-  const posts = useMemo(() => cornerPosts(solids), [solids]);
   /** Wall index → position in `solids` (zero-length walls are skipped). */
   const solidPosition = useMemo(
     () => new Map(solids.map((solid, i) => [solid.index, i])),
@@ -837,14 +852,14 @@ function stackTopsOf(furniture: FurnitureItem[]): Map<string, number> {
 /** One room of the floor: platform, cutaway walls, furniture bodies. */
 function RoomLayer({
   room,
-  seamData,
+  walls,
   selectedId,
   onSelectItem,
   onDragStart,
 }: {
   room: Room;
-  /** The room's shared-wall data (portal cuts + half-thickness seams). */
-  seamData?: RoomSeamData;
+  /** The room's derived wall solids + the neighbor rooms' (from `RoomScene`). */
+  walls: RoomWalls;
   selectedId: string | null;
   onSelectItem: (id: string) => void;
   onDragStart: (
@@ -867,7 +882,7 @@ function RoomLayer({
   return (
     <group>
       <Platform outline={room.outline} />
-      <Walls room={room} seamData={seamData} />
+      <Walls walls={walls} />
       {room.furniture.map((item) => (
         <FurnitureMesh
           key={item.id}
@@ -919,6 +934,19 @@ export function RoomScene({
   // (never stored): each room draws its half of a party wall and cuts gaps
   // for the neighbor's doors/windows on it.
   const seamData = useMemo(() => floorSeamData(rooms), [rooms]);
+  // One wall-solid derivation per room, each bundled with the other rooms'
+  // as neighbors: `Walls` hides the corner posts a flush neighbor's wall
+  // already fills (they'd z-fight on the shared junction).
+  const wallSets = useMemo<RoomWalls[]>(() => {
+    const sets = rooms.map((room) => ({
+      solids: buildWallSolids(room, wallHeightOf(room), seamData.get(room.id)),
+      wallHeight: wallHeightOf(room),
+    }));
+    return sets.map((set, i) => ({
+      ...set,
+      neighbors: sets.filter((_, j) => j !== i),
+    }));
+  }, [rooms, seamData]);
   const center: [number, number, number] = bounds
     ? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
     : [0, 0, 0];
@@ -951,11 +979,11 @@ export function RoomScene({
         intensity={0.45}
       />
       {bounds && <FloorContactShadow bounds={bounds} />}
-      {rooms.map((room) => (
+      {rooms.map((room, i) => (
         <RoomLayer
           key={room.id}
           room={room}
-          seamData={seamData.get(room.id)}
+          walls={wallSets[i]}
           selectedId={selectedId}
           onSelectItem={onSelectItem}
           onDragStart={(item, grabPoint, screen, grabHeight) =>
