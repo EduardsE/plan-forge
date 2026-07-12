@@ -1,6 +1,6 @@
 import type { OpeningKind, Point, Room } from "#/lib/model";
 import { DEFAULT_WALL_HEIGHT, wallHeightOf, wallsOf } from "#/lib/model";
-import type { RoomSeamData, Span } from "#/lib/seams";
+import type { RoomSeamData, SeamSpan, Span } from "#/lib/seams";
 
 /**
  * Pure scene-preparation math for the 3D lens: turns the plain room model
@@ -63,10 +63,11 @@ export interface WallSolid {
   holes: WallHole[];
   /**
    * Shared-wall stretches (wall-local, sorted, disjoint): another room's
-   * wall runs along the same line there, so this side renders only half the
-   * thickness (see `wallPieces`). Absent/empty on unshared walls.
+   * wall runs along the same line (gap 0) or one thickness outward
+   * (back-to-back) there, so this side renders only half the thickness
+   * (see `wallPieces`). Absent/empty on unshared walls.
    */
-  seams?: Span[];
+  seams?: SeamSpan[];
 }
 
 /**
@@ -283,6 +284,51 @@ export function stubSpans(piece: WallPiece): Span[] {
     spans.push({ start: cursor, end: piece.end });
   }
   return spans;
+}
+
+/**
+ * The seam gap under a hole's midpoint, or null when the hole isn't on a
+ * shared stretch. Renderers use it to center window symbols/dressing on the
+ * wall *assembly* — `gap / 2` outward from the owning wall line.
+ */
+export function holeSeamGap(
+  solid: WallSolid,
+  hole: { start: number; width: number },
+): number | null {
+  const mid = hole.start + hole.width / 2;
+  const span = (solid.seams ?? []).find(
+    (entry) => entry.start <= mid && mid <= entry.end,
+  );
+  return span ? span.gap : null;
+}
+
+/** A stretch of floor-level portal on a gapped (back-to-back) seam. */
+export interface PortalThreshold {
+  start: number;
+  end: number;
+  gap: number;
+}
+
+/**
+ * Floor slabs cover only their room's outline, so on a back-to-back seam the
+ * strip between the two outlines is bare — visible as a trench through any
+ * floor-reaching portal. These are the spans to bridge with a threshold,
+ * owned (like symbols/dressing) by the opening's own side, so the two rooms
+ * never draw it twice. Flush seams (gap 0) have no strip and yield none.
+ */
+export function portalThresholds(solid: WallSolid): PortalThreshold[] {
+  const thresholds: PortalThreshold[] = [];
+  for (const hole of solid.holes) {
+    if (hole.phantom || hole.bottom > MIN_HOLE_SIZE) continue;
+    for (const span of solid.seams ?? []) {
+      if (span.gap <= MIN_HOLE_SIZE) continue;
+      const start = Math.max(hole.start, span.start);
+      const end = Math.min(hole.start + hole.width, span.end);
+      if (end - start < MIN_HOLE_SIZE) continue;
+      thresholds.push({ start, end, gap: span.gap });
+    }
+  }
+  return thresholds;
 }
 
 const COVER_EPSILON = 1e-6;

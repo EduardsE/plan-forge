@@ -41,7 +41,9 @@ import { floorBounds, stackSurfaceHeight, wallHeightOf } from "#/lib/model";
 import {
   buildWallSolids,
   cornerPosts,
+  holeSeamGap,
   type NeighborWalls,
+  portalThresholds,
   postCoveredByWalls,
   SLAB_THICKNESS,
   STUB_WALL_HEIGHT,
@@ -69,6 +71,8 @@ import type { Unit } from "#/lib/units";
 const FLOOR_TOP = 0.001;
 const PLANK_PERIOD = 0.8;
 const PLANK_COLORS = ["#eaddc6", "#decfb2", "#e4d6bc"] as const;
+/** Doorway threshold over a back-to-back seam's slab strip (plank-toned). */
+const THRESHOLD_COLOR = PLANK_COLORS[1];
 const SLAB_SIDE_COLOR = "#2b3452";
 const WALL_TOP_COLOR = "#f8f2e7";
 const WALL_BOTTOM_COLOR = "#efe5d3";
@@ -436,13 +440,8 @@ function WallMesh({
   const localZOutward =
     solid.outward.x * -solid.dir.y + solid.outward.y * solid.dir.x > 0;
   const zOffset = (thickness: number) => (localZOutward ? 0 : -thickness);
-  /** Whether the (unclipped) hole sits on a shared stretch of this wall. */
-  const onSeam = (hole: WallSolid["holes"][number]) => {
-    const mid = hole.start + hole.width / 2;
-    return (solid.seams ?? []).some(
-      (span) => span.start <= mid && mid <= span.end,
-    );
-  };
+  /** Wall-local z of a point `outward` meters outward from the wall line. */
+  const zOutward = (outward: number) => (localZOutward ? outward : -outward);
   const pieceMesh = (
     piece: (typeof pieces)[number],
     geometry: ExtrudeGeometry,
@@ -460,18 +459,25 @@ function WallMesh({
   // Window dressing (frame + glowing pane + light) rides in its stretch's
   // full-height group: a cut-down wall can't host a floating window. A
   // phantom window is a neighbor's portal — the owning side draws the one
-  // frame, centered on the seam so it spans both halves.
+  // frame, centered on the wall assembly (gap / 2 outward from the owning
+  // line) so it spans both rooms' halves.
   const dressings = (seam: boolean) =>
     solid.holes
       .filter(
         (hole) =>
-          hole.kind === "window" && !hole.phantom && onSeam(hole) === seam,
+          hole.kind === "window" &&
+          !hole.phantom &&
+          (holeSeamGap(solid, hole) !== null) === seam,
       )
       .map((hole) => (
         <WindowDressing
           key={hole.start}
           hole={hole}
-          zCenter={seam ? 0 : zOffset(WALL_THICKNESS) + WALL_THICKNESS / 2}
+          zCenter={
+            seam
+              ? zOutward((holeSeamGap(solid, hole) ?? 0) / 2)
+              : zOffset(WALL_THICKNESS) + WALL_THICKNESS / 2
+          }
         />
       ));
 
@@ -521,6 +527,29 @@ function WallMesh({
             pieceMesh(piece, piece.stubGeometry as ExtrudeGeometry),
           )}
       </group>
+      {/* Back-to-back seams leave a slab-deep strip neither room's platform
+          covers; bridge it under floor-reaching portals so doorways don't
+          open onto a trench. Floor-level, so it never joins the cutaway. */}
+      {portalThresholds(solid).map((threshold) => (
+        <mesh
+          key={threshold.start}
+          position={[
+            (threshold.start + threshold.end) / 2,
+            FLOOR_TOP - SLAB_THICKNESS / 2,
+            zOutward(threshold.gap / 2),
+          ]}
+          raycast={noRaycast}
+        >
+          <boxGeometry
+            args={[
+              threshold.end - threshold.start,
+              SLAB_THICKNESS,
+              threshold.gap,
+            ]}
+          />
+          <meshLambertMaterial color={THRESHOLD_COLOR} />
+        </mesh>
+      ))}
     </group>
   );
 }

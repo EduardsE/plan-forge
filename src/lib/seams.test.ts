@@ -64,10 +64,63 @@ describe("floorSeams", () => {
     expect(other?.otherEnd).toBeCloseTo(1);
   });
 
-  it("ignores rooms with a gap between them", () => {
+  it("pairs back-to-back walls (lines one thickness apart) as a seam", () => {
+    // Shift the kitchen one wall thickness east: the two wall lines no
+    // longer coincide, but the outward-extruded solids occupy the same
+    // slab — the user-visible "one wall" the doors were cut into.
     const shifted = kitchen();
     shifted.outline = shifted.outline.map((p) => ({ x: p.x + 0.1, y: p.y }));
-    expect(floorSeams([livingRoom(), shifted])).toEqual([]);
+    const seams = floorSeams([livingRoom(), shifted]);
+    expect(seams).toHaveLength(2);
+
+    const living = seams.find((seam) => seam.roomId === "living");
+    expect(living).toMatchObject({
+      wallIndex: 1,
+      otherRoomId: "kitchen",
+      otherWallIndex: 3,
+      gap: 0.1,
+    });
+    expect(living?.span.start).toBeCloseTo(1);
+    expect(living?.span.end).toBeCloseTo(4);
+    // The offset is perpendicular, so the along-wall mapping is unchanged.
+    expect(living?.otherStart).toBeCloseTo(3);
+    expect(living?.otherEnd).toBeCloseTo(0);
+    expect(seams.find((seam) => seam.roomId === "kitchen")?.gap).toBe(0.1);
+  });
+
+  it("flags flush seams with gap 0", () => {
+    for (const seam of floorSeams([livingRoom(), kitchen()])) {
+      expect(seam.gap).toBe(0);
+    }
+  });
+
+  it("ignores rooms with a real gap or overlap between them", () => {
+    // Half a thickness (solids overlap but lines differ), a thickness plus
+    // a grid step (real air gap), and minus a thickness (rooms overlap).
+    for (const dx of [0.05, 0.15, -0.1]) {
+      const shifted = kitchen();
+      shifted.outline = shifted.outline.map((p) => ({ x: p.x + dx, y: p.y }));
+      expect(floorSeams([livingRoom(), shifted])).toEqual([]);
+    }
+  });
+
+  it("ignores parallel walls one thickness apart that face the same way", () => {
+    // A room overlapping the living room's east edge: its east wall runs
+    // 0.1 beyond the living room's east wall — parallel, one thickness
+    // apart, but both face east, so their solids don't share a slab.
+    const overlapping: Room = {
+      id: "overlap",
+      name: "Overlap",
+      outline: [
+        { x: 6.2, y: 1 },
+        { x: 6.5, y: 1 },
+        { x: 6.5, y: 4 },
+        { x: 6.2, y: 4 },
+      ],
+      openings: [],
+      furniture: [],
+    };
+    expect(floorSeams([livingRoom(), overlapping])).toEqual([]);
   });
 
   it("ignores corner touches (zero-length overlaps)", () => {
@@ -115,6 +168,17 @@ describe("floorPortals", () => {
     expect(portals).toHaveLength(1);
     expect(portals[0].otherOffset).toBeCloseTo(0);
     expect(portals[0].otherWidth).toBeCloseTo(0.3);
+  });
+
+  it("derives portals across a back-to-back seam", () => {
+    const shifted = kitchen();
+    shifted.outline = shifted.outline.map((p) => ({ x: p.x + 0.1, y: p.y }));
+    const portals = floorPortals([livingRoom([door]), shifted]);
+    expect(portals).toHaveLength(1);
+    // Same along-wall mapping as the flush case — the offset is
+    // perpendicular to the wall, so it doesn't shift the hole.
+    expect(portals[0].otherOffset).toBeCloseTo(1.1);
+    expect(portals[0].otherWidth).toBeCloseTo(0.9);
   });
 
   it("leaves openings off the seam unclassified", () => {

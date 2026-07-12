@@ -6,6 +6,8 @@ import {
   buildWallSolids,
   cornerPosts,
   DOOR_HEIGHT,
+  holeSeamGap,
+  portalThresholds,
   postCoveredByWalls,
   STUB_WALL_HEIGHT,
   stubSpans,
@@ -274,12 +276,12 @@ describe("buildWallSolids with seam data", () => {
       furniture: [],
     };
     const solids = buildWallSolids(room, undefined, {
-      seamSpans: new Map([[3, [{ start: 0, end: 3 }]]]),
+      seamSpans: new Map([[3, [{ start: 0, end: 3, gap: 0 }]]]),
       portalHoles: [
         { id: "door-1", kind: "door", wallIndex: 3, offset: 1.1, width: 0.9 },
       ],
     });
-    expect(solids[3].seams).toEqual([{ start: 0, end: 3 }]);
+    expect(solids[3].seams).toEqual([{ start: 0, end: 3, gap: 0 }]);
     expect(solids[3].holes).toEqual([
       {
         id: "door-1",
@@ -390,7 +392,7 @@ describe("wallPieces", () => {
     const pieces = wallPieces({
       ...baseSolid,
       holes: [door, window],
-      seams: [{ start: 1, end: 4 }],
+      seams: [{ start: 1, end: 4, gap: 0 }],
     });
     expect(pieces).toHaveLength(3);
     expect(pieces[0]).toEqual({ start: 0, end: 1, seam: false, holes: [] });
@@ -415,7 +417,7 @@ describe("wallPieces", () => {
     const pieces = wallPieces({
       ...baseSolid,
       holes: [door],
-      seams: [{ start: 1, end: 4 }],
+      seams: [{ start: 1, end: 4, gap: 0 }],
     });
     // Widths compare as the exact float differences the clipping computes.
     expect(pieces[1].holes).toEqual([{ ...door, start: 3.8, width: 4 - 3.8 }]);
@@ -426,7 +428,76 @@ describe("wallPieces", () => {
 
   it("covers a fully shared wall with one seam piece", () => {
     expect(
-      wallPieces({ ...baseSolid, seams: [{ start: 0, end: 5.2 }] }),
+      wallPieces({ ...baseSolid, seams: [{ start: 0, end: 5.2, gap: 0 }] }),
     ).toEqual([{ start: 0, end: 5.2, seam: true, holes: [] }]);
+  });
+});
+
+describe("holeSeamGap", () => {
+  const baseSolid = {
+    index: 1,
+    start: { x: 6.4, y: 0 },
+    dir: { x: 0, y: 1 },
+    outward: { x: 1, y: 0 },
+    length: 5.2,
+    holes: [],
+  };
+
+  it("reports the containing span's gap, or null off the seams", () => {
+    const solid = {
+      ...baseSolid,
+      seams: [
+        { start: 0, end: 2, gap: 0 },
+        { start: 3, end: 5, gap: 0.1 },
+      ],
+    };
+    expect(holeSeamGap(solid, { start: 0.5, width: 0.9 })).toBe(0);
+    expect(holeSeamGap(solid, { start: 3.5, width: 0.9 })).toBe(0.1);
+    expect(holeSeamGap(solid, { start: 2.1, width: 0.5 })).toBeNull();
+    expect(holeSeamGap(baseSolid, { start: 0.5, width: 0.9 })).toBeNull();
+  });
+});
+
+describe("portalThresholds", () => {
+  const door = {
+    id: "door-1",
+    kind: "door" as const,
+    start: 2,
+    width: 0.9,
+    bottom: 0,
+    top: DOOR_HEIGHT,
+  };
+  const solid = (holes: (typeof door)[], gap: number) => ({
+    index: 1,
+    start: { x: 6.4, y: 0 },
+    dir: { x: 0, y: 1 },
+    outward: { x: 1, y: 0 },
+    length: 5.2,
+    holes,
+    seams: [{ start: 1, end: 4, gap }],
+  });
+
+  it("bridges a floor-reaching portal on a gapped seam", () => {
+    expect(portalThresholds(solid([door], 0.1))).toEqual([
+      { start: 2, end: 2.9, gap: 0.1 },
+    ]);
+  });
+
+  it("clips the threshold to the seam span", () => {
+    expect(portalThresholds(solid([{ ...door, start: 3.7 }], 0.1))).toEqual([
+      { start: 3.7, end: 4, gap: 0.1 },
+    ]);
+  });
+
+  it("yields none on flush seams, phantom cuts or raised holes", () => {
+    expect(portalThresholds(solid([door], 0))).toEqual([]);
+    expect(portalThresholds(solid([{ ...door, phantom: true }], 0.1))).toEqual(
+      [],
+    );
+    expect(
+      portalThresholds(
+        solid([{ ...door, bottom: WINDOW_SILL, kind: "window" }], 0.1),
+      ),
+    ).toEqual([]);
   });
 });

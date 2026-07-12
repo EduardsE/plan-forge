@@ -46,6 +46,8 @@ import {
 import {
   buildWallSolids,
   cornerPosts,
+  holeSeamGap,
+  portalThresholds,
   WALL_THICKNESS,
   type WallHole,
   type WallSolid,
@@ -305,8 +307,9 @@ function PlanShadow({
 
 /** Window symbol: white break in the wall crossed by three parallel lines.
  * `base` shifts the symbol across the wall — 0 spans the wall band outward
- * of the outline (exterior walls); -WALL_THICKNESS/2 centers it on a shared
- * wall, whose two half-thickness sides straddle the outline line. */
+ * of the outline (exterior walls); on a shared wall `(gap - t) / 2` centers
+ * it on the assembly (flush: straddling the outline line; back-to-back:
+ * the slab between the two lines). */
 function WindowSymbol({
   solid,
   hole,
@@ -366,18 +369,11 @@ function DoorSymbol({ solid, hole }: { solid: WallSolid; hole: WallHole }) {
   );
 }
 
-/** Whether the (unclipped) hole sits on a shared stretch of the wall. */
-function holeOnSeam(solid: WallSolid, hole: WallHole): boolean {
-  const mid = hole.start + hole.width / 2;
-  return (solid.seams ?? []).some(
-    (span) => span.start <= mid && mid <= span.end,
-  );
-}
-
 /** One wall's openings: the white break in the navy fill, then the symbol.
  * On shared stretches there is no break — the gap shows the neighbor's floor
- * running through the portal — and phantom holes (a neighbor's portal cuts)
- * draw no symbol either: the owning side has it. */
+ * running through the portal (plus a painted threshold where a back-to-back
+ * seam leaves a bare strip between the two floors) — and phantom holes (a
+ * neighbor's portal cuts) draw no symbol either: the owning side has it. */
 function WallOpenings({ solid }: { solid: WallSolid }) {
   // Breaks paint over whatever sits under the wall band beyond the outline
   // (the plan's drop shadow); clipped per piece so a hole straddling a seam
@@ -396,6 +392,11 @@ function WallOpenings({ solid }: { solid: WallSolid }) {
               ),
             ),
           ),
+        )
+        .concat(
+          portalThresholds(solid).map((threshold) =>
+            shapeFromPoints(wallSpanRect(solid, threshold, threshold.gap)),
+          ),
         ),
     [solid],
   );
@@ -406,18 +407,20 @@ function WallOpenings({ solid }: { solid: WallSolid }) {
       {breakShapes.length > 0 && (
         <FlatShape shapes={breakShapes} y={OPENING_Y} color={FLOOR_COLOR} />
       )}
-      {symbolHoles.map((hole) =>
-        hole.kind === "window" ? (
+      {symbolHoles.map((hole) => {
+        if (hole.kind !== "window") {
+          return <DoorSymbol key={hole.start} solid={solid} hole={hole} />;
+        }
+        const gap = holeSeamGap(solid, hole);
+        return (
           <WindowSymbol
             key={hole.start}
             solid={solid}
             hole={hole}
-            base={holeOnSeam(solid, hole) ? -WALL_THICKNESS / 2 : 0}
+            base={gap === null ? 0 : (gap - WALL_THICKNESS) / 2}
           />
-        ) : (
-          <DoorSymbol key={hole.start} solid={solid} hole={hole} />
-        ),
-      )}
+        );
+      })}
     </group>
   );
 }

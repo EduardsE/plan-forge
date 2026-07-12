@@ -1,5 +1,8 @@
-import type { OpeningKind, Room } from "#/lib/model";
+import type { OpeningKind, Point, Room } from "#/lib/model";
 import { wallsOf } from "#/lib/model";
+// Type-only in the other direction (room-scene imports only types from here),
+// so this value import doesn't create a runtime cycle.
+import { WALL_THICKNESS } from "#/lib/room-scene";
 
 /**
  * Seam detection between the rooms of a floor — the pure geometry behind
@@ -10,15 +13,30 @@ import { wallsOf } from "#/lib/model";
  * cut and each side draws only half the wall thickness (two flush rooms both
  * extrude a wall over the same line — halving un-doubles it).
  *
- * Nothing here is stored: rooms snap flush while drawing (M3), and abutment
- * is recomputed from the outlines every time, consistent with "walls are
- * derived, never stored".
+ * Two wall arrangements count as one shared wall (`WallSeam.gap`):
+ * - flush (gap 0): both outlines run over the same line, the canonical
+ *   result of M3's flush snapping;
+ * - back-to-back (gap = WALL_THICKNESS): the lines sit one wall thickness
+ *   apart with the walls facing each other. Walls extrude *outward*, so the
+ *   two solids occupy exactly the same slab — visually already one wall,
+ *   which is how users read it when they draw a room against the outer face
+ *   of an existing wall.
+ *
+ * Nothing here is stored: abutment is recomputed from the outlines every
+ * time, consistent with "walls are derived, never stored".
  */
 
 /** A stretch along a wall, as distances from the wall's start corner. */
 export interface Span {
   start: number;
   end: number;
+}
+
+/** A shared-wall stretch, tagged with the perpendicular offset between the
+ * two rooms' wall lines (0 flush, WALL_THICKNESS back-to-back) — renderers
+ * center the wall assembly `gap / 2` outward from the owning line. */
+export interface SeamSpan extends Span {
+  gap: number;
 }
 
 /**
@@ -46,6 +64,8 @@ export interface WallSeam {
    * the walls run antiparallel (the usual case for same-winding rooms). */
   otherStart: number;
   otherEnd: number;
+  /** Perpendicular offset between the two wall lines (see `SeamSpan`). */
+  gap: number;
 }
 
 interface UnitWall {
@@ -53,6 +73,18 @@ interface UnitWall {
   start: { x: number; y: number };
   dir: { x: number; y: number };
   length: number;
+}
+
+/** Outline winding sign via the shoelace sum (same convention as
+ * `wall-mount.ts` / `place.ts`: positive for the sample's winding). */
+function outlineWinding(outline: Point[]): number {
+  let sum = 0;
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i];
+    const b = outline[(i + 1) % outline.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return Math.sign(sum) || 1;
 }
 
 function unitWalls(room: Room): UnitWall[] {
@@ -89,6 +121,7 @@ function alongWall(wall: UnitWall, p: { x: number; y: number }): number {
 export function floorSeams(rooms: Room[]): WallSeam[] {
   const seams: WallSeam[] = [];
   const walls = rooms.map(unitWalls);
+  const windings = rooms.map((room) => outlineWinding(room.outline));
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
       for (const a of walls[i]) {
@@ -98,10 +131,29 @@ export function floorSeams(rooms: Room[]): WallSeam[] {
             x: b.start.x + b.dir.x * b.length,
             y: b.start.y + b.dir.y * b.length,
           };
-          if (
-            Math.abs(lineDistance(a, bStart)) > COLLINEAR_TOLERANCE ||
-            Math.abs(lineDistance(a, bEnd)) > COLLINEAR_TOLERANCE
+          const d0 = lineDistance(a, bStart);
+          const d1 = lineDistance(a, bEnd);
+          // Not parallel — a wall crossing a's line is never a seam.
+          if (Math.abs(d0 - d1) > COLLINEAR_TOLERANCE) continue;
+          // Offset of b's line from a's, measured along a's outward normal
+          // (lineDistance measures along outward / winding).
+          const offset = ((d0 + d1) / 2) * windings[i];
+          // Facing ⟺ outward_a · outward_b < 0; with parallel walls that
+          // dot product reduces to winding_a · winding_b · (dir_a · dir_b).
+          const facing =
+            windings[i] *
+              windings[j] *
+              (a.dir.x * b.dir.x + a.dir.y * b.dir.y) <
+            0;
+          let gap: number;
+          if (Math.abs(offset) <= COLLINEAR_TOLERANCE) {
+            gap = 0;
+          } else if (
+            facing &&
+            Math.abs(offset - WALL_THICKNESS) <= COLLINEAR_TOLERANCE
           ) {
+            gap = WALL_THICKNESS;
+          } else {
             continue;
           }
           const t0 = alongWall(a, bStart);
@@ -129,6 +181,7 @@ export function floorSeams(rooms: Room[]): WallSeam[] {
             otherWallIndex: b.index,
             otherStart: uLo,
             otherEnd: uHi,
+            gap,
           });
           const vLo = Math.min(uLo, uHi);
           const vHi = Math.max(uLo, uHi);
@@ -140,6 +193,7 @@ export function floorSeams(rooms: Room[]): WallSeam[] {
             otherWallIndex: a.index,
             otherStart: mapToA(vLo),
             otherEnd: mapToA(vHi),
+            gap,
           });
         }
       }
@@ -223,18 +277,23 @@ export interface PortalHole {
 export interface RoomSeamData {
   /** Shared-wall stretches per wall index (sorted, merged): rendered at
    * half thickness, since the neighbor draws the other half. */
-  seamSpans: Map<number, Span[]>;
+  seamSpans: Map<number, SeamSpan[]>;
   /** Holes to cut for neighbor rooms' portal openings. */
   portalHoles: PortalHole[];
 }
 
-/** Merge overlapping/touching spans into a sorted disjoint list. */
-function mergeSpans(spans: Span[]): Span[] {
+/** Merge overlapping/touching same-gap spans into a sorted list. Spans with
+ * different gaps describe different wall assemblies and stay separate. */
+function mergeSpans(spans: SeamSpan[]): SeamSpan[] {
   const sorted = [...spans].sort((a, b) => a.start - b.start);
-  const merged: Span[] = [];
+  const merged: SeamSpan[] = [];
   for (const span of sorted) {
     const last = merged[merged.length - 1];
-    if (last && span.start <= last.end + MIN_SEAM_LENGTH) {
+    if (
+      last &&
+      last.gap === span.gap &&
+      span.start <= last.end + MIN_SEAM_LENGTH
+    ) {
       last.end = Math.max(last.end, span.end);
     } else {
       merged.push({ ...span });
@@ -264,7 +323,7 @@ export function floorSeamData(
   for (const seam of seams) {
     const entry = roomData(seam.roomId);
     const spans = entry.seamSpans.get(seam.wallIndex) ?? [];
-    spans.push({ ...seam.span });
+    spans.push({ ...seam.span, gap: seam.gap });
     entry.seamSpans.set(seam.wallIndex, spans);
   }
   for (const entry of data.values()) {
