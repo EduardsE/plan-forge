@@ -60,6 +60,7 @@ import {
   draftFromRoom,
   emptyOutlineDraft,
   type OutlineDraft,
+  removeOutlineCorner,
   sameOutline,
   setClosedSegmentLength,
   splitOutlineWall,
@@ -587,6 +588,47 @@ function Planner() {
       }),
     [],
   );
+  const deleteDraftCorner = useCallback(
+    (index: number) =>
+      setDraft((current) => {
+        if (!current.closed) return current;
+        const removed = removeOutlineCorner(
+          current.corners,
+          current.openings,
+          index,
+        );
+        return removed.outline === current.corners
+          ? current
+          : {
+              ...current,
+              corners: removed.outline,
+              openings: removed.openings,
+            };
+      }),
+    [],
+  );
+  // A wall/grid click in draw mode's select state: apply the reshape
+  // session (like picking the Wall tool — clicks never silently lose
+  // edits) and open a fresh new-room chain with its first corner at the
+  // clicked point. A stray click in select mode over an open chain just
+  // places the corner, as the wall tool would.
+  const startDrawAt = useCallback(
+    (point: Point) => {
+      if (draft.closed) {
+        applyDraft(draft);
+        setDraft({
+          roomId: null,
+          corners: [point],
+          closed: false,
+          openings: [],
+        });
+      } else {
+        setDraft({ ...draft, corners: [...draft.corners, point] });
+      }
+      setDrawTool("wall");
+    },
+    [draft, applyDraft],
+  );
   // ⏎ (or clicking the start corner while drawing) commits the draft: the
   // outline becomes its room — or a brand-new room — openings re-anchor to
   // their (possibly resized or split) walls, and furniture stays wherever it
@@ -867,6 +909,8 @@ function Planner() {
               onRequestCloseDraft={closeDraft}
               onMoveDraftCorner={moveDraftCorner}
               onSplitDraftWall={splitDraftWall}
+              onDeleteDraftCorner={deleteDraftCorner}
+              onStartDraw={startDrawAt}
               placingItem={placing?.item ?? null}
               onPlacingEnd={endPlacing}
               openingTool={openingTool}

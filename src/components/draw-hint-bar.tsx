@@ -48,7 +48,9 @@ export function DrawHintBar({
         <>
           <Hint>Drag corners to reshape</Hint>
           {DIVIDER}
-          <Hint>Click a wall to add a corner</Hint>
+          <Hint>Click to draw a new room</Hint>
+          {DIVIDER}
+          <Hint>Right-click for corner options</Hint>
           {multiRoom && (
             <>
               {DIVIDER}

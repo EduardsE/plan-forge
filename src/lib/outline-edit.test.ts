@@ -5,6 +5,8 @@ import {
   applyOutlineDraft,
   draftFromRoom,
   emptyOutlineDraft,
+  pointAlongWall,
+  removeOutlineCorner,
   sameOutline,
   setClosedSegmentLength,
   snapCornerDrag,
@@ -273,6 +275,157 @@ describe("splitOutlineWall", () => {
       { x: 0.5, y: 0 },
     );
     expect(openings).toEqual([]);
+  });
+});
+
+describe("pointAlongWall", () => {
+  it("projects the cursor onto the wall and quantizes along it", () => {
+    expect(pointAlongWall(RECT, 1, { x: 6.08, y: 2.53 })).toEqual({
+      x: 6,
+      y: 2.55,
+    });
+  });
+
+  it("allows points all the way to the corners (no clearance)", () => {
+    expect(pointAlongWall(RECT, 0, { x: 0.1, y: 0 })).toEqual({
+      x: 0.1,
+      y: 0,
+    });
+  });
+
+  it("clamps a cursor beyond an end onto that corner", () => {
+    expect(pointAlongWall(RECT, 0, { x: -1, y: 0.2 })).toEqual({ x: 0, y: 0 });
+    expect(pointAlongWall(RECT, 0, { x: 7, y: -0.2 })).toEqual({ x: 6, y: 0 });
+  });
+
+  it("returns null for invalid walls", () => {
+    expect(pointAlongWall(RECT, 9, { x: 1, y: 1 })).toBeNull();
+  });
+});
+
+describe("removeOutlineCorner", () => {
+  /** RECT with an extra corner splitting the top wall at x = 2.5. */
+  const PENT: Point[] = [
+    { x: 0, y: 0 },
+    { x: 2.5, y: 0 },
+    { x: 6, y: 0 },
+    { x: 6, y: 5 },
+    { x: 0, y: 5 },
+  ];
+
+  it("merges the corner's two walls back into one", () => {
+    const { outline } = removeOutlineCorner(PENT, [], 1);
+    expect(outline).toEqual(RECT);
+  });
+
+  it("keeps a triangle intact (same references)", () => {
+    const tri: Point[] = [
+      { x: 0, y: 0 },
+      { x: 4, y: 0 },
+      { x: 4, y: 4 },
+    ];
+    const doors = [opening({})];
+    const result = removeOutlineCorner(tri, doors, 1);
+    expect(result.outline).toBe(tri);
+    expect(result.openings).toBe(doors);
+  });
+
+  it("shifts openings on later walls down one index", () => {
+    const { openings } = removeOutlineCorner(
+      PENT,
+      [opening({ wallIndex: 3, offset: 1.2 })],
+      1,
+    );
+    expect(openings).toEqual([opening({ wallIndex: 2, offset: 1.2 })]);
+  });
+
+  it("keeps openings on earlier walls untouched", () => {
+    const { openings } = removeOutlineCorner(
+      PENT,
+      [opening({ wallIndex: 0, offset: 0.5 })],
+      3,
+    );
+    expect(openings).toEqual([opening({ wallIndex: 0, offset: 0.5 })]);
+  });
+
+  it("re-anchors merged-wall openings at their world position", () => {
+    // Wall 1 starts at x = 2.5; offset 0.5 + width/2 → world center x = 3.5.
+    const { openings } = removeOutlineCorner(
+      PENT,
+      [
+        opening({ id: "a", wallIndex: 0, offset: 1, width: 0.9 }),
+        opening({ id: "b", wallIndex: 1, offset: 0.5, width: 1 }),
+      ],
+      1,
+    );
+    expect(openings).toEqual([
+      opening({ id: "a", wallIndex: 0, offset: 1, width: 0.9 }),
+      opening({ id: "b", wallIndex: 0, offset: 3, width: 1 }),
+    ]);
+  });
+
+  it("slides a merged opening clear of one already re-anchored", () => {
+    // Both openings' centers project to x = 2.5 — the second slides aside.
+    const { openings } = removeOutlineCorner(
+      PENT,
+      [
+        opening({ id: "a", wallIndex: 0, offset: 1.5, width: 2 }),
+        opening({ id: "b", wallIndex: 1, offset: 0, width: 1 }),
+      ],
+      1,
+    );
+    expect(openings[0]).toEqual(
+      opening({ id: "a", wallIndex: 0, offset: 1.5, width: 2 }),
+    );
+    expect(openings[1].wallIndex).toBe(0);
+    // Slid out of [1.5, 3.5] — flush against one side of the door.
+    expect(openings[1].offset === 3.5 || openings[1].offset === 0.5).toBe(true);
+  });
+
+  it("drops a merged opening wider than the straight-line wall", () => {
+    // Two 5 m walls fold into a 6 m base — a 7 m opening can't survive.
+    const kite: Point[] = [
+      { x: 0, y: 0 },
+      { x: 3, y: 4 },
+      { x: 6, y: 0 },
+      { x: 3, y: -4 },
+    ];
+    const { outline, openings } = removeOutlineCorner(
+      kite,
+      [opening({ wallIndex: 0, offset: 0, width: 7 })],
+      1,
+    );
+    expect(outline).toEqual([
+      { x: 0, y: 0 },
+      { x: 6, y: 0 },
+      { x: 3, y: -4 },
+    ]);
+    expect(openings).toEqual([]);
+  });
+
+  it("handles removing corner 0 (wraparound merge)", () => {
+    // Old walls 4 ((0,5)→(0,0)) + 0 ((0,0)→(2.5,0)) merge into the *last*
+    // wall of the new outline; every other opening shifts down one index.
+    const { outline, openings } = removeOutlineCorner(
+      PENT,
+      [
+        opening({ id: "a", wallIndex: 2, offset: 1, width: 0.9 }),
+        opening({ id: "b", wallIndex: 4, offset: 2, width: 1 }),
+      ],
+      0,
+    );
+    expect(outline).toEqual([
+      { x: 2.5, y: 0 },
+      { x: 6, y: 0 },
+      { x: 6, y: 5 },
+      { x: 0, y: 5 },
+    ]);
+    expect(openings[0]).toEqual(
+      opening({ id: "a", wallIndex: 1, offset: 1, width: 0.9 }),
+    );
+    expect(openings[1].wallIndex).toBe(3);
+    // Center was at (0, 2.5); projected onto (0,5)→(2.5,0) then quantized.
+    expect(openings[1].offset).toBeCloseTo(1.75, 5);
   });
 });
 

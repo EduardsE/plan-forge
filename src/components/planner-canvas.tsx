@@ -600,6 +600,10 @@ export interface PlannerCanvasProps {
   onRequestCloseDraft: () => void;
   onMoveDraftCorner: (index: number, point: Point) => void;
   onSplitDraftWall: (wallIndex: number, point: Point) => void;
+  onDeleteDraftCorner: (index: number) => void;
+  /** Select-state wall/grid click: apply the session, start a new wall draw
+   * with its first corner at `point`. */
+  onStartDraw: (point: Point) => void;
   /** Catalog item mid-drag from the objects panel, if any. */
   placingItem: CatalogItem | null;
   /** Placement session over — dropped or cancelled (route clears it). */
@@ -637,6 +641,8 @@ export function PlannerCanvas({
   onRequestCloseDraft,
   onMoveDraftCorner,
   onSplitDraftWall,
+  onDeleteDraftCorner,
+  onStartDraw,
   placingItem,
   onPlacingEnd,
   openingTool,
@@ -941,6 +947,8 @@ export function PlannerCanvas({
               onRequestClose={onRequestCloseDraft}
               onMoveCorner={onMoveDraftCorner}
               onSplitWall={onSplitDraftWall}
+              onDeleteCorner={onDeleteDraftCorner}
+              onStartDraw={onStartDraw}
               onDragActiveChange={setSceneDragActive}
             />
           ) : (

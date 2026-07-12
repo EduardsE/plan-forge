@@ -179,6 +179,43 @@ export function splitPointOnWall(
   };
 }
 
+/**
+ * The point on wall `wallIndex` nearest to `cursor`: the projection onto the
+ * wall, quantized along it and clamped into the segment (a cursor beyond an
+ * end lands exactly on that corner). Unlike `splitPointOnWall` there is no
+ * corner clearance — this locates where on the wall a new draw starts, and
+ * starting flush at a corner is fine. Null only for invalid/degenerate walls.
+ */
+export function pointAlongWall(
+  outline: Point[],
+  wallIndex: number,
+  cursor: Point,
+  grid: number = DRAW_GRID_STEP,
+): Point | null {
+  const wall = wallsOf(outline)[wallIndex];
+  if (!wall) return null;
+  const length = wallLength(wall);
+  if (length < EPS) return null;
+  const dir = {
+    x: (wall.end.x - wall.start.x) / length,
+    y: (wall.end.y - wall.start.y) / length,
+  };
+  const along = Math.max(
+    0,
+    Math.min(
+      length,
+      quantizeToStep(
+        (cursor.x - wall.start.x) * dir.x + (cursor.y - wall.start.y) * dir.y,
+        grid,
+      ),
+    ),
+  );
+  return {
+    x: Math.round((wall.start.x + dir.x * along) * 1e4) / 1e4,
+    y: Math.round((wall.start.y + dir.y * along) * 1e4) / 1e4,
+  };
+}
+
 const EPS = 1e-6;
 
 /**
@@ -234,6 +271,85 @@ export function splitOutlineWall(
         });
       }
     }
+  }
+  return { outline: nextOutline, openings: nextOpenings };
+}
+
+/**
+ * Remove corner `cornerIndex` from a closed outline, merging its two walls
+ * into one from the previous corner straight to the next. Openings on the
+ * merged walls re-anchor by their world-space center projected onto the new
+ * wall — slid apart where the (possibly shorter) merged wall would overlap
+ * them, dropped where they no longer fit; openings on later walls shift
+ * index down by one. A triangle keeps all three corners (same references).
+ */
+export function removeOutlineCorner(
+  outline: Point[],
+  openings: Opening[],
+  cornerIndex: number,
+): { outline: Point[]; openings: Opening[] } {
+  const n = outline.length;
+  if (n <= 3 || cornerIndex < 0 || cornerIndex >= n) {
+    return { outline, openings };
+  }
+  const prevWall = (cornerIndex - 1 + n) % n;
+  const mergedIndex = cornerIndex === 0 ? n - 2 : cornerIndex - 1;
+  const mergedStart = outline[(cornerIndex - 1 + n) % n];
+  const mergedEnd = outline[(cornerIndex + 1) % n];
+  const mergedLength = Math.hypot(
+    mergedEnd.x - mergedStart.x,
+    mergedEnd.y - mergedStart.y,
+  );
+  const mergedDir =
+    mergedLength < EPS
+      ? null
+      : {
+          x: (mergedEnd.x - mergedStart.x) / mergedLength,
+          y: (mergedEnd.y - mergedStart.y) / mergedLength,
+        };
+  const walls = wallsOf(outline);
+  const nextOutline = outline.filter((_, i) => i !== cornerIndex);
+  const nextOpenings: Opening[] = [];
+  const mergedSpans: WallSpan[] = [];
+  for (const opening of openings) {
+    if (opening.wallIndex !== prevWall && opening.wallIndex !== cornerIndex) {
+      const shifted =
+        cornerIndex === 0 || opening.wallIndex > cornerIndex
+          ? opening.wallIndex - 1
+          : opening.wallIndex;
+      nextOpenings.push(
+        shifted === opening.wallIndex
+          ? opening
+          : { ...opening, wallIndex: shifted },
+      );
+      continue;
+    }
+    // A merged-wall opening: project its world center onto the new wall.
+    const wall = walls[opening.wallIndex];
+    const length = wallLength(wall);
+    if (!mergedDir || length < EPS) continue;
+    const center = {
+      x:
+        wall.start.x +
+        ((wall.end.x - wall.start.x) / length) *
+          (opening.offset + opening.width / 2),
+      y:
+        wall.start.y +
+        ((wall.end.y - wall.start.y) / length) *
+          (opening.offset + opening.width / 2),
+    };
+    const along =
+      (center.x - mergedStart.x) * mergedDir.x +
+      (center.y - mergedStart.y) * mergedDir.y;
+    const offset = slideOpening(
+      mergedLength,
+      opening.width,
+      mergedSpans,
+      along - opening.width / 2,
+    );
+    if (offset === null) continue;
+    mergedSpans.push({ start: offset, width: opening.width });
+    nextOpenings.push({ ...opening, wallIndex: mergedIndex, offset });
   }
   return { outline: nextOutline, openings: nextOpenings };
 }

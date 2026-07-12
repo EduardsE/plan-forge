@@ -448,8 +448,9 @@ export function Inspector({
               {draftClosed ? " · closed" : ""}
             </div>
             <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
-              Drag corners to reshape, click a wall to split it, or edit a
-              length label directly. ⏎ applies the outline, esc reverts it.
+              {draftClosed
+                ? "Drag corners to reshape, edit a length label directly, or click a wall to start drawing a new room. Right-click a wall or corner to add or delete corners. ⏎ applies the outline, esc reverts it."
+                : "Click to place corners; click the start corner or press ⏎ to close the room. Esc cancels."}
             </div>
           </div>
         ) : showSelection ? (

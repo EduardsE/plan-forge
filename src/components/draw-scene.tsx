@@ -20,9 +20,10 @@ import {
   snapRectPoint,
   snapTargetsOf,
 } from "#/lib/draw";
-import type { Point, Room } from "#/lib/model";
+import { type Point, pointInOutline, type Room, wallsOf } from "#/lib/model";
 import {
   type CornerGuide,
+  pointAlongWall,
   snapCornerDrag,
   splitPointOnWall,
 } from "#/lib/outline-edit";
@@ -45,8 +46,10 @@ import {
  *
  * A *closed* draft (draw mode entered over an existing room) renders the
  * same loop but flips the interactions to reshaping: corners drag with the
- * same snapping and guides, and clicking a wall splits it with a new corner
- * (`src/lib/outline-edit.ts` holds that geometry).
+ * same snapping and guides, clicking a wall or the open grid starts a *new*
+ * wall draw from that point, and right-clicking a wall or corner opens a
+ * context menu (add corner / delete corner — `src/lib/outline-edit.ts`
+ * holds that geometry).
  *
  * Labels are drei `<Html>` overlays like the plan lens, so they stay crisp
  * and the length input is a real DOM input.
@@ -405,10 +408,14 @@ function RectPreview({ a, b, unit }: { a: Point; b: Point; unit: Unit }) {
 
 /** Corner pick-handle radius, meters (the visual dot is smaller). */
 const CORNER_PICK_RADIUS = 0.18;
-/** Wall pick-strip half-width for splitting, meters. */
+/** Wall pick-strip half-width, meters. */
 const STRIP_PAD = 0.12;
 /** Invisible pick layers, above the visible strokes. */
 const PICK_Y = 0.018;
+/** Corner discs sit above the wall strips so the raycast always delivers a
+ * near-corner press to the corner first — its stopPropagation is what keeps
+ * the strip's click (start a wall draw) and right-click (wall menu) away. */
+const CORNER_PICK_Y = PICK_Y + 0.002;
 
 /** Plan-coordinate polygon as a three Shape (mirrored so world z = plan y
  * after `rotation-x={-Math.PI / 2}`); same convention as plan-openings. */
@@ -557,28 +564,52 @@ function CornerDragSession({
   );
 }
 
-/** Draggable corner of a closed draft: visual dot + invisible pick disc. */
+/** Draggable corner of a closed draft: visual dot + invisible pick disc.
+ * Right-click (press + release without travel) asks for the context menu. */
 function CornerHandle({
   at,
   index,
   onDragStart,
+  onContextRequest,
 }: {
   at: Point;
   index: number;
   onDragStart: (index: number, screen: { x: number; y: number }) => void;
+  onContextRequest: (index: number) => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const rightPress = useRef<{ x: number; y: number } | null>(null);
   useCursor(hovered, "grab");
   return (
     <group>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element. */}
       <mesh
         rotation-x={-Math.PI / 2}
-        position={[at.x, PICK_Y, at.y]}
+        position={[at.x, CORNER_PICK_Y, at.y]}
         onPointerDown={(event) => {
+          if (event.button === 2) {
+            rightPress.current = { x: event.clientX, y: event.clientY };
+            return;
+          }
           if (event.button !== 0) return;
           event.stopPropagation();
           onDragStart(index, { x: event.clientX, y: event.clientY });
         }}
+        onPointerUp={(event) => {
+          if (event.button !== 2 || !rightPress.current) return;
+          const travel = Math.hypot(
+            event.clientX - rightPress.current.x,
+            event.clientY - rightPress.current.y,
+          );
+          rightPress.current = null;
+          // Right-drags are camera pans, not menu requests.
+          if (travel > DRAG_SLOP_PX) return;
+          event.stopPropagation();
+          onContextRequest(index);
+        }}
+        // Swallow the click so the grid plane below never sees it (it would
+        // start a new wall draw under the corner).
+        onClick={(event) => event.stopPropagation()}
         onPointerOver={(event) => {
           event.stopPropagation();
           setHovered(true);
@@ -602,11 +633,99 @@ function CornerHandle({
   );
 }
 
+/** A pending right-click context menu on the closed draft's outline. */
+type OutlineMenu =
+  | { kind: "wall"; wallIndex: number; at: Point }
+  | { kind: "corner"; index: number; at: Point };
+
+/**
+ * The right-click context menu (Paper popover): "Add corner" on a wall,
+ * "Delete corner" on a corner (disabled on a triangle — a room keeps at
+ * least three). Anchored to the clicked outline point as a drei overlay, so
+ * it rides camera pans. Dismissed by any press outside it or esc (captured,
+ * so the route's draft-wide esc doesn't also revert the session).
+ */
+function OutlineContextMenu({
+  menu,
+  cornerCount,
+  onAddCorner,
+  onDeleteCorner,
+  onClose,
+}: {
+  menu: OutlineMenu;
+  cornerCount: number;
+  onAddCorner: (wallIndex: number, point: Point) => void;
+  onDeleteCorner: (index: number) => void;
+  onClose: () => void;
+}) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const handleDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        boxRef.current?.contains(event.target)
+      )
+        return;
+      onClose();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("pointerdown", handleDown, true);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", handleDown, true);
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [onClose]);
+  const deletable = cornerCount > 3;
+  return (
+    <Html position={v3(menu.at, LABEL_Y)} style={{ pointerEvents: "none" }}>
+      <div
+        ref={boxRef}
+        role="menu"
+        className="pointer-events-auto mt-1.5 ml-1.5 min-w-[150px] rounded-[9px] border border-[#E7E7E2] bg-white p-1 shadow-[0_14px_34px_rgba(15,27,61,0.14)]"
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        {menu.kind === "wall" ? (
+          <button
+            type="button"
+            onClick={() => onAddCorner(menu.wallIndex, menu.at)}
+            className="flex w-full cursor-pointer items-center rounded-[6px] px-2.5 py-1.5 text-left text-[13px] text-[#1A1A17] hover:bg-[#F1F1EE]"
+          >
+            Add corner
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={!deletable}
+            title={
+              deletable ? undefined : "A room needs at least three corners"
+            }
+            onClick={() => onDeleteCorner(menu.index)}
+            className={
+              deletable
+                ? "flex w-full cursor-pointer items-center rounded-[6px] px-2.5 py-1.5 text-left text-[13px] text-[#D64545] hover:bg-[rgba(214,69,69,0.08)]"
+                : "flex w-full items-center rounded-[6px] px-2.5 py-1.5 text-left text-[13px] text-[#B8B8B0]"
+            }
+          >
+            Delete corner
+          </button>
+        )}
+      </div>
+    </Html>
+  );
+}
+
 /**
  * Reshaping interactions of a closed draft: draggable corner handles, and an
- * invisible strip along each wall that previews (ghost dot) and inserts a new
- * corner on click — the split, which the next press can drag out. The camera
- * controls pause around a drag, like every in-scene drag.
+ * invisible strip along each wall that starts a new wall draw on click (flush
+ * from the clicked point) and opens the context menu on right-click — hover
+ * previews the corner spot with a ghost dot. The camera controls pause
+ * around a drag, like every in-scene drag.
  */
 function OutlineEditLayer({
   corners,
@@ -614,6 +733,8 @@ function OutlineEditLayer({
   targets,
   onMoveCorner,
   onSplitWall,
+  onDeleteCorner,
+  onStartDraw,
   onDragActiveChange,
 }: {
   corners: Point[];
@@ -621,16 +742,23 @@ function OutlineEditLayer({
   targets: SnapTargets;
   onMoveCorner: (index: number, point: Point) => void;
   onSplitWall: (wallIndex: number, point: Point) => void;
+  onDeleteCorner: (index: number) => void;
+  onStartDraw: (point: Point) => void;
   onDragActiveChange: (active: boolean) => void;
 }) {
   const [drag, setDrag] = useState<CornerDrag | null>(null);
   const [splitGhost, setSplitGhost] = useState<Point | null>(null);
   const [stripHovered, setStripHovered] = useState(false);
-  useCursor(stripHovered && !drag, "copy");
+  const [menu, setMenu] = useState<OutlineMenu | null>(null);
+  // Where a right button went down on a wall strip — release without travel
+  // is a right-click (travel means the gesture was a camera pan).
+  const stripRightPress = useRef<{ x: number; y: number } | null>(null);
+  useCursor(stripHovered && !drag, "crosshair");
   const { begin, end } = useControlsPause(onDragActiveChange);
 
   const beginDrag = useCallback(
     (index: number, screen: { x: number; y: number }) => {
+      setMenu(null);
       setDrag({ index, original: corners[index], originScreen: screen });
       begin();
     },
@@ -678,17 +806,41 @@ function OutlineEditLayer({
               setStripHovered(false);
               setSplitGhost(null);
             }}
+            onPointerDown={(event) => {
+              if (event.button !== 2) return;
+              stripRightPress.current = {
+                x: event.clientX,
+                y: event.clientY,
+              };
+            }}
+            onPointerUp={(event) => {
+              if (event.button !== 2 || !stripRightPress.current) return;
+              const travel = Math.hypot(
+                event.clientX - stripRightPress.current.x,
+                event.clientY - stripRightPress.current.y,
+              );
+              stripRightPress.current = null;
+              // Right-drags are camera pans, not menu requests.
+              if (travel > CLICK_SLOP_PX) return;
+              const at = splitPointOnWall(corners, wallIndex, {
+                x: event.point.x,
+                y: event.point.z,
+              });
+              if (!at) return;
+              event.stopPropagation();
+              setMenu({ kind: "wall", wallIndex, at });
+            }}
             onClick={(event) => {
-              // A drag that ends on the wall is a camera pan, not a split.
+              // A drag that ends on the wall is a camera pan, not a click.
               if (event.delta > CLICK_SLOP_PX) return;
-              const point = splitPointOnWall(corners, wallIndex, {
+              const point = pointAlongWall(corners, wallIndex, {
                 x: event.point.x,
                 y: event.point.z,
               });
               if (!point) return;
               event.stopPropagation();
               setSplitGhost(null);
-              onSplitWall(wallIndex, point);
+              onStartDraw(point);
             }}
           >
             <shapeGeometry args={[shape]} />
@@ -702,8 +854,30 @@ function OutlineEditLayer({
           at={corner}
           index={index}
           onDragStart={beginDrag}
+          onContextRequest={(cornerIndex) =>
+            setMenu({
+              kind: "corner",
+              index: cornerIndex,
+              at: corners[cornerIndex],
+            })
+          }
         />
       ))}
+      {menu && (
+        <OutlineContextMenu
+          menu={menu}
+          cornerCount={corners.length}
+          onAddCorner={(wallIndex, point) => {
+            setMenu(null);
+            onSplitWall(wallIndex, point);
+          }}
+          onDeleteCorner={(index) => {
+            setMenu(null);
+            onDeleteCorner(index);
+          }}
+          onClose={() => setMenu(null)}
+        />
+      )}
       {splitGhost && !drag && (
         <Html
           position={v3(splitGhost, LABEL_Y)}
@@ -789,8 +963,13 @@ export interface DrawSceneProps {
   onRequestClose: () => void;
   /** Closed drafts: a corner dragged to a (snapped) new position. */
   onMoveCorner: (index: number, point: Point) => void;
-  /** Closed drafts: a wall clicked to insert a corner at `point`. */
+  /** Closed drafts: "Add corner" chosen on a wall's context menu. */
   onSplitWall: (wallIndex: number, point: Point) => void;
+  /** Closed drafts: "Delete corner" chosen on a corner's context menu. */
+  onDeleteCorner: (index: number) => void;
+  /** Select mode: a wall or the open grid was clicked — apply the session
+   * and start a new wall draw with its first corner at `point`. */
+  onStartDraw: (point: Point) => void;
   /** A corner drag started/ended — the canvas locks pan/zoom meanwhile. */
   onDragActiveChange: (active: boolean) => void;
 }
@@ -810,6 +989,8 @@ export function DrawScene({
   onRequestClose,
   onMoveCorner,
   onSplitWall,
+  onDeleteCorner,
+  onStartDraw,
   onDragActiveChange,
 }: DrawSceneProps) {
   const [snap, setSnap] = useState<DraftSnap | null>(null);
@@ -841,6 +1022,18 @@ export function DrawScene({
   // The other rooms' corners and walls, as flush-snap targets for every
   // draw interaction (corner placement, rect corners, corner drags).
   const targets = useMemo(() => snapTargetsOf(contextRooms), [contextRooms]);
+  // A select-mode click starting a new wall draw also snaps against the
+  // draft's own outline — a click near its wall starts the new room flush.
+  const startDrawTargets = useMemo(
+    () =>
+      closed && corners.length >= 3
+        ? {
+            corners: [...targets.corners, ...corners],
+            walls: [...targets.walls, ...wallsOf(corners)],
+          }
+        : targets,
+    [closed, corners, targets],
+  );
   // Shared walls among the context rooms render like the 2D lens (halved
   // fills, portal cuts); the draft's own seams appear once it commits.
   const contextSeamData = useMemo(
@@ -877,11 +1070,28 @@ export function DrawScene({
   };
 
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
-    if (!placing && !rectMode) return;
     // Clicks on DOM overlays (length pills) also raycast through to this
     // plane; only true canvas clicks may place corners.
     if (!(event.nativeEvent.target instanceof HTMLCanvasElement)) return;
     if (event.delta > CLICK_SLOP_PX) return;
+    if (!placing && !rectMode) {
+      // Select mode: clicking the open grid starts a new wall draw there
+      // (wall clicks land on the pick strips instead, corner clicks on the
+      // handles, other rooms on their re-target fills). The draft's own
+      // interior stays inert — it's a room, not free floor.
+      if (!closed) return;
+      const cursor = { x: event.point.x, y: event.point.z };
+      if (pointInOutline(corners, cursor)) return;
+      const { point } = snapDraftPoint(
+        [],
+        cursor,
+        toleranceOf(event),
+        snapEnabled,
+        startDrawTargets,
+      );
+      onStartDraw(point);
+      return;
+    }
     if (rectMode) {
       const corner = snapRectPoint(
         { x: event.point.x, y: event.point.z },
@@ -1053,6 +1263,8 @@ export function DrawScene({
           targets={targets}
           onMoveCorner={onMoveCorner}
           onSplitWall={onSplitWall}
+          onDeleteCorner={onDeleteCorner}
+          onStartDraw={onStartDraw}
           onDragActiveChange={onDragActiveChange}
         />
       )}
