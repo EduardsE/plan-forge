@@ -1,4 +1,11 @@
-import { type Point, type Room, type Wall, wallsOf } from "#/lib/model";
+import {
+  type Point,
+  type Room,
+  type Wall,
+  wallFrames,
+  wallsOf,
+} from "#/lib/model";
+import { WALL_THICKNESS } from "#/lib/room-scene";
 
 /**
  * Pure geometry for the draw-mode flow (mockup screen 1c): snapping the
@@ -27,6 +34,12 @@ export interface AlignmentSnap {
   axis: "x" | "y";
 }
 
+/** A target wall plus the side its solid extrudes to: the rendered slab
+ * spans one `WALL_THICKNESS` along `outward` from the wall line. */
+export interface SnapWall extends Wall {
+  outward: Point;
+}
+
 /**
  * Corners and walls of the floor's *other* rooms, as snap targets while
  * drawing or reshaping — new corners land exactly on them so rooms sit
@@ -34,17 +47,26 @@ export interface AlignmentSnap {
  */
 export interface SnapTargets {
   corners: Point[];
-  walls: Wall[];
+  walls: SnapWall[];
 }
 
 export const NO_SNAP_TARGETS: SnapTargets = { corners: [], walls: [] };
 
+/** A closed outline's walls tagged with their outward normals. */
+export function snapWallsOf(outline: Point[]): SnapWall[] {
+  const walls = wallsOf(outline);
+  return wallFrames(outline).map((frame) => ({
+    ...walls[frame.index],
+    outward: frame.outward,
+  }));
+}
+
 export function snapTargetsOf(rooms: Room[]): SnapTargets {
   const corners: Point[] = [];
-  const walls: Wall[] = [];
+  const walls: SnapWall[] = [];
   for (const room of rooms) {
     corners.push(...room.outline);
-    walls.push(...wallsOf(room.outline));
+    walls.push(...snapWallsOf(room.outline));
   }
   return { corners, walls };
 }
@@ -59,9 +81,14 @@ export type FloorSnap =
 const AXIS_EPS = 1e-9;
 
 /**
- * Best snap for one free coordinate against the targets: wall lines within
- * the wall's own span (the flush case), then corner coordinates (alignment
- * past a span). Ties inside `tolerance` prefer the wall — it's the seam.
+ * Best snap for one free coordinate against the targets: wall *slabs* within
+ * the wall's own span, then corner coordinates (alignment past a span). The
+ * whole rendered thickness captures — a cursor anywhere on the slab (line to
+ * `WALL_THICKNESS` outward, padded by `tolerance` on both sides) snaps to the
+ * wall line, so clicking any part of an existing wall means "share this
+ * wall" and always yields the flush (gap 0) seam. Slab hits rank above
+ * corner alignments; back-to-back twin walls (coincident slabs) tie-break to
+ * the nearer wall line.
  */
 export function targetAxisCandidate(
   targets: SnapTargets,
@@ -71,19 +98,28 @@ export function targetAxisCandidate(
 ): { value: number; distance: number; snap: FloorSnap } | null {
   const cross: "x" | "y" = axis === "x" ? "y" : "x";
   let best: { value: number; distance: number; snap: FloorSnap } | null = null;
+  /** Among equal-distance (on-slab) hits, the nearer wall line wins. */
+  let bestLineDistance = Number.POSITIVE_INFINITY;
   for (const wall of targets.walls) {
     // Only walls running along the cross axis pin this coordinate.
     if (Math.abs(wall.start[axis] - wall.end[axis]) > AXIS_EPS) continue;
     const lo = Math.min(wall.start[cross], wall.end[cross]) - tolerance;
     const hi = Math.max(wall.start[cross], wall.end[cross]) + tolerance;
     if (cursor[cross] < lo || cursor[cross] > hi) continue;
-    const distance = Math.abs(cursor[axis] - wall.start[axis]);
-    if (distance < tolerance && (!best || distance < best.distance)) {
-      best = {
-        value: wall.start[axis],
-        distance,
-        snap: { kind: "wall", wall },
-      };
+    const line = wall.start[axis];
+    // Signed offset along outward: [0, WALL_THICKNESS] is on the slab.
+    const along = (cursor[axis] - line) * (wall.outward[axis] || 1);
+    const distance =
+      along < 0 ? -along : along > WALL_THICKNESS ? along - WALL_THICKNESS : 0;
+    const lineDistance = Math.abs(cursor[axis] - line);
+    if (
+      distance < tolerance &&
+      (!best ||
+        distance < best.distance ||
+        (distance === best.distance && lineDistance < bestLineDistance))
+    ) {
+      best = { value: line, distance, snap: { kind: "wall", wall } };
+      bestLineDistance = lineDistance;
     }
   }
   for (const corner of targets.corners) {

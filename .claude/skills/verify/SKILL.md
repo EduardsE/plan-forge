@@ -7,8 +7,12 @@ description: How to drive PlanForge headless for runtime verification — launch
 
 ## Launch
 
+Verify against the **production build** (PROGRESS.md gotcha: the dev server's
+devtools console forwarding melts down on a three.js deprecation warning):
+
 ```bash
-pnpm dev   # port 3005; poll http://localhost:3005/ until 200
+lsof -tnP -iTCP:4173 -sTCP:LISTEN | xargs kill   # a stale preview serves old bundles
+pnpm build && pnpm preview --port 4173           # poll http://localhost:4173/ until 200
 ```
 
 ## Browser
@@ -51,6 +55,24 @@ No DOM handles inside the canvas — compute pixel targets from the camera:
 - Read results from `localStorage.planforge.room` (autosave commits after
   pointerup) and from the inspector POS X/POS Y fields.
 
+## Driving the plan (2D/draw) canvas
+
+- The ortho camera maps world→pixel linearly: `px = canvasCenter + (world −
+  boundsCenter) · zoom`, plan x/y = screen x/y, `zoom = planFitZoom(bounds.w,
+  bounds.h, canvas.w, canvas.h)` (fill 0.72, `src/lib/camera.ts`) — **but only
+  after clicking "Fit to view"**: a lens switch keeps the dolly-matched zoom
+  (the fit effect reruns only when bounds/size change), so compute targets
+  only from a freshly fitted camera, and refit after any commit that changes
+  the floor bounds.
+- Keep click targets inside the fitted view — planFitZoom fills 72% with the
+  *committed* bounds, so points beyond ~±(canvas/2)/zoom of the center land on
+  chrome, not canvas, and silently do nothing.
+- ⏎-closing a draft (`closeDraft`) also switches to the 2D lens; re-enter
+  draw mode between draw flows. A rect-tool room stays an uncommitted closed
+  draft until ⏎ or leaving draw applies it.
+- Draft snap tolerance is 12 px / zoom in meters — seed a small room (big
+  zoom) when a check needs the tolerance below some world-space distance.
+
 ## Gotchas
 
 - The readout only publishes on OrbitControls change events — a camera moved
@@ -58,4 +80,4 @@ No DOM handles inside the canvas — compute pixel targets from the camera:
   camera-motion bugs, temporarily mount a `useFrame` probe inside `<Canvas>`
   writing `window.__probe = { pos, target, enabled }` and sample it from the
   script (remove before commit).
-- Kill the dev server when done: `lsof -ti :3005 | xargs kill`.
+- Kill the preview server when done: `lsof -ti :4173 | xargs kill`.

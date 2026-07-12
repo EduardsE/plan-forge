@@ -6,6 +6,8 @@ import {
   snapDraftPoint,
   snapRectPoint,
   snapTargetsOf,
+  snapWallsOf,
+  targetAxisCandidate,
 } from "./draw";
 
 const TOL = 0.1;
@@ -124,6 +126,87 @@ describe("snapTargetsOf", () => {
     expect(TARGETS.walls[1].start).toEqual({ x: 6.4, y: 0 });
     expect(TARGETS.walls[1].end).toEqual({ x: 6.4, y: 5.2 });
   });
+
+  it("tags each wall with its outward normal, whatever the winding", () => {
+    // The right wall's slab extrudes +x regardless of outline direction.
+    expect(TARGETS.walls[1].outward).toEqual({ x: 1, y: 0 });
+    const reversed = snapWallsOf([...NEIGHBOR.outline].reverse());
+    const right = reversed.find(
+      (wall) => wall.start.x === 6.4 && wall.end.x === 6.4,
+    );
+    expect(right?.outward).toEqual({ x: 1, y: 0 });
+  });
+});
+
+describe("targetAxisCandidate slab capture", () => {
+  // The right wall's line is x = 6.4, its slab spans x ∈ [6.4, 6.5]. A
+  // tolerance below the wall thickness proves the slab itself captures.
+  const tol = 0.03;
+
+  it("snaps a cursor anywhere on the slab to the wall line", () => {
+    const candidate = targetAxisCandidate(
+      TARGETS,
+      "x",
+      { x: 6.47, y: 2.5 },
+      tol,
+    );
+    expect(candidate?.value).toBe(6.4);
+    expect(candidate?.distance).toBe(0);
+    expect(candidate?.snap.kind).toBe("wall");
+  });
+
+  it("pads the slab by the tolerance on both sides, no further", () => {
+    expect(
+      targetAxisCandidate(TARGETS, "x", { x: 6.52, y: 2.5 }, tol)?.value,
+    ).toBe(6.4);
+    expect(
+      targetAxisCandidate(TARGETS, "x", { x: 6.54, y: 2.5 }, tol),
+    ).toBeNull();
+    expect(
+      targetAxisCandidate(TARGETS, "x", { x: 6.38, y: 2.5 }, tol)?.value,
+    ).toBe(6.4);
+    expect(
+      targetAxisCandidate(TARGETS, "x", { x: 6.36, y: 2.5 }, tol),
+    ).toBeNull();
+  });
+
+  it("ranks an on-slab hit above a nearer corner alignment", () => {
+    const targets = {
+      corners: [{ x: 6.46, y: 20 }],
+      walls: snapWallsOf(NEIGHBOR.outline),
+    };
+    const candidate = targetAxisCandidate(
+      targets,
+      "x",
+      { x: 6.47, y: 2.5 },
+      tol,
+    );
+    expect(candidate?.value).toBe(6.4);
+    expect(candidate?.snap.kind).toBe("wall");
+  });
+
+  it("tie-breaks coincident back-to-back slabs to the nearer line", () => {
+    // A second room one wall thickness to the right: its left wall's line is
+    // x = 6.5 with outward -x, so both slabs occupy x ∈ [6.4, 6.5].
+    const twin: Room = {
+      id: "twin",
+      outline: [
+        { x: 6.5, y: 0 },
+        { x: 9, y: 0 },
+        { x: 9, y: 5.2 },
+        { x: 6.5, y: 5.2 },
+      ],
+      openings: [],
+      furniture: [],
+    };
+    const targets = snapTargetsOf([NEIGHBOR, twin]);
+    expect(
+      targetAxisCandidate(targets, "x", { x: 6.42, y: 2.5 }, tol)?.value,
+    ).toBe(6.4);
+    expect(
+      targetAxisCandidate(targets, "x", { x: 6.48, y: 2.5 }, tol)?.value,
+    ).toBe(6.5);
+  });
 });
 
 describe("snapDraftPoint against other rooms", () => {
@@ -148,6 +231,14 @@ describe("snapDraftPoint against other rooms", () => {
 
   it("pins a coordinate to a wall line within the wall's span", () => {
     const snap = snapDraftPoint([], { x: 6.45, y: 2.52 }, TOL, true, TARGETS);
+    expect(snap.point).toEqual({ x: 6.4, y: 2.5 });
+    expect(snap.floorSnap?.kind).toBe("wall");
+  });
+
+  it("snaps a click in the middle of the wall's slab to the wall line", () => {
+    // Beyond a 0.03 tolerance of the line, but on the rendered thickness —
+    // clicking any part of an existing wall means "share this wall".
+    const snap = snapDraftPoint([], { x: 6.47, y: 2.52 }, 0.03, true, TARGETS);
     expect(snap.point).toEqual({ x: 6.4, y: 2.5 });
     expect(snap.floorSnap?.kind).toBe("wall");
   });
@@ -206,6 +297,11 @@ describe("snapRectPoint", () => {
     expect(snapRectPoint({ x: 6.44, y: 5.16 }, true, TARGETS, TOL)).toEqual({
       x: 6.4,
       y: 5.2,
+    });
+    // A click on the wall's slab pins to the line past the tolerance too.
+    expect(snapRectPoint({ x: 6.47, y: 1.28 }, true, TARGETS, 0.03)).toEqual({
+      x: 6.4,
+      y: 1.3,
     });
   });
 });

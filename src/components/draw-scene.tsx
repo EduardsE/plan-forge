@@ -19,8 +19,9 @@ import {
   snapDraftPoint,
   snapRectPoint,
   snapTargetsOf,
+  snapWallsOf,
 } from "#/lib/draw";
-import { type Point, pointInOutline, type Room, wallsOf } from "#/lib/model";
+import { type Point, pointInOutline, type Room } from "#/lib/model";
 import {
   type CornerGuide,
   pointAlongWall,
@@ -1029,7 +1030,7 @@ export function DrawScene({
       closed && corners.length >= 3
         ? {
             corners: [...targets.corners, ...corners],
-            walls: [...targets.walls, ...wallsOf(corners)],
+            walls: [...targets.walls, ...snapWallsOf(corners)],
           }
         : targets,
     [closed, corners, targets],
