@@ -101,11 +101,17 @@ export const MIN_OPENING_WIDTH = 0.3;
 /**
  * Set an opening's width from the chip's field, keeping its center where it
  * is as far as the wall allows. The width clamps into the free stretch the
- * opening currently occupies (its wall minus the other openings there), and
- * the near-edge offset re-clamps so nothing overlaps. Unknown ids and
- * non-finite widths return the room unchanged.
+ * opening currently occupies (its wall minus the other openings there, and
+ * minus `blocked` — extra occupied spans such as a neighbor room's portal
+ * holes on a shared wall), and the near-edge offset re-clamps so nothing
+ * overlaps. Unknown ids and non-finite widths return the room unchanged.
  */
-export function resizeOpening(room: Room, id: string, width: number): Room {
+export function resizeOpening(
+  room: Room,
+  id: string,
+  width: number,
+  blocked: WallSpan[] = [],
+): Room {
   const opening = room.openings.find((entry) => entry.id === id);
   if (!opening || !Number.isFinite(width)) return room;
   const wall = wallsOf(room.outline).find((w) => w.index === opening.wallIndex);
@@ -118,12 +124,19 @@ export function resizeOpening(room: Room, id: string, width: number): Room {
   // corner) on each side.
   let gapStart = 0;
   let gapEnd = wallLength;
-  for (const other of room.openings) {
-    if (other.id === id || other.wallIndex !== opening.wallIndex) continue;
-    const end = other.offset + other.width;
+  const others: WallSpan[] = [
+    ...room.openings
+      .filter(
+        (other) => other.id !== id && other.wallIndex === opening.wallIndex,
+      )
+      .map((other) => ({ start: other.offset, width: other.width })),
+    ...blocked,
+  ];
+  for (const other of others) {
+    const end = other.start + other.width;
     if (end <= opening.offset + EPS) gapStart = Math.max(gapStart, end);
-    if (other.offset + EPS >= opening.offset + opening.width) {
-      gapEnd = Math.min(gapEnd, other.offset);
+    if (other.start + EPS >= opening.offset + opening.width) {
+      gapEnd = Math.min(gapEnd, other.start);
     }
   }
   const clampedWidth = Math.min(

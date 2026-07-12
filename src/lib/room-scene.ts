@@ -1,5 +1,6 @@
 import type { OpeningKind, Point, Room } from "#/lib/model";
 import { DEFAULT_WALL_HEIGHT, wallHeightOf, wallsOf } from "#/lib/model";
+import type { RoomSeamData, Span } from "#/lib/seams";
 
 /**
  * Pure scene-preparation math for the 3D lens: turns the plain room model
@@ -35,6 +36,12 @@ export interface WallHole {
   top: number;
   /** Doors only: hinge edge, carried through from the opening. */
   hinge?: "start" | "end";
+  /**
+   * A portal cut for a *neighbor* room's opening on a shared wall: renderers
+   * cut the gap but draw no symbol, dressing, or pick target — those belong
+   * to the opening's owning side.
+   */
+  phantom?: boolean;
 }
 
 /** One wall ready to extrude: a placed rectangle with holes cut into it. */
@@ -48,6 +55,12 @@ export interface WallSolid {
   outward: Point;
   length: number;
   holes: WallHole[];
+  /**
+   * Shared-wall stretches (wall-local, sorted, disjoint): another room's
+   * wall runs along the same line there, so this side renders only half the
+   * thickness (see `wallPieces`). Absent/empty on unshared walls.
+   */
+  seams?: Span[];
 }
 
 /**
@@ -81,10 +94,14 @@ const MIN_HOLE_SIZE = 1e-6;
  * Derive one solid per wall of the room, with door/window holes located in
  * wall-local coordinates and clamped to the wall's extent. Outlines with
  * fewer than 3 corners enclose nothing and yield no walls.
+ *
+ * `seamData` (from `floorSeamData`) adds the room's shared-wall stretches
+ * and cuts phantom holes for neighbor rooms' portal openings.
  */
 export function buildWallSolids(
   room: Room,
   wallHeight = wallHeightOf(room),
+  seamData?: RoomSeamData,
 ): WallSolid[] {
   const { outline, openings } = room;
   if (outline.length < 3) return [];
@@ -106,28 +123,57 @@ export function buildWallSolids(
     };
 
     const holes: WallHole[] = [];
-    for (const opening of openings) {
-      if (opening.wallIndex !== wall.index) continue;
-      const start = Math.min(Math.max(opening.offset, 0), length);
-      const end = Math.min(Math.max(opening.offset + opening.width, 0), length);
-      const bottom = opening.kind === "window" ? WINDOW_SILL : 0;
+    const cutHole = (
+      id: string,
+      kind: OpeningKind,
+      offset: number,
+      width: number,
+      hinge?: "start" | "end",
+      phantom?: boolean,
+    ) => {
+      const start = Math.min(Math.max(offset, 0), length);
+      const end = Math.min(Math.max(offset + width, 0), length);
+      const bottom = kind === "window" ? WINDOW_SILL : 0;
       const top = Math.min(
-        opening.kind === "window" ? WINDOW_HEAD : DOOR_HEIGHT,
+        kind === "window" ? WINDOW_HEAD : DOOR_HEIGHT,
         wallHeight,
       );
-      if (end - start < MIN_HOLE_SIZE || top - bottom < MIN_HOLE_SIZE) continue;
+      if (end - start < MIN_HOLE_SIZE || top - bottom < MIN_HOLE_SIZE) return;
       holes.push({
-        id: opening.id,
-        kind: opening.kind,
+        id,
+        kind,
         start,
         width: end - start,
         bottom,
         top,
-        hinge: opening.hinge,
+        ...(hinge ? { hinge } : {}),
+        ...(phantom ? { phantom } : {}),
       });
+    };
+    for (const opening of openings) {
+      if (opening.wallIndex !== wall.index) continue;
+      cutHole(
+        opening.id,
+        opening.kind,
+        opening.offset,
+        opening.width,
+        opening.hinge,
+      );
+    }
+    for (const portal of seamData?.portalHoles ?? []) {
+      if (portal.wallIndex !== wall.index) continue;
+      cutHole(
+        portal.id,
+        portal.kind,
+        portal.offset,
+        portal.width,
+        undefined,
+        true,
+      );
     }
     holes.sort((a, b) => a.start - b.start);
 
+    const seams = seamData?.seamSpans.get(wall.index);
     solids.push({
       index: wall.index,
       start: wall.start,
@@ -135,9 +181,72 @@ export function buildWallSolids(
       outward,
       length,
       holes,
+      ...(seams && seams.length > 0 ? { seams } : {}),
     });
   }
   return solids;
+}
+
+/**
+ * A constant-thickness stretch of a wall, for rendering: shared (seam)
+ * stretches draw at half thickness — the abutting room draws the other half,
+ * so together the wall reads as one, not doubled — with the wall's holes
+ * clipped into each piece.
+ */
+export interface WallPiece {
+  start: number;
+  end: number;
+  /** On a shared-wall stretch: render at `WALL_THICKNESS / 2`. */
+  seam: boolean;
+  /** Holes overlapping this piece, clipped to it (wall-local offsets). */
+  holes: WallHole[];
+}
+
+/**
+ * Split a wall into its constant-thickness pieces along the seam
+ * boundaries. Unshared walls yield the single full piece.
+ */
+export function wallPieces(solid: WallSolid): WallPiece[] {
+  const seams = (solid.seams ?? [])
+    .map((span) => ({
+      start: Math.min(Math.max(span.start, 0), solid.length),
+      end: Math.min(Math.max(span.end, 0), solid.length),
+    }))
+    .filter((span) => span.end - span.start > MIN_HOLE_SIZE);
+  const cuts = [
+    0,
+    ...seams.flatMap((span) => [span.start, span.end]),
+    solid.length,
+  ].sort((a, b) => a - b);
+  const pieces: WallPiece[] = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const start = cuts[i];
+    const end = cuts[i + 1];
+    if (end - start < MIN_HOLE_SIZE) continue;
+    const mid = (start + end) / 2;
+    const seam = seams.some((span) => span.start <= mid && mid <= span.end);
+    const last = pieces[pieces.length - 1];
+    if (last && last.seam === seam) {
+      last.end = end;
+    } else {
+      pieces.push({ start, end, seam, holes: [] });
+    }
+  }
+  for (const piece of pieces) {
+    for (const hole of solid.holes) {
+      const start = Math.max(hole.start, piece.start);
+      const end = Math.min(hole.start + hole.width, piece.end);
+      if (end - start < MIN_HOLE_SIZE) continue;
+      // A hole fully inside the piece passes through unchanged; only true
+      // straddlers get clipped.
+      piece.holes.push(
+        end - start >= hole.width - MIN_HOLE_SIZE
+          ? hole
+          : { ...hole, start, width: end - start },
+      );
+    }
+  }
+  return pieces;
 }
 
 /**

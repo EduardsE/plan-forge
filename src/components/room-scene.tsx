@@ -45,7 +45,9 @@ import {
   SLAB_THICKNESS,
   WALL_THICKNESS,
   type WallSolid,
+  wallPieces,
 } from "#/lib/room-scene";
+import { floorSeamData, type RoomSeamData } from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -278,10 +280,12 @@ function Platform({ outline }: { outline: Point[] }) {
 /** Frame, muntin cross and glowing pane for one window hole (wall-local). */
 function WindowDressing({
   hole,
-  zOffset,
+  zCenter,
 }: {
   hole: WallSolid["holes"][number];
-  zOffset: number;
+  /** Wall-local z of the dressing's center plane (mid-thickness; on shared
+   * walls the seam line, so the frame straddles both rooms' halves). */
+  zCenter: number;
 }) {
   const { pane } = sharedTextures();
   const f = WINDOW_FRAME_SIZE;
@@ -290,7 +294,7 @@ function WindowDressing({
   const height = hole.top - hole.bottom;
   // Centered in the wall, slightly deeper than it, so the frame reads as a
   // lip on both faces without caring which side is the interior.
-  const z = zOffset + WALL_THICKNESS / 2;
+  const z = zCenter;
   const frameDepth = WALL_THICKNESS + 0.02;
   // Frame bars sit inside the hole, border-box style; the muntin cross
   // stays within the wall thickness.
@@ -343,27 +347,40 @@ function WallMesh({
   groupRef: (group: Group | null) => void;
 }) {
   const wall = wallTexture(wallHeight);
-  const geometry = useMemo(() => {
-    const shape = new Shape();
-    shape.moveTo(0, 0);
-    shape.lineTo(solid.length, 0);
-    shape.lineTo(solid.length, wallHeight);
-    shape.lineTo(0, wallHeight);
-    shape.closePath();
-    for (const hole of solid.holes) {
-      const path = new Path();
-      path.moveTo(hole.start, hole.bottom);
-      path.lineTo(hole.start + hole.width, hole.bottom);
-      path.lineTo(hole.start + hole.width, hole.top);
-      path.lineTo(hole.start, hole.top);
-      path.closePath();
-      shape.holes.push(path);
-    }
-    return new ExtrudeGeometry(shape, {
-      depth: WALL_THICKNESS,
-      bevelEnabled: false,
-    });
-  }, [solid, wallHeight]);
+  // One extrusion per constant-thickness piece: shared (seam) stretches are
+  // half as thick — the abutting room extrudes the other half on its side of
+  // the wall line, so together the party wall reads as one, not doubled.
+  const pieces = useMemo(
+    () =>
+      wallPieces(solid).map((piece) => {
+        const shape = new Shape();
+        shape.moveTo(piece.start, 0);
+        shape.lineTo(piece.end, 0);
+        shape.lineTo(piece.end, wallHeight);
+        shape.lineTo(piece.start, wallHeight);
+        shape.closePath();
+        for (const hole of piece.holes) {
+          const path = new Path();
+          path.moveTo(hole.start, hole.bottom);
+          path.lineTo(hole.start + hole.width, hole.bottom);
+          path.lineTo(hole.start + hole.width, hole.top);
+          path.lineTo(hole.start, hole.top);
+          path.closePath();
+          shape.holes.push(path);
+        }
+        const thickness = piece.seam ? WALL_THICKNESS / 2 : WALL_THICKNESS;
+        return {
+          start: piece.start,
+          seam: piece.seam,
+          thickness,
+          geometry: new ExtrudeGeometry(shape, {
+            depth: thickness,
+            bevelEnabled: false,
+          }),
+        };
+      }),
+    [solid, wallHeight],
+  );
 
   // rotation-y mapping local +X onto the wall direction sends local +Z to
   // plan (-dir.y, dir.x); when that lands inward, shift the extrusion so the
@@ -371,7 +388,14 @@ function WallMesh({
   const rotationY = Math.atan2(-solid.dir.y, solid.dir.x);
   const localZOutward =
     solid.outward.x * -solid.dir.y + solid.outward.y * solid.dir.x > 0;
-  const zOffset = localZOutward ? 0 : -WALL_THICKNESS;
+  const zOffset = (thickness: number) => (localZOutward ? 0 : -thickness);
+  /** Whether the (unclipped) hole sits on a shared stretch of this wall. */
+  const onSeam = (hole: WallSolid["holes"][number]) => {
+    const mid = hole.start + hole.width / 2;
+    return (solid.seams ?? []).some(
+      (span) => span.start <= mid && mid <= span.end,
+    );
+  };
 
   return (
     <group
@@ -379,23 +403,41 @@ function WallMesh({
       position={[solid.start.x, 0, solid.start.y]}
       rotation-y={rotationY}
     >
-      <mesh geometry={geometry} position-z={zOffset} raycast={noRaycast}>
-        <meshLambertMaterial attach="material-0" map={wall} />
-        <meshLambertMaterial attach="material-1" color={WALL_EDGE_COLOR} />
-      </mesh>
+      {pieces.map((piece) => (
+        <mesh
+          key={piece.start}
+          geometry={piece.geometry}
+          position-z={zOffset(piece.thickness)}
+          raycast={noRaycast}
+        >
+          <meshLambertMaterial attach="material-0" map={wall} />
+          <meshLambertMaterial attach="material-1" color={WALL_EDGE_COLOR} />
+        </mesh>
+      ))}
       {solid.holes
-        .filter((hole) => hole.kind === "window")
+        // A phantom window is a neighbor's portal — the owning side draws
+        // the one frame, centered on the seam so it spans both halves.
+        .filter((hole) => hole.kind === "window" && !hole.phantom)
         .map((hole) => (
-          <WindowDressing key={hole.start} hole={hole} zOffset={zOffset} />
+          <WindowDressing
+            key={hole.start}
+            hole={hole}
+            zCenter={
+              onSeam(hole) ? 0 : zOffset(WALL_THICKNESS) + WALL_THICKNESS / 2
+            }
+          />
         ))}
     </group>
   );
 }
 
 /** Walls + corner posts with the per-frame dollhouse cutaway. */
-function Walls({ room }: { room: Room }) {
+function Walls({ room, seamData }: { room: Room; seamData?: RoomSeamData }) {
   const wallHeight = wallHeightOf(room);
-  const solids = useMemo(() => buildWallSolids(room), [room]);
+  const solids = useMemo(
+    () => buildWallSolids(room, wallHeightOf(room), seamData),
+    [room, seamData],
+  );
   const posts = useMemo(() => cornerPosts(solids), [solids]);
   /** Wall index → position in `solids` (zero-length walls are skipped). */
   const solidPosition = useMemo(
@@ -653,11 +695,14 @@ function stackTopsOf(furniture: FurnitureItem[]): Map<string, number> {
 /** One room of the floor: platform, cutaway walls, furniture bodies. */
 function RoomLayer({
   room,
+  seamData,
   selectedId,
   onSelectItem,
   onDragStart,
 }: {
   room: Room;
+  /** The room's shared-wall data (portal cuts + half-thickness seams). */
+  seamData?: RoomSeamData;
   selectedId: string | null;
   onSelectItem: (id: string) => void;
   onDragStart: (
@@ -680,7 +725,7 @@ function RoomLayer({
   return (
     <group>
       <Platform outline={room.outline} />
-      <Walls room={room} />
+      <Walls room={room} seamData={seamData} />
       {room.furniture.map((item) => (
         <FurnitureMesh
           key={item.id}
@@ -722,6 +767,10 @@ export function RoomScene({
   // Lights aim at the whole floor's center, so a two-room flat reads as one
   // warmly lit model rather than per-room hotspots.
   const bounds = useMemo(() => floorBounds({ rooms }), [rooms]);
+  // Shared walls + portal cuts, derived from the outlines every render pass
+  // (never stored): each room draws its half of a party wall and cuts gaps
+  // for the neighbor's doors/windows on it.
+  const seamData = useMemo(() => floorSeamData(rooms), [rooms]);
   const center: [number, number, number] = bounds
     ? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
     : [0, 0, 0];
@@ -777,6 +826,7 @@ export function RoomScene({
         <RoomLayer
           key={room.id}
           room={room}
+          seamData={seamData.get(room.id)}
           selectedId={selectedId}
           onSelectItem={onSelectItem}
           onDragStart={beginDrag}

@@ -4,6 +4,7 @@ import {
   circlePoints,
   dashedPolyline,
   doorSwing,
+  pieceSpans,
   roundedRectPoints,
   solidSpans,
   wallPoint,
@@ -48,6 +49,37 @@ describe("solidSpans", () => {
       ],
     };
     expect(solidSpans(solid)).toEqual([{ start: 2, end: 4 }]);
+  });
+});
+
+describe("pieceSpans", () => {
+  it("complements the piece's holes within its own extent", () => {
+    expect(
+      pieceSpans({
+        start: 1,
+        end: 4,
+        seam: true,
+        holes: [
+          {
+            id: "door-1",
+            kind: "door",
+            start: 2,
+            width: 0.9,
+            bottom: 0,
+            top: 2,
+          },
+        ],
+      }),
+    ).toEqual([
+      { start: 1, end: 2 },
+      { start: 2.9, end: 4 },
+    ]);
+  });
+
+  it("returns the whole piece without holes", () => {
+    expect(pieceSpans({ start: 0, end: 2, seam: false, holes: [] })).toEqual([
+      { start: 0, end: 2 },
+    ]);
   });
 });
 

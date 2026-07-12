@@ -7,6 +7,7 @@ import {
   WALL_HEIGHT,
   WINDOW_HEAD,
   WINDOW_SILL,
+  wallPieces,
 } from "./room-scene";
 
 describe("buildWallSolids", () => {
@@ -150,5 +151,119 @@ describe("cornerPosts", () => {
     expect(
       posts.find((p) => p.corner.x === 2 && p.corner.y === 2),
     ).toBeUndefined();
+  });
+});
+
+describe("buildWallSolids with seam data", () => {
+  it("cuts phantom holes for a neighbor's portal openings", () => {
+    const room = {
+      id: "kitchen",
+      outline: [
+        { x: 6.4, y: 1 },
+        { x: 10, y: 1 },
+        { x: 10, y: 4 },
+        { x: 6.4, y: 4 },
+      ],
+      openings: [],
+      furniture: [],
+    };
+    const solids = buildWallSolids(room, undefined, {
+      seamSpans: new Map([[3, [{ start: 0, end: 3 }]]]),
+      portalHoles: [
+        { id: "door-1", kind: "door", wallIndex: 3, offset: 1.1, width: 0.9 },
+      ],
+    });
+    expect(solids[3].seams).toEqual([{ start: 0, end: 3 }]);
+    expect(solids[3].holes).toEqual([
+      {
+        id: "door-1",
+        kind: "door",
+        start: 1.1,
+        width: expect.closeTo(0.9, 10),
+        bottom: 0,
+        top: DOOR_HEIGHT,
+        phantom: true,
+      },
+    ]);
+    // The other walls stay untouched, without seam spans.
+    expect(solids[0].holes).toEqual([]);
+    expect(solids[0].seams).toBeUndefined();
+  });
+});
+
+describe("wallPieces", () => {
+  const baseSolid = {
+    index: 1,
+    start: { x: 6.4, y: 0 },
+    dir: { x: 0, y: 1 },
+    outward: { x: 1, y: 0 },
+    length: 5.2,
+    holes: [],
+  };
+
+  it("keeps an unshared wall as one full-thickness piece", () => {
+    expect(wallPieces(baseSolid)).toEqual([
+      { start: 0, end: 5.2, seam: false, holes: [] },
+    ]);
+  });
+
+  it("splits at the seam boundaries and assigns holes to their pieces", () => {
+    const door = {
+      id: "door-1",
+      kind: "door" as const,
+      start: 2,
+      width: 0.9,
+      bottom: 0,
+      top: DOOR_HEIGHT,
+    };
+    const window = {
+      id: "window-1",
+      kind: "window" as const,
+      start: 4.5,
+      width: 0.5,
+      bottom: WINDOW_SILL,
+      top: WINDOW_HEAD,
+    };
+    const pieces = wallPieces({
+      ...baseSolid,
+      holes: [door, window],
+      seams: [{ start: 1, end: 4 }],
+    });
+    expect(pieces).toHaveLength(3);
+    expect(pieces[0]).toEqual({ start: 0, end: 1, seam: false, holes: [] });
+    expect(pieces[1]).toEqual({ start: 1, end: 4, seam: true, holes: [door] });
+    expect(pieces[2]).toEqual({
+      start: 4,
+      end: 5.2,
+      seam: false,
+      holes: [window],
+    });
+  });
+
+  it("clips a hole straddling a seam boundary into both pieces", () => {
+    const door = {
+      id: "door-1",
+      kind: "door" as const,
+      start: 3.8,
+      width: 0.4,
+      bottom: 0,
+      top: DOOR_HEIGHT,
+    };
+    const pieces = wallPieces({
+      ...baseSolid,
+      holes: [door],
+      seams: [{ start: 1, end: 4 }],
+    });
+    // Widths compare as the exact float differences the clipping computes.
+    expect(pieces[1].holes).toEqual([{ ...door, start: 3.8, width: 4 - 3.8 }]);
+    expect(pieces[2].holes).toEqual([
+      { ...door, start: 4, width: 3.8 + 0.4 - 4 },
+    ]);
+  });
+
+  it("covers a fully shared wall with one seam piece", () => {
+    expect(
+      wallPieces({ ...baseSolid, seams: [{ start: 0, end: 5.2 }] }),
+    ).toEqual([{ start: 0, end: 5.2, seam: true, holes: [] }]);
   });
 });

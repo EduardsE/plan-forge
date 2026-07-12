@@ -24,6 +24,7 @@ import {
   WALL_THICKNESS,
   type WallHole,
   type WallSolid,
+  wallPieces,
 } from "#/lib/room-scene";
 import { formatLengthValue, parseLength, type Unit } from "#/lib/units";
 
@@ -266,10 +267,12 @@ function ChipWidthField({
   );
 }
 
-/** The selected opening's chip: flip hinge (doors), delete, editable width. */
+/** The selected opening's chip: flip hinge (doors), delete, editable width.
+ * A portal opening also names the connection it makes ("Living ↔ Kitchen"). */
 function OpeningChip({
   solid,
   hole,
+  connects,
   unit,
   onFlipHinge,
   onDelete,
@@ -277,6 +280,8 @@ function OpeningChip({
 }: {
   solid: WallSolid;
   hole: WallHole;
+  /** Derived portal label ("Living ↔ Kitchen"), or null off shared walls. */
+  connects: string | null;
   unit: Unit;
   onFlipHinge: (id: string) => void;
   onDelete: (id: string) => void;
@@ -295,6 +300,11 @@ function OpeningChip({
             className="h-[7px] w-[7px] rounded-[2px] bg-[var(--blue)]"
           />
           {hole.kind === "door" ? "Door" : "Window"}
+          {connects && (
+            <span className="font-normal text-[11.5px] text-[var(--ink-400)]">
+              {connects}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 rounded-[10px] border border-[var(--control-border)] bg-white px-2.5 py-[7px] shadow-[0_14px_34px_rgba(15,27,61,0.14)]">
           {hole.kind === "door" && (
@@ -454,40 +464,51 @@ function OpeningInsertLayer({
     [width],
   );
 
+  // One strip per constant-thickness piece. On a shared stretch the strip
+  // stops at the wall line: the abutting room's strip covers the far side,
+  // so whichever room the cursor is in owns the insert (and a door placed
+  // there swings into that room).
   const strips = useMemo(
     () =>
-      solids.map((solid) => ({
-        solid,
-        shape: shapeFromPoints(
-          wallRect(
-            solid,
-            0,
-            solid.length,
-            -PICK_PAD,
-            WALL_THICKNESS + PICK_PAD,
+      solids.flatMap((solid) =>
+        wallPieces(solid).map((piece) => ({
+          solid,
+          key: `${solid.index}:${piece.start}`,
+          shape: shapeFromPoints(
+            wallRect(
+              solid,
+              piece.start,
+              piece.end,
+              -PICK_PAD,
+              piece.seam ? 0 : WALL_THICKNESS + PICK_PAD,
+            ),
           ),
-        ),
-      })),
+        })),
+      ),
     [solids],
   );
   const ghostSolid = ghost
     ? (solids.find((solid) => solid.index === ghost.wallIndex) ?? null)
     : null;
-  const ghostShape = useMemo(
-    () =>
-      ghost && ghostSolid
-        ? shapeFromPoints(
-            wallRect(
-              ghostSolid,
-              ghost.offset,
-              ghost.offset + width,
-              0,
-              WALL_THICKNESS,
-            ),
-          )
-        : null,
-    [ghost, ghostSolid, width],
-  );
+  const ghostShape = useMemo(() => {
+    if (!ghost || !ghostSolid) return null;
+    // On a shared wall the visual wall straddles the line (a half-thickness
+    // fill each side), so the ghost centers on it too.
+    const mid = ghost.offset + width / 2;
+    const onSeam = (ghostSolid.seams ?? []).some(
+      (span) => span.start <= mid && mid <= span.end,
+    );
+    const base = onSeam ? -WALL_THICKNESS / 2 : 0;
+    return shapeFromPoints(
+      wallRect(
+        ghostSolid,
+        ghost.offset,
+        ghost.offset + width,
+        base,
+        base + WALL_THICKNESS,
+      ),
+    );
+  }, [ghost, ghostSolid, width]);
   const guides = useMemo(
     () =>
       ghost && ghostSolid
@@ -498,10 +519,10 @@ function OpeningInsertLayer({
 
   return (
     <group>
-      {strips.map(({ solid, shape }) => (
+      {strips.map(({ solid, key, shape }) => (
         // biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element.
         <mesh
-          key={solid.index}
+          key={key}
           rotation-x={-Math.PI / 2}
           position-y={STRIP_Y}
           onPointerMove={(event) => {
@@ -549,6 +570,8 @@ export interface PlanOpeningsProps {
   selectedId: string | null;
   /** Armed insert tool, or null when openings are merely selectable. */
   tool: OpeningKind | null;
+  /** "Living ↔ Kitchen" per portal opening id, shown on the chip. */
+  portalLabels?: Map<string, string>;
   unit: Unit;
   onSelect: (id: string) => void;
   onInsert: (
@@ -571,6 +594,7 @@ export function PlanOpenings({
   solids,
   selectedId,
   tool,
+  portalLabels,
   unit,
   onSelect,
   onInsert,
@@ -606,9 +630,12 @@ export function PlanOpenings({
     end();
   }, [end]);
 
+  // Phantom holes (a neighbor's portal cuts) are not this room's to pick,
+  // select, or chip — the owning room's PlanOpenings carries all of that,
+  // and its pick target already spans both sides of the shared wall.
   const selected = useMemo(() => {
     for (const solid of solids) {
-      const hole = solid.holes.find((h) => h.id === selectedId);
+      const hole = solid.holes.find((h) => h.id === selectedId && !h.phantom);
       if (hole) return { solid, hole };
     }
     return null;
@@ -620,21 +647,24 @@ export function PlanOpenings({
   return (
     <group>
       {solids.map((solid) =>
-        solid.holes.map((hole) => (
-          <OpeningTarget
-            key={hole.id}
-            solid={solid}
-            hole={hole}
-            selected={hole.id === selectedId}
-            onSelect={onSelect}
-            onDragStart={beginDrag}
-          />
-        )),
+        solid.holes
+          .filter((hole) => !hole.phantom)
+          .map((hole) => (
+            <OpeningTarget
+              key={hole.id}
+              solid={solid}
+              hole={hole}
+              selected={hole.id === selectedId}
+              onSelect={onSelect}
+              onDragStart={beginDrag}
+            />
+          )),
       )}
       {selected && (
         <OpeningChip
           solid={selected.solid}
           hole={selected.hole}
+          connects={portalLabels?.get(selected.hole.id) ?? null}
           unit={unit}
           onFlipHinge={onFlipHinge}
           onDelete={onDelete}

@@ -27,6 +27,7 @@ import {
   splitPointOnWall,
 } from "#/lib/outline-edit";
 import { dashedPolyline } from "#/lib/plan-scene";
+import { floorSeamData } from "#/lib/seams";
 import {
   formatLength,
   formatLengthValue,
@@ -840,6 +841,12 @@ export function DrawScene({
   // The other rooms' corners and walls, as flush-snap targets for every
   // draw interaction (corner placement, rect corners, corner drags).
   const targets = useMemo(() => snapTargetsOf(contextRooms), [contextRooms]);
+  // Shared walls among the context rooms render like the 2D lens (halved
+  // fills, portal cuts); the draft's own seams appear once it commits.
+  const contextSeamData = useMemo(
+    () => floorSeamData(contextRooms),
+    [contextRooms],
+  );
   const centroid = useMemo(() => centroidOf(corners), [corners]);
   const last = corners.at(-1);
   const preview = !closed && placing && last && snap ? snap : null;
@@ -920,7 +927,12 @@ export function DrawScene({
       {/* The rest of the floor as a static backdrop (non-interactive: its
 			    meshes carry no handlers, so they never intercept corner clicks). */}
       {contextRooms.map((room) => (
-        <PlanRoomLayer key={room.id} room={room} unit={unit} />
+        <PlanRoomLayer
+          key={room.id}
+          room={room}
+          seamData={contextSeamData.get(room.id)}
+          unit={unit}
+        />
       ))}
       {/* In select mode a context room is clickable — the session re-targets
 			    onto it. Inert while placing corners so drawing along (or across)

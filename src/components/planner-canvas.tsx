@@ -61,6 +61,7 @@ import {
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
 import { resizeOpening } from "#/lib/opening-place";
+import { floorPortals } from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -569,6 +570,10 @@ export interface PlannerCanvasProps {
   /** Furniture selection — owned by the route, shared with the inspector. */
   selectedId: string | null;
   onSelectedIdChange: (id: string | null) => void;
+  /** Opening selection (2D lens) — owned by the route too, so the status
+   * bar can label a portal ("connects Living ↔ Kitchen"). */
+  selectedOpeningId: string | null;
+  onSelectedOpeningIdChange: (id: string | null) => void;
   cameraApiRef: RefObject<CameraApi | null>;
   readoutStore: CameraReadoutStore;
   /** Display unit for draw-mode labels. */
@@ -609,6 +614,8 @@ export function PlannerCanvas({
   viewMode,
   selectedId,
   onSelectedIdChange: setSelectedId,
+  selectedOpeningId,
+  onSelectedOpeningIdChange: setSelectedOpeningId,
   cameraApiRef,
   readoutStore,
   unit,
@@ -639,11 +646,6 @@ export function PlannerCanvas({
   // plan drawing swaps in only at the matched top-down endpoint.
   const [renderPlan, setRenderPlan] = useState(planView);
 
-  // Selected opening (2D lens only) — one selection at a time across both
-  // (the furniture side lives in the route, where the inspector shares it).
-  const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(
-    null,
-  );
   // Screen position of the last pointer-down, to tell orbit drags from
   // picks in onPointerMissed (which only carries the raw MouseEvent).
   const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
@@ -671,14 +673,14 @@ export function PlannerCanvas({
       setSelectedId(id);
       setSelectedOpeningId(null);
     },
-    [setSelectedId],
+    [setSelectedId, setSelectedOpeningId],
   );
   const selectOpening = useCallback(
     (id: string) => {
       setSelectedOpeningId(id);
       setSelectedId(null);
     },
-    [setSelectedId],
+    [setSelectedId, setSelectedOpeningId],
   );
 
   const moveItem = useCallback(
@@ -735,10 +737,24 @@ export function PlannerCanvas({
   const resizeOpeningTo = useCallback(
     // A committed width from the opening chip's field; `resizeOpening` owns
     // the clamping and returns the same room for no-ops (no empty undo step).
+    // On a shared wall, the neighbor room's portal holes there block growth
+    // exactly like this room's own openings.
     (id: string, width: number) => {
       const owner = roomOfOpening(floor, id);
       if (!owner) return;
-      const next = resizeOpening(owner, id, width);
+      const opening = owner.openings.find((entry) => entry.id === id);
+      if (!opening) return;
+      const blocked = floorPortals(floor.rooms)
+        .filter(
+          (portal) =>
+            portal.otherRoomId === owner.id &&
+            portal.otherWallIndex === opening.wallIndex,
+        )
+        .map((portal) => ({
+          start: portal.otherOffset,
+          width: portal.otherWidth,
+        }));
+      const next = resizeOpening(owner, id, width, blocked);
       if (next !== owner) onRoomChange(owner.id, next);
     },
     [floor, onRoomChange],
@@ -749,7 +765,7 @@ export function PlannerCanvas({
       if (owner) onRoomChange(owner.id, removeOpening(owner, id));
       setSelectedOpeningId(null);
     },
-    [floor, onRoomChange],
+    [floor, onRoomChange, setSelectedOpeningId],
   );
 
   // A placement drag takes over the scene; a leftover selection chip would
@@ -763,7 +779,7 @@ export function PlannerCanvas({
     if (!openingTool) return;
     setSelectedId(null);
     setSelectedOpeningId(null);
-  }, [openingTool, setSelectedId]);
+  }, [openingTool, setSelectedId, setSelectedOpeningId]);
 
   const placeDraggedItem = useCallback(
     // The ghost already resolved which room the drop targets (the one whose

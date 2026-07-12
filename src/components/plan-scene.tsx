@@ -39,8 +39,8 @@ import {
   circlePoints,
   dashedPolyline,
   doorSwing,
+  pieceSpans,
   roundedRectPoints,
-  solidSpans,
   wallPoint,
   wallSpanRect,
 } from "#/lib/plan-scene";
@@ -50,7 +50,15 @@ import {
   WALL_THICKNESS,
   type WallHole,
   type WallSolid,
+  wallPieces,
 } from "#/lib/room-scene";
+import {
+  floorPortals,
+  floorSeamData,
+  floorSeams,
+  portalLabel,
+  type RoomSeamData,
+} from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -296,13 +304,24 @@ function PlanShadow({
   );
 }
 
-/** Window symbol: white break in the wall crossed by three parallel lines. */
-function WindowSymbol({ solid, hole }: { solid: WallSolid; hole: WallHole }) {
+/** Window symbol: white break in the wall crossed by three parallel lines.
+ * `base` shifts the symbol across the wall — 0 spans the wall band outward
+ * of the outline (exterior walls); -WALL_THICKNESS/2 centers it on a shared
+ * wall, whose two half-thickness sides straddle the outline line. */
+function WindowSymbol({
+  solid,
+  hole,
+  base = 0,
+}: {
+  solid: WallSolid;
+  hole: WallHole;
+  base?: number;
+}) {
   const inset = 0.02;
   const lines: Array<{ offset: number; width: number }> = [
-    { offset: inset, width: 3 },
-    { offset: WALL_THICKNESS / 2, width: 2 },
-    { offset: WALL_THICKNESS - inset, width: 3 },
+    { offset: base + inset, width: 3 },
+    { offset: base + WALL_THICKNESS / 2, width: 2 },
+    { offset: base + WALL_THICKNESS - inset, width: 3 },
   ];
   return (
     <group>
@@ -348,28 +367,54 @@ function DoorSymbol({ solid, hole }: { solid: WallSolid; hole: WallHole }) {
   );
 }
 
-/** One wall's openings: the white break in the navy fill, then the symbol. */
+/** Whether the (unclipped) hole sits on a shared stretch of the wall. */
+function holeOnSeam(solid: WallSolid, hole: WallHole): boolean {
+  const mid = hole.start + hole.width / 2;
+  return (solid.seams ?? []).some(
+    (span) => span.start <= mid && mid <= span.end,
+  );
+}
+
+/** One wall's openings: the white break in the navy fill, then the symbol.
+ * On shared stretches there is no break — the gap shows the neighbor's floor
+ * running through the portal — and phantom holes (a neighbor's portal cuts)
+ * draw no symbol either: the owning side has it. */
 function WallOpenings({ solid }: { solid: WallSolid }) {
+  // Breaks paint over whatever sits under the wall band beyond the outline
+  // (the plan's drop shadow); clipped per piece so a hole straddling a seam
+  // boundary breaks only where this room's wall is full thickness.
   const breakShapes = useMemo(
     () =>
-      solid.holes.map((hole) =>
-        shapeFromPoints(
-          wallSpanRect(
-            solid,
-            { start: hole.start, end: hole.start + hole.width },
-            WALL_THICKNESS,
+      wallPieces(solid)
+        .filter((piece) => !piece.seam)
+        .flatMap((piece) =>
+          piece.holes.map((hole) =>
+            shapeFromPoints(
+              wallSpanRect(
+                solid,
+                { start: hole.start, end: hole.start + hole.width },
+                WALL_THICKNESS,
+              ),
+            ),
           ),
         ),
-      ),
     [solid],
   );
+  const symbolHoles = solid.holes.filter((hole) => !hole.phantom);
   if (solid.holes.length === 0) return null;
   return (
     <group>
-      <FlatShape shapes={breakShapes} y={OPENING_Y} color={FLOOR_COLOR} />
-      {solid.holes.map((hole) =>
+      {breakShapes.length > 0 && (
+        <FlatShape shapes={breakShapes} y={OPENING_Y} color={FLOOR_COLOR} />
+      )}
+      {symbolHoles.map((hole) =>
         hole.kind === "window" ? (
-          <WindowSymbol key={hole.start} solid={solid} hole={hole} />
+          <WindowSymbol
+            key={hole.start}
+            solid={solid}
+            hole={hole}
+            base={holeOnSeam(solid, hole) ? -WALL_THICKNESS / 2 : 0}
+          />
         ) : (
           <DoorSymbol key={hole.start} solid={solid} hole={hole} />
         ),
@@ -681,6 +726,10 @@ function DimensionLine({
 
 export interface PlanRoomLayerProps {
   room: Room;
+  /** The room's shared-wall data (portal cuts + half-thickness seams). */
+  seamData?: RoomSeamData;
+  /** "Living ↔ Kitchen" per portal opening id, for the selection chip. */
+  portalLabels?: Map<string, string>;
   /** Floor-wide furniture selection; only this room's items can match. */
   selectedId?: string | null;
   unit: Unit;
@@ -722,6 +771,8 @@ export interface PlanRoomLayerProps {
  */
 export function PlanRoomLayer({
   room,
+  seamData,
+  portalLabels,
   selectedId = null,
   unit,
   interactive = false,
@@ -737,7 +788,10 @@ export function PlanRoomLayer({
   onResizeOpening,
   onDragActiveChange,
 }: PlanRoomLayerProps) {
-  const solids = useMemo(() => buildWallSolids(room), [room]);
+  const solids = useMemo(
+    () => buildWallSolids(room, undefined, seamData),
+    [room, seamData],
+  );
   const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
   const area = useMemo(() => floorArea(room.outline), [room.outline]);
   const floorShape = useMemo(
@@ -745,9 +799,20 @@ export function PlanRoomLayer({
     [room.outline],
   );
   const wallShapes = useMemo(() => {
+    // Per constant-thickness piece: shared stretches fill at half thickness
+    // (the neighbor fills its half on the other side of the line, so the
+    // party wall reads as one wall, not two).
     const shapes = solids.flatMap((solid) =>
-      solidSpans(solid).map((span) =>
-        shapeFromPoints(wallSpanRect(solid, span, WALL_THICKNESS)),
+      wallPieces(solid).flatMap((piece) =>
+        pieceSpans(piece).map((span) =>
+          shapeFromPoints(
+            wallSpanRect(
+              solid,
+              span,
+              piece.seam ? WALL_THICKNESS / 2 : WALL_THICKNESS,
+            ),
+          ),
+        ),
       ),
     );
     const half = WALL_THICKNESS / 2;
@@ -789,6 +854,7 @@ export function PlanRoomLayer({
           solids={solids}
           selectedId={selectedOpeningId}
           tool={openingTool ?? null}
+          portalLabels={portalLabels}
           unit={unit}
           onSelect={onSelectOpening ?? (() => {})}
           onInsert={(kind, wallIndex, offset, width) =>
@@ -906,6 +972,22 @@ export function PlanScene({
   onResizeOpening,
 }: PlanSceneProps) {
   const bounds = useMemo(() => floorBounds({ rooms }), [rooms]);
+  // Shared walls + portals, derived from the outlines every render pass
+  // (never stored): each room fills its half of a party wall, cuts gaps for
+  // the neighbor's openings on it, and the chip labels the connection.
+  const { seamData, portalLabels } = useMemo(() => {
+    const seams = floorSeams(rooms);
+    const portals = floorPortals(rooms, seams);
+    return {
+      seamData: floorSeamData(rooms, seams, portals),
+      portalLabels: new Map(
+        portals.map((portal) => [
+          portal.openingId,
+          portalLabel(rooms, portals, portal.openingId) ?? "",
+        ]),
+      ),
+    };
+  }, [rooms]);
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
   // The owning room is derived from the item id — selection and drags are
@@ -946,6 +1028,8 @@ export function PlanScene({
         <PlanRoomLayer
           key={room.id}
           room={room}
+          seamData={seamData.get(room.id)}
+          portalLabels={portalLabels}
           selectedId={selectedId}
           unit={unit}
           interactive

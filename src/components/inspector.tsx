@@ -377,6 +377,9 @@ export interface InspectorProps {
   /** Draw-mode draft state, for the OUTLINE view. */
   draftCornerCount?: number;
   draftClosed?: boolean;
+  /** The selected opening is a portal — "Door connects Living ↔ Kitchen"
+   * (derived from wall abutment); shown with the floor overview. */
+  portalStatus?: string | null;
   onResize: (footprint: Footprint) => void;
   onRotateTo: (deg: number) => void;
   onElevate: (elevation: number) => void;
@@ -395,6 +398,7 @@ export function Inspector({
   selectedItem,
   draftCornerCount = 0,
   draftClosed = false,
+  portalStatus = null,
   onResize,
   onRotateTo,
   onElevate,
@@ -495,6 +499,14 @@ export function Inspector({
                 </div>
               ))}
             </div>
+            {portalStatus && (
+              <div
+                className="text-[12.5px] text-[var(--ink-500)]"
+                data-testid="inspector-portal"
+              >
+                {portalStatus}
+              </div>
+            )}
             <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
               Select an item in either lens to edit its size, rotation and
               position here.

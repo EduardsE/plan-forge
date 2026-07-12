@@ -4,6 +4,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -68,6 +69,7 @@ import {
   serializeSavedState,
 } from "#/lib/persistence";
 import { PLACEMENT_GRID } from "#/lib/place";
+import { floorPortals, portalLabel } from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -155,6 +157,29 @@ function Planner() {
     : null;
   const selectedItem =
     selectedRoom?.furniture.find((item) => item.id === selectedId) ?? null;
+  // The opening selection (2D lens) lives here too, so the status bar and
+  // inspector can label a portal — an opening on a wall two rooms share —
+  // with the connection it makes. Derived from geometry, never stored.
+  const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(
+    null,
+  );
+  const portalStatus = useMemo(() => {
+    if (!selectedOpeningId || viewMode !== "2d") return null;
+    const owner = floor.rooms.find((entry) =>
+      entry.openings.some((opening) => opening.id === selectedOpeningId),
+    );
+    const opening = owner?.openings.find(
+      (entry) => entry.id === selectedOpeningId,
+    );
+    if (!opening) return null;
+    const label = portalLabel(
+      floor.rooms,
+      floorPortals(floor.rooms),
+      selectedOpeningId,
+    );
+    if (!label) return null;
+    return `${opening.kind === "door" ? "Door" : "Window"} connects ${label}`;
+  }, [selectedOpeningId, viewMode, floor]);
   // One commit against the room owning `itemId`, resolved inside the
   // functional update so bursts never work from a stale floor. One history
   // step per commit; same-reference no-ops land nowhere.
@@ -797,6 +822,8 @@ function Planner() {
               viewMode={viewMode}
               selectedId={selectedId}
               onSelectedIdChange={setSelectedId}
+              selectedOpeningId={selectedOpeningId}
+              onSelectedOpeningIdChange={setSelectedOpeningId}
               cameraApiRef={cameraApiRef}
               readoutStore={readoutStore}
               unit={unit}
@@ -854,6 +881,7 @@ function Planner() {
         mode={viewMode}
         floor={floor}
         selectedRoomName={selectedRoom?.name ?? null}
+        portalStatus={portalStatus}
         cameraReadout={readoutStore}
         unit={unit}
         onUnitChange={setUnit}
@@ -879,6 +907,7 @@ function Planner() {
           mode={viewMode}
           selectedRoom={selectedRoom}
           selectedItem={selectedItem}
+          portalStatus={portalStatus}
           draftCornerCount={draft.corners.length}
           draftClosed={draft.closed}
           onResize={resizeSelected}

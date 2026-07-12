@@ -126,6 +126,17 @@ describe("resizeOpening", () => {
     expect(win?.offset).toBeCloseTo(2);
   });
 
+  it("clamps against extra blocked spans (a neighbor's portal holes)", () => {
+    // door-1 sits at [3.6, 4.55] on the right wall; a neighbor room's portal
+    // hole occupies [4.8, 5.2], so growth stops at its near edge.
+    const room = resizeOpening(createSampleRoom(), "door-1", 12, [
+      { start: 4.8, width: 0.4 },
+    ]);
+    const door = room.openings.find((o) => o.id === "door-1");
+    expect(door?.width).toBeCloseTo(4.8);
+    expect(door?.offset).toBeCloseTo(0);
+  });
+
   it("enforces the minimum width", () => {
     const room = resizeOpening(createSampleRoom(), "door-1", 0.05);
     expect(room.openings.find((o) => o.id === "door-1")?.width).toBeCloseTo(

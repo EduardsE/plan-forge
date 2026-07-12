@@ -1,5 +1,5 @@
 import type { Point } from "#/lib/model";
-import type { WallHole, WallSolid } from "#/lib/room-scene";
+import type { WallHole, WallPiece, WallSolid } from "#/lib/room-scene";
 
 /**
  * Pure geometry for the 2D plan lens: turns wall solids and footprints into
@@ -17,23 +17,37 @@ export interface Span {
   end: number;
 }
 
-/**
- * The stretches of a wall that are solid masonry — the complement of its
- * (sorted, possibly overlapping) holes over the wall's length.
- */
-export function solidSpans(solid: WallSolid): Span[] {
+/** Complement of (sorted, possibly overlapping) holes over `[start, end]`. */
+function complementSpans(
+  holes: Array<{ start: number; width: number }>,
+  start: number,
+  end: number,
+): Span[] {
   const spans: Span[] = [];
-  let cursor = 0;
-  for (const hole of solid.holes) {
+  let cursor = start;
+  for (const hole of holes) {
     if (hole.start - cursor > EPS) {
       spans.push({ start: cursor, end: hole.start });
     }
     cursor = Math.max(cursor, hole.start + hole.width);
   }
-  if (solid.length - cursor > EPS) {
-    spans.push({ start: cursor, end: solid.length });
+  if (end - cursor > EPS) {
+    spans.push({ start: cursor, end });
   }
   return spans;
+}
+
+/**
+ * The stretches of a wall that are solid masonry — the complement of its
+ * (sorted, possibly overlapping) holes over the wall's length.
+ */
+export function solidSpans(solid: WallSolid): Span[] {
+  return complementSpans(solid.holes, 0, solid.length);
+}
+
+/** The solid-masonry stretches of one constant-thickness wall piece. */
+export function pieceSpans(piece: WallPiece): Span[] {
+  return complementSpans(piece.holes, piece.start, piece.end);
 }
 
 /**
