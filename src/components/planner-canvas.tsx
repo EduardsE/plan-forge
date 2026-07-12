@@ -218,16 +218,16 @@ function CameraRig({
   /** Orbit pose saved when leaving 3D, restored on the way back. */
   const savedOrbitRef = useRef<CameraPose | null>(null);
 
+  // Keyed on the center *values*, not the bounds object: `bounds` gets a new
+  // identity on every floor mutation — including each frame of a furniture
+  // drag — and an identity-keyed Vector3 here would ripple into the camera
+  // `position` props below, which R3F re-applies on identity change. That
+  // re-apply teleported the live camera back to the initial pose mid-drag.
+  const centerX = bounds ? (bounds.min.x + bounds.max.x) / 2 : 0;
+  const centerZ = bounds ? (bounds.min.y + bounds.max.y) / 2 : 0;
   const center = useMemo(
-    () =>
-      bounds
-        ? new Vector3(
-            (bounds.min.x + bounds.max.x) / 2,
-            0,
-            (bounds.min.y + bounds.max.y) / 2,
-          )
-        : new Vector3(),
-    [bounds],
+    () => new Vector3(centerX, 0, centerZ),
+    [centerX, centerZ],
   );
   const fitRadius = bounds ? Math.hypot(bounds.width, bounds.height) / 2 : 5;
 

@@ -16,11 +16,9 @@ import {
   RepeatWrapping,
   Shape,
   SRGBColorSpace,
-  Vector3,
 } from "three";
 import {
   CLICK_SLOP_PX,
-  FLOOR_PLANE,
   MoveDragSession,
   useMoveDrag,
 } from "#/components/move-drag";
@@ -499,8 +497,9 @@ function FurnitureMesh({
   /** Pointer went down on the selected item: begin a move drag. */
   onDragStart: (
     item: FurnitureItem,
-    floorPoint: Point,
+    grabPoint: Point,
     screen: { x: number; y: number },
+    grabHeight: number,
   ) => void;
 }) {
   const { width, depth, height } = item.footprint;
@@ -596,13 +595,15 @@ function FurnitureMesh({
         // Only a selected item arms a move drag — the first press picks,
         // the next press-and-drag moves (right button still pans).
         if (!selected || event.button !== 0) return;
-        const hit = new Vector3();
-        if (!event.ray.intersectPlane(FLOOR_PLANE, hit)) return;
+        // Grab at the actual hit on the item, not a floor-plane raycast:
+        // from a low camera a grab above the horizon never reaches y=0,
+        // which used to fall through to OrbitControls and orbit instead.
         event.stopPropagation();
         onDragStart(
           item,
-          { x: hit.x, y: hit.z },
+          { x: event.point.x, y: event.point.z },
           { x: event.clientX, y: event.clientY },
+          event.point.y,
         );
       }}
       onPointerOver={(event) => {
@@ -661,8 +662,9 @@ function RoomLayer({
   onSelectItem: (id: string) => void;
   onDragStart: (
     item: FurnitureItem,
-    floorPoint: Point,
+    grabPoint: Point,
     screen: { x: number; y: number },
+    grabHeight: number,
   ) => void;
 }) {
   // Overlap warnings and stack lifts are per-room concerns: furniture

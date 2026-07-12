@@ -34,7 +34,7 @@ import type { Unit } from "#/lib/units";
  */
 export const CLICK_SLOP_PX = 4;
 
-/** The y=0 floor plane a move drag tracks the pointer across. */
+/** The y=0 floor plane, the default plane a drag tracks the pointer across. */
 export const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 
 /** A live move drag: which item, where it was grabbed, where it started. */
@@ -42,6 +42,13 @@ export interface MoveDrag {
   id: string;
   /** Grab offset from the item's center, plan coords — dragging keeps it. */
   grab: Point;
+  /**
+   * World-space height of the grab point. The drag tracks the pointer across
+   * the horizontal plane at this height, not y=0 — projecting an elevated
+   * grab (a wardrobe top, a wall shelf) onto the floor would land behind the
+   * item and make it jump on the first move.
+   */
+  grabHeight: number;
   /** Position at drag start, restored by esc. */
   original: Point;
   /** Rotation at drag start, restored by esc (matters for wall re-mounts). */
@@ -110,13 +117,15 @@ export function useControlsPause(onActiveChange: (active: boolean) => void) {
 }
 
 /**
- * Project window pointer events onto the y=0 floor plane through `camera`.
- * Ignores the event target on purpose: mid-drag the pointer may cross a DOM
- * overlay (the selection chip) and tracking must not stall there.
+ * Project window pointer events onto a horizontal plane (the floor by
+ * default) through `camera`. Ignores the event target on purpose: mid-drag
+ * the pointer may cross a DOM overlay (the selection chip) and tracking must
+ * not stall there.
  */
 export function floorProjector(
   gl: { domElement: HTMLCanvasElement },
   camera: Camera,
+  plane: Plane = FLOOR_PLANE,
 ): (event: PointerEvent) => Point | null {
   const raycaster = new Raycaster();
   const hit = new Vector3();
@@ -128,7 +137,7 @@ export function floorProjector(
       -(((event.clientY - rect.top) / rect.height) * 2 - 1),
     );
     raycaster.setFromCamera(ndc, camera);
-    return raycaster.ray.intersectPlane(FLOOR_PLANE, hit)
+    return raycaster.ray.intersectPlane(plane, hit)
       ? { x: hit.x, y: hit.z }
       : null;
   };
@@ -144,15 +153,19 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
   const beginDrag = useCallback(
     (
       item: FurnitureItem,
-      floorPoint: Point,
+      /** Where on the item the pointer grabbed it, plan coords. */
+      grabPoint: Point,
       screen: { x: number; y: number },
+      /** World-space height of the grab point (0 for the flat 2D lens). */
+      grabHeight = 0,
     ) => {
       setDrag({
         id: item.id,
         grab: {
-          x: floorPoint.x - item.position.x,
-          y: floorPoint.y - item.position.y,
+          x: grabPoint.x - item.position.x,
+          y: grabPoint.y - item.position.y,
         },
+        grabHeight,
         original: item.position,
         originalRotation: item.rotation,
         size: rotatedFootprintSize(item.footprint, item.rotation),
@@ -247,7 +260,14 @@ export function MoveDragSession({
   hostsRef.current = hosts;
 
   useEffect(() => {
-    const toFloor = floorProjector(gl, camera);
+    // Track the pointer across the plane of the grab point, so an elevated
+    // grab (3D lens) keeps the item under the hand instead of adding the
+    // floor-projection parallax.
+    const toFloor = floorProjector(
+      gl,
+      camera,
+      new Plane(new Vector3(0, 1, 0), -drag.grabHeight),
+    );
     // Pointer-still-down presses shouldn't nudge the item onto the snap
     // grid: nothing moves until the pointer clears the click slop.
     let moved = false;
