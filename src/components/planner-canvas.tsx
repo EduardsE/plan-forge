@@ -879,6 +879,12 @@ export function PlannerCanvas({
       <Canvas
         flat
         dpr={[1, 2]}
+        // react-use-measure wires its ResizeObserver to the *scroll*-debounced
+        // handler (50 ms by default), so a container resize — the library
+        // column docking — leaves the canvas at its stale size for several
+        // frames and the room visibly lurches, then snaps. Undebounced, the
+        // buffer follows the grid within a frame.
+        resize={{ debounce: 0 }}
         gl={{ antialias: true, alpha: true }}
         onPointerMissed={(event) => {
           // Only furniture raycasts, so any true click elsewhere lands here.
