@@ -40,6 +40,7 @@ const CHIP_ORDER: CatalogCategory[] = [
   "decor",
   "wall-items",
   "plants",
+  "openings",
 ];
 
 export function ObjectsPanel({

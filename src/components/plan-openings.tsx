@@ -11,9 +11,8 @@ import {
 import { ACTION_BUTTON_CLASS } from "#/components/selection-chip";
 import { SnapGuides } from "#/components/snap-guides";
 import { Tooltip } from "#/components/tooltip";
-import type { OpeningKind, Point } from "#/lib/model";
+import type { Point } from "#/lib/model";
 import {
-  defaultOpeningWidth,
   offsetAlongWall,
   openingCornerGuides,
   slideOpening,
@@ -24,22 +23,19 @@ import {
   WALL_THICKNESS,
   type WallHole,
   type WallSolid,
-  wallPieces,
 } from "#/lib/room-scene";
 import { formatLengthValue, parseLength, type Unit } from "#/lib/units";
 
 /**
  * Door/window editing on the 2D plan lens: existing openings pick like the
  * furniture footprints (hover, click-select, chip, drag-along-the-wall with
- * the shared guide pills), and an armed door/window tool turns every wall
- * into a click target with a live ghost at the snapped offset. All geometry
- * math lives in `opening-place.ts`; this file is rendering and pointers.
+ * the shared guide pills). Fresh doors/windows insert by dragging a catalog
+ * card from the objects library (`opening-ghost.tsx`). All geometry math
+ * lives in `opening-place.ts`; this file is rendering and pointers.
  */
 
 /** Hover/selection stroke, same accent as the plan footprints. */
 const SELECTION_COLOR = "#3a5bf0";
-/** Ghost fill while an armed tool hovers a wall (the guide cyan). */
-const GHOST_COLOR = "#3a5bf0";
 
 /** Pick target reach beyond the wall faces, meters — the wall band is only
  * 0.1 m deep, a sliver at typical zoom. */
@@ -53,12 +49,9 @@ const CHIP_GAP = 0.16;
 
 /** Stacked above the plan drawing's symbol strokes (LINE_Y = 0.014) and
  * below the snap-guide pills (0.026). The invisible pick layers sit on top
- * of the visible strokes; the armed tool's wall strips beat the opening
- * targets so a click near an existing opening still places. */
-const GHOST_Y = 0.018;
+ * of the visible strokes. */
 const HIGHLIGHT_Y = 0.019;
 const PICK_Y = 0.02;
-const STRIP_Y = 0.022;
 const CHIP_Y = 0.024;
 
 function v3(p: Point, y: number): [number, number, number] {
@@ -422,164 +415,13 @@ function OpeningDragSession({
   return <SnapGuides guides={guides} unit={unit} />;
 }
 
-/** Where an armed tool would insert on the hovered wall right now. */
-interface InsertGhost {
-  wallIndex: number;
-  offset: number;
-}
-
-/**
- * The armed tool's wall strips and ghost: every wall grows an invisible
- * pick band; hovering it previews the opening at the snapped offset with
- * corner readouts, and a click commits the insert. Walls with no room for
- * the opening's width show nothing and swallow the click.
- */
-function OpeningInsertLayer({
-  solids,
-  kind,
-  unit,
-  onInsert,
-}: {
-  solids: WallSolid[];
-  kind: OpeningKind;
-  unit: Unit;
-  onInsert: (
-    kind: OpeningKind,
-    wallIndex: number,
-    offset: number,
-    width: number,
-  ) => void;
-}) {
-  const width = defaultOpeningWidth(kind);
-  const [ghost, setGhost] = useState<InsertGhost | null>(null);
-
-  const candidateFor = useCallback(
-    (solid: WallSolid, point: { x: number; z: number }): number | null =>
-      slideOpening(
-        solid.length,
-        width,
-        solid.holes,
-        offsetAlongWall(solid, { x: point.x, y: point.z }) - width / 2,
-      ),
-    [width],
-  );
-
-  // One strip per constant-thickness piece. On a shared stretch the strip
-  // stops at the wall line: the abutting room's strip covers the far side,
-  // so whichever room the cursor is in owns the insert (and a door placed
-  // there swings into that room).
-  const strips = useMemo(
-    () =>
-      solids.flatMap((solid) =>
-        wallPieces(solid).map((piece) => ({
-          solid,
-          key: `${solid.index}:${piece.start}`,
-          shape: shapeFromPoints(
-            wallRect(
-              solid,
-              piece.start,
-              piece.end,
-              -PICK_PAD,
-              piece.seam ? 0 : WALL_THICKNESS + PICK_PAD,
-            ),
-          ),
-        })),
-      ),
-    [solids],
-  );
-  const ghostSolid = ghost
-    ? (solids.find((solid) => solid.index === ghost.wallIndex) ?? null)
-    : null;
-  const ghostShape = useMemo(() => {
-    if (!ghost || !ghostSolid) return null;
-    // On a shared wall the visual wall straddles the line (a half-thickness
-    // fill each side), so the ghost centers on it too.
-    const mid = ghost.offset + width / 2;
-    const onSeam = (ghostSolid.seams ?? []).some(
-      (span) => span.start <= mid && mid <= span.end,
-    );
-    const base = onSeam ? -WALL_THICKNESS / 2 : 0;
-    return shapeFromPoints(
-      wallRect(
-        ghostSolid,
-        ghost.offset,
-        ghost.offset + width,
-        base,
-        base + WALL_THICKNESS,
-      ),
-    );
-  }, [ghost, ghostSolid, width]);
-  const guides = useMemo(
-    () =>
-      ghost && ghostSolid
-        ? openingCornerGuides(ghostSolid, ghost.offset, width)
-        : [],
-    [ghost, ghostSolid, width],
-  );
-
-  return (
-    <group>
-      {strips.map(({ solid, key, shape }) => (
-        // biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element.
-        <mesh
-          key={key}
-          rotation-x={-Math.PI / 2}
-          position-y={STRIP_Y}
-          onPointerMove={(event) => {
-            event.stopPropagation();
-            const offset = candidateFor(solid, event.point);
-            setGhost(
-              offset === null ? null : { wallIndex: solid.index, offset },
-            );
-          }}
-          onPointerOut={() => {
-            setGhost((current) =>
-              current?.wallIndex === solid.index ? null : current,
-            );
-          }}
-          onClick={(event) => {
-            // A drag that ends on the wall is a camera pan, not an insert.
-            if (event.delta > CLICK_SLOP_PX) return;
-            event.stopPropagation();
-            const offset = candidateFor(solid, event.point);
-            if (offset !== null) onInsert(kind, solid.index, offset, width);
-          }}
-        >
-          <shapeGeometry args={[shape]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
-      ))}
-      {ghostShape && (
-        <mesh rotation-x={-Math.PI / 2} position-y={GHOST_Y}>
-          <shapeGeometry args={[ghostShape]} />
-          <meshBasicMaterial
-            color={GHOST_COLOR}
-            transparent
-            opacity={0.45}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
-      <SnapGuides guides={guides} unit={unit} />
-    </group>
-  );
-}
-
 export interface PlanOpeningsProps {
   solids: WallSolid[];
   selectedId: string | null;
-  /** Armed insert tool, or null when openings are merely selectable. */
-  tool: OpeningKind | null;
   /** "Living ↔ Kitchen" per portal opening id, shown on the chip. */
   portalLabels?: Map<string, string>;
   unit: Unit;
   onSelect: (id: string) => void;
-  onInsert: (
-    kind: OpeningKind,
-    wallIndex: number,
-    offset: number,
-    width: number,
-  ) => void;
   /** Live re-offset during a drag (already snapped). */
   onMove: (id: string, offset: number) => void;
   onFlipHinge: (id: string) => void;
@@ -593,11 +435,9 @@ export interface PlanOpeningsProps {
 export function PlanOpenings({
   solids,
   selectedId,
-  tool,
   portalLabels,
   unit,
   onSelect,
-  onInsert,
   onMove,
   onFlipHinge,
   onDelete,
@@ -678,14 +518,6 @@ export function PlanOpenings({
           unit={unit}
           onMove={onMove}
           onEnd={endDrag}
-        />
-      )}
-      {tool && !drag && (
-        <OpeningInsertLayer
-          solids={solids}
-          kind={tool}
-          unit={unit}
-          onInsert={onInsert}
         />
       )}
     </group>

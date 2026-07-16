@@ -19,13 +19,7 @@ import { PlanOpenings } from "#/components/plan-openings";
 import { RotateHandle } from "#/components/rotate-handle";
 import { SelectionChip } from "#/components/selection-chip";
 import { overlappingFurnitureIds } from "#/lib/collision";
-import type {
-  FurnitureItem,
-  FurnitureUpdate,
-  OpeningKind,
-  Point,
-  Room,
-} from "#/lib/model";
+import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
 import {
   catalogItemById,
   floorArea,
@@ -742,7 +736,6 @@ export interface PlanRoomLayerProps {
    */
   interactive?: boolean;
   selectedOpeningId?: string | null;
-  openingTool?: OpeningKind | null;
   onSelectItem?: (id: string) => void;
   onDragStart?: (
     item: FurnitureItem,
@@ -750,14 +743,6 @@ export interface PlanRoomLayerProps {
     screen: { x: number; y: number },
   ) => void;
   onSelectOpening?: (id: string) => void;
-  /** Insert on this room's wall — the layer binds its room id. */
-  onInsertOpening?: (
-    roomId: string,
-    kind: OpeningKind,
-    wallIndex: number,
-    offset: number,
-    width: number,
-  ) => void;
   onMoveOpening?: (id: string, offset: number) => void;
   onFlipDoorHinge?: (id: string) => void;
   onDeleteOpening?: (id: string) => void;
@@ -779,11 +764,9 @@ export function PlanRoomLayer({
   unit,
   interactive = false,
   selectedOpeningId = null,
-  openingTool = null,
   onSelectItem,
   onDragStart,
   onSelectOpening,
-  onInsertOpening,
   onMoveOpening,
   onFlipDoorHinge,
   onDeleteOpening,
@@ -852,17 +835,13 @@ export function PlanRoomLayer({
       {solids.map((solid) => (
         <WallOpenings key={solid.index} solid={solid} />
       ))}
-      {interactive && onInsertOpening && (
+      {interactive && (
         <PlanOpenings
           solids={solids}
           selectedId={selectedOpeningId}
-          tool={openingTool ?? null}
           portalLabels={portalLabels}
           unit={unit}
           onSelect={onSelectOpening ?? (() => {})}
-          onInsert={(kind, wallIndex, offset, width) =>
-            onInsertOpening(room.id, kind, wallIndex, offset, width)
-          }
           onMove={onMoveOpening ?? (() => {})}
           onFlipHinge={onFlipDoorHinge ?? (() => {})}
           onDelete={onDeleteOpening ?? (() => {})}
@@ -931,8 +910,6 @@ export interface PlanSceneProps {
   selectedId: string | null;
   /** Selected opening id — never set together with `selectedId`. */
   selectedOpeningId: string | null;
-  /** Armed door/window insert tool, or null. */
-  openingTool: OpeningKind | null;
   unit: Unit;
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
   snapEnabled: boolean;
@@ -948,13 +925,6 @@ export interface PlanSceneProps {
   /** A move drag started/ended — the canvas locks pan/zoom while it runs. */
   onMoveActiveChange: (active: boolean) => void;
   onSelectOpening: (id: string) => void;
-  onInsertOpening: (
-    roomId: string,
-    kind: OpeningKind,
-    wallIndex: number,
-    offset: number,
-    width: number,
-  ) => void;
   /** Live re-offset during an opening drag (already snapped). */
   onMoveOpening: (id: string, offset: number) => void;
   onFlipDoorHinge: (id: string) => void;
@@ -967,14 +937,12 @@ export function PlanScene({
   rooms,
   selectedId,
   selectedOpeningId,
-  openingTool,
   unit,
   snapEnabled,
   onSelectItem,
   onMoveItem,
   onMoveActiveChange,
   onSelectOpening,
-  onInsertOpening,
   onMoveOpening,
   onFlipDoorHinge,
   onDeleteOpening,
@@ -1023,13 +991,11 @@ export function PlanScene({
           unit={unit}
           interactive
           selectedOpeningId={selectedOpeningId}
-          openingTool={openingTool}
           onSelectItem={onSelectItem}
           onDragStart={(item, floorPoint, screen) =>
             beginDrag(item, room.id, floorPoint, screen)
           }
           onSelectOpening={onSelectOpening}
-          onInsertOpening={onInsertOpening}
           onMoveOpening={onMoveOpening}
           onFlipDoorHinge={onFlipDoorHinge}
           onDeleteOpening={onDeleteOpening}

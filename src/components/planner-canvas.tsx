@@ -23,6 +23,7 @@ import {
 } from "three";
 import { DrawScene } from "#/components/draw-scene";
 import type { DrawTool } from "#/components/draw-tool-stack";
+import { OpeningGhost } from "#/components/opening-ghost";
 import { PlacementGhost } from "#/components/placement-ghost";
 import { PlanScene } from "#/components/plan-scene";
 import { RoomScene } from "#/components/room-scene";
@@ -46,6 +47,7 @@ import {
   type FurnitureUpdate,
   flipDoorHinge,
   floorBounds,
+  isOpeningItem,
   isWallItem,
   moveOpening,
   type Opening,
@@ -61,7 +63,7 @@ import {
   updateFurniture,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
-import { resizeOpening } from "#/lib/opening-place";
+import { type OpeningPlacement, resizeOpening } from "#/lib/opening-place";
 import { floorPortals } from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
@@ -608,10 +610,6 @@ export interface PlannerCanvasProps {
   placingItem: CatalogItem | null;
   /** Placement session over — dropped or cancelled (route clears it). */
   onPlacingEnd: () => void;
-  /** Armed door/window tool on the 2D lens (route owns it, like drawTool). */
-  openingTool: OpeningKind | null;
-  /** An insert landed — the route disarms the tool. */
-  onOpeningToolDone: () => void;
 }
 
 export function PlannerCanvas({
@@ -645,11 +643,9 @@ export function PlannerCanvas({
   onStartDraw,
   placingItem,
   onPlacingEnd,
-  openingTool,
-  onOpeningToolDone,
 }: PlannerCanvasProps) {
-  // Same lens split as the 2D|3D pill: draw is a top-down 2D flow, the
-  // objects catalog drops onto the 3D dollhouse.
+  // Same lens split as the 2D|3D pill: draw is a top-down 2D flow; the
+  // objects catalog drops onto either lens.
   const planView = viewMode === "2d" || viewMode === "draw";
   const drawing = viewMode === "draw";
   // Scene presentation follows the rendering camera, not the requested
@@ -712,30 +708,26 @@ export function PlannerCanvas({
     [floor, onRoomPreview, onFloorPreview],
   );
 
-  const insertOpening = useCallback(
-    (
-      roomId: string,
-      kind: OpeningKind,
-      wallIndex: number,
-      offset: number,
-      width: number,
-    ) => {
-      const owner = roomById(floor, roomId);
+  // A door/window card released on a wall (the ghost resolved which room's
+  // wall and the clamped offset).
+  const placeOpeningItem = useCallback(
+    (kind: OpeningKind, placement: OpeningPlacement) => {
+      const owner = roomById(floor, placement.roomId);
       if (!owner) return;
       const opening: Opening = {
         id: crypto.randomUUID(),
         kind,
-        wallIndex,
-        offset,
-        width,
+        wallIndex: placement.wallIndex,
+        offset: placement.offset,
+        width: placement.width,
       };
       if (kind === "door") opening.hinge = "start";
       onRoomChange(owner.id, addOpening(owner, opening));
       // Selection follows the insert (like a drop), ready to drag/adjust.
       selectOpening(opening.id);
-      onOpeningToolDone();
+      onPlacingEnd();
     },
-    [floor, onRoomChange, selectOpening, onOpeningToolDone],
+    [floor, onRoomChange, selectOpening, onPlacingEnd],
   );
   const moveOpeningTo = useCallback(
     // Streams per pointermove during an opening slide, like moveItem.
@@ -789,15 +781,10 @@ export function PlannerCanvas({
   // A placement drag takes over the scene; a leftover selection chip would
   // sit between the pointer and the floor (its DOM would eat the drop).
   useEffect(() => {
-    if (placingItem) setSelectedId(null);
-  }, [placingItem, setSelectedId]);
-  // Arming a door/window tool likewise clears any selection — clicks now
-  // mean "insert here", and a chip would sit over the wall pick strips.
-  useEffect(() => {
-    if (!openingTool) return;
+    if (!placingItem) return;
     setSelectedId(null);
     setSelectedOpeningId(null);
-  }, [openingTool, setSelectedId, setSelectedOpeningId]);
+  }, [placingItem, setSelectedId, setSelectedOpeningId]);
 
   const placeDraggedItem = useCallback(
     // The ghost already resolved which room the drop targets (the one whose
@@ -870,7 +857,6 @@ export function PlannerCanvas({
           drawTool === "wall" &&
           !draftClosed &&
           "cursor-none",
-        viewMode === "2d" && renderPlan && openingTool && "cursor-crosshair",
       )}
       onPointerDown={(event) => {
         pointerDownRef.current = { x: event.clientX, y: event.clientY };
@@ -962,14 +948,12 @@ export function PlannerCanvas({
               rooms={floor.rooms}
               selectedId={selectedId}
               selectedOpeningId={selectedOpeningId}
-              openingTool={openingTool}
               unit={unit}
               snapEnabled={snapEnabled}
               onSelectItem={selectItem}
               onMoveItem={moveItem}
               onMoveActiveChange={handleRoomDragActive}
               onSelectOpening={selectOpening}
-              onInsertOpening={insertOpening}
               onMoveOpening={moveOpeningTo}
               onFlipDoorHinge={flipHinge}
               onDeleteOpening={deleteOpening}
@@ -992,7 +976,16 @@ export function PlannerCanvas({
 				    the 3D dollhouse are both drop targets. */}
         {!drawing &&
           placingItem &&
-          (isWallItem(placingItem.id) ? (
+          (isOpeningItem(placingItem.id) ? (
+            <OpeningGhost
+              rooms={floor.rooms}
+              item={placingItem}
+              unit={unit}
+              snapEnabled={snapEnabled}
+              onPlace={placeOpeningItem}
+              onCancel={onPlacingEnd}
+            />
+          ) : isWallItem(placingItem.id) ? (
             <WallMountGhost
               rooms={floor.rooms}
               item={placingItem}

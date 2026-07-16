@@ -28,8 +28,6 @@ interface StatusBarProps {
   draftClosed?: boolean;
   /** Catalog item mid-placement; takes over the objects status text. */
   placingName?: string | null;
-  /** Armed door/window tool on the 2D lens; takes over its status text. */
-  openingTool?: "door" | "window" | null;
   /** The selected opening is a portal — "Door connects Living ↔ Kitchen"
    * (derived from wall abutment, never stored); takes over the context. */
   portalStatus?: string | null;
@@ -76,7 +74,6 @@ export function StatusBar({
   draftCornerCount = 0,
   draftClosed = false,
   placingName = null,
-  openingTool = null,
   portalStatus = null,
 }: StatusBarProps) {
   const live = useSyncExternalStore(
@@ -105,8 +102,6 @@ export function StatusBar({
     context = drawStatusText(draftCornerCount, draftClosed);
   } else if (placingName) {
     context = `Placing “${placingName}” — drop to confirm`;
-  } else if (mode === "2d" && openingTool) {
-    context = `Placing a ${openingTool} — click a wall to insert it`;
   } else if (mode === "2d" && portalStatus) {
     context = portalStatus;
   } else if (libraryOpen) {

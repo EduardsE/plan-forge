@@ -37,6 +37,8 @@ const layer = (
 
 const WOOD = "#b98a5f";
 const WOOD_DARK = "#7a5230";
+const WALL_PLASTER = "#e6dfd2";
+const GLASS = "#cfe0e8";
 const GLYPHS: Record<string, GlyphLayer[]> = {
   // Seating — copied 1:1 from the mockup's panel cards / drag card.
   "lounge-chair": [
@@ -181,6 +183,20 @@ const GLYPHS: Record<string, GlyphLayer[]> = {
     layer("2px", 52, 32, 30, "#5c8a50", "50%"),
     layer("-9px", 40, 34, 30, "#4f7d46", "50%"),
     layer("-50%", 16, 28, 22, "#b4633e", "3px 3px 9px 9px"),
+  ],
+  // Openings: a stretch of wall with the opening cut into it.
+  door: [
+    layer("-50%", 12, 76, 68, WALL_PLASTER, "3px"),
+    layer("-50%", 12, 40, 60, "#faf8f4", "2px 2px 0 0"),
+    layer("-50%", 12, 32, 54, WOOD, "2px 2px 0 0"),
+    layer("8px", 36, 4, 4, WOOD_DARK, "50%"),
+  ],
+  window: [
+    layer("-50%", 12, 76, 68, WALL_PLASTER, "3px"),
+    layer("-50%", 28, 52, 38, "#faf8f4", "2px"),
+    layer("-50%", 31, 46, 32, GLASS, "1px"),
+    layer("-50%", 31, 2, 32, "#faf8f4"),
+    layer("-50%", 45, 46, 2, "#faf8f4"),
   ],
 };
 const FALLBACK_GLYPH: GlyphLayer[] = [layer("-50%", 24, 52, 34, WOOD, "6px")];

@@ -1,7 +1,6 @@
 import { FilePlus2, Maximize, Redo2, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Tooltip } from "#/components/tooltip";
-import type { OpeningKind } from "#/lib/model";
 import { formatSavedStatus } from "#/lib/persistence";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -26,8 +25,6 @@ interface WorkspaceHeaderProps {
   draftClosed?: boolean;
   /** Catalog item mid-placement; flips the status chip to "Placing". */
   placingName?: string | null;
-  /** Armed door/window tool on the 2D lens. */
-  openingTool?: OpeningKind | null;
 }
 
 /** How often the "Saved N min ago" chip re-renders to stay truthful. */
@@ -104,7 +101,6 @@ export function WorkspaceHeader({
   onFullscreen,
   draftClosed = false,
   placingName = null,
-  openingTool = null,
 }: WorkspaceHeaderProps) {
   // Activity beats autosave on the chip: an armed opening tool, a live
   // placement drag, or draw mode each announce themselves in blue.
@@ -117,8 +113,6 @@ export function WorkspaceHeader({
     );
   } else if (placingName) {
     chip = <StatusChip tone="blue">Placing</StatusChip>;
-  } else if (mode === "2d" && openingTool) {
-    chip = <StatusChip tone="blue">Placing {openingTool}</StatusChip>;
   }
   const is2dActive = mode === "2d" || mode === "draw";
 

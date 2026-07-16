@@ -13,7 +13,6 @@ import { type DrawTool, DrawToolStack } from "#/components/draw-tool-stack";
 import { Inspector } from "#/components/inspector";
 import { NavRail } from "#/components/nav-rail";
 import { ObjectsPanel } from "#/components/objects-panel";
-import { OpeningToolStack } from "#/components/opening-tool-stack";
 import { PlacementDragLayer } from "#/components/placement-drag-layer";
 import { SettingsPopover } from "#/components/settings-popover";
 import { StatusBar } from "#/components/status-bar";
@@ -39,7 +38,6 @@ import {
   type Footprint,
   floorBounds,
   nextRoomName,
-  type OpeningKind,
   type Point,
   type Room,
   removeFurniture,
@@ -504,24 +502,6 @@ function Planner() {
     [floor, draft, applyDraft],
   );
 
-  // The 2D lens's armed door/window tool. Owned here (like drawTool) so the
-  // tool stack chrome and the header status line share it with the canvas.
-  const [openingTool, setOpeningTool] = useState<OpeningKind | null>(null);
-  const disarmOpeningTool = useCallback(() => setOpeningTool(null), []);
-  // Leaving the 2D lens drops the armed tool with it.
-  useEffect(() => {
-    if (viewMode !== "2d") setOpeningTool(null);
-  }, [viewMode]);
-  // Esc disarms without inserting.
-  useEffect(() => {
-    if (viewMode !== "2d" || openingTool === null) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpeningTool(null);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [viewMode, openingTool]);
-
   // A live placement drag from the objects panel. Owned here so the header
   // status line, the panel's "placing…" card, the DOM drag layer and the
   // in-scene ghost all read one session.
@@ -889,7 +869,6 @@ function Planner() {
         onFullscreen={toggleFullscreen}
         draftClosed={draft.closed}
         placingName={placing?.item.name ?? null}
-        openingTool={openingTool}
       />
       <div
         ref={workspaceRef}
@@ -930,8 +909,6 @@ function Planner() {
               onStartDraw={startDrawAt}
               placingItem={placing?.item ?? null}
               onPlacingEnd={endPlacing}
-              openingTool={openingTool}
-              onOpeningToolDone={disarmOpeningTool}
             />
           </Suspense>
         )}
@@ -947,9 +924,6 @@ function Planner() {
               multiRoom={floor.rooms.length > 1}
             />
           </>
-        )}
-        {viewMode === "2d" && (
-          <OpeningToolStack tool={openingTool} onToolChange={setOpeningTool} />
         )}
         <ZoomPill
           cameraReadout={readoutStore}
@@ -981,7 +955,6 @@ function Planner() {
         draftCornerCount={draft.corners.length}
         draftClosed={draft.closed}
         placingName={placing?.item.name ?? null}
-        openingTool={openingTool}
       />
       {/* Always mounted so the drawer can slide: the wrapper clips while its
           column animates, the fixed-width panel pins to the right edge so it

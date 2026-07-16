@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createSampleRoom } from "#/lib/model";
+import { createSampleRoom, type Room } from "#/lib/model";
 import {
   MIN_OPENING_WIDTH,
   offsetAlongWall,
+  openingAcrossRooms,
+  openingAt,
   openingCornerGuides,
   resizeOpening,
   slideOpening,
@@ -148,5 +150,94 @@ describe("resizeOpening", () => {
     const room = createSampleRoom();
     expect(resizeOpening(room, "nope", 1)).toBe(room);
     expect(resizeOpening(room, "door-1", 0.95)).toBe(room);
+  });
+});
+
+describe("openingAt / openingAcrossRooms", () => {
+  const bareRoom = (
+    id: string,
+    outline: Array<{ x: number; y: number }>,
+    openings: Room["openings"] = [],
+  ): Room => ({ id, outline, openings, furniture: [] });
+
+  const room = bareRoom("a", [
+    { x: 0, y: 0 },
+    { x: 6.4, y: 0 },
+    { x: 6.4, y: 5.2 },
+    { x: 0, y: 5.2 },
+  ]);
+  const roomSolids = buildWallSolids(room);
+
+  it("lands centered on the cursor's wall projection, quantized", () => {
+    const placed = openingAt("a", roomSolids, { x: 2.53, y: 0.3 }, 0.9);
+    expect(placed?.roomId).toBe("a");
+    expect(placed?.wallIndex).toBe(0);
+    // 2.53 - 0.45 = 2.08, snapped to the 0.05 grid.
+    expect(placed?.offset).toBeCloseTo(2.1);
+    expect(placed?.guides).toHaveLength(2);
+  });
+
+  it("keeps the exact offset with snap off (still clamped)", () => {
+    const placed = openingAt("a", roomSolids, { x: 2.53, y: 0.3 }, 0.9, false);
+    expect(placed?.offset).toBeCloseTo(2.08);
+    expect(placed?.guides).toHaveLength(0);
+  });
+
+  it("slides clear of an existing opening on the wall", () => {
+    const occupied = bareRoom("a", room.outline, [
+      { id: "d", kind: "door", wallIndex: 0, offset: 2.0, width: 0.9 },
+    ]);
+    const placed = openingAt(
+      "a",
+      buildWallSolids(occupied),
+      { x: 2.6, y: 0.2 },
+      0.9,
+    );
+    // The cursor centers inside the door's span; the slide lands flush
+    // beside it instead of overlapping.
+    expect(placed?.wallIndex).toBe(0);
+    expect(
+      placed && (placed.offset >= 2.9 - 1e-6 || placed.offset <= 1.1 + 1e-6),
+    ).toBe(true);
+  });
+
+  it("falls through to the next-nearest wall when the nearest can't fit", () => {
+    // A 0.6 m stub wall at the top: a 0.9 m door can't fit it.
+    const lShaped = bareRoom("a", [
+      { x: 0, y: 0 },
+      { x: 0.6, y: 0 },
+      { x: 0.6, y: 2 },
+      { x: 4, y: 2 },
+      { x: 4, y: 5 },
+      { x: 0, y: 5 },
+    ]);
+    const placed = openingAt(
+      "a",
+      buildWallSolids(lShaped),
+      { x: 0.3, y: 0.1 },
+      0.9,
+    );
+    expect(placed).not.toBeNull();
+    expect(placed?.wallIndex).not.toBe(0);
+  });
+
+  it("across rooms, the nearest landed band wins", () => {
+    const west = room;
+    const east = bareRoom("b", [
+      { x: 6.5, y: 0 },
+      { x: 9.5, y: 0 },
+      { x: 9.5, y: 5.2 },
+      { x: 6.5, y: 5.2 },
+    ]);
+    const entries = [
+      { roomId: "a", solids: buildWallSolids(west) },
+      { roomId: "b", solids: buildWallSolids(east) },
+    ];
+    expect(openingAcrossRooms(entries, { x: 1, y: 0.2 }, 0.9)?.roomId).toBe(
+      "a",
+    );
+    expect(openingAcrossRooms(entries, { x: 9.4, y: 2.6 }, 0.9)?.roomId).toBe(
+      "b",
+    );
   });
 });

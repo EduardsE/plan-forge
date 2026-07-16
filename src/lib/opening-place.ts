@@ -2,7 +2,7 @@ import { type OpeningKind, type Point, type Room, wallsOf } from "#/lib/model";
 import type { PlacementGuide } from "#/lib/place";
 import { PLACEMENT_GRID } from "#/lib/place";
 import { wallPoint } from "#/lib/plan-scene";
-import type { WallSolid } from "#/lib/room-scene";
+import { WALL_THICKNESS, type WallSolid } from "#/lib/room-scene";
 
 /**
  * Pure placement math for the door/window tools: where a click or drag along
@@ -79,7 +79,9 @@ export function slideOpening(
   }
   if (wallLength - cursor > EPS) gaps.push({ start: cursor, end: wallLength });
 
-  const quantized = Math.round(rawOffset / grid) * grid;
+  // A non-positive grid means "no quantize" (snap off): the offset still
+  // clamps into a free stretch, it just lands exactly where dragged.
+  const quantized = grid > 0 ? Math.round(rawOffset / grid) * grid : rawOffset;
   let best: number | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const gap of gaps) {
@@ -155,6 +157,105 @@ export function resizeOpening(
       entry.id === id ? { ...entry, offset, width: clampedWidth } : entry,
     ),
   };
+}
+
+/**
+ * Where a catalog door/window card dragged to a floor point would insert.
+ * The wall solid rides along so the ghost can render the band (and detect
+ * seam-centering) without re-finding it.
+ */
+export interface OpeningPlacement {
+  roomId: string;
+  wallIndex: number;
+  /** Wall-local near-edge offset, snapped/clamped clear of `solid.holes`. */
+  offset: number;
+  width: number;
+  solid: WallSolid;
+  guides: PlacementGuide[];
+}
+
+/** Perpendicular distance from `cursor` to the wall segment, and the clamped
+ * projection offset (0..length) along it — `mount-place.ts`'s projection,
+ * over a WallSolid. */
+function projectToSolid(
+  solid: WallSolid,
+  cursor: Point,
+): { along: number; distance: number } {
+  const raw = offsetAlongWall(solid, cursor);
+  const along = Math.min(Math.max(raw, 0), solid.length);
+  const proj = {
+    x: solid.start.x + solid.dir.x * along,
+    y: solid.start.y + solid.dir.y * along,
+  };
+  return { along, distance: Math.hypot(cursor.x - proj.x, cursor.y - proj.y) };
+}
+
+/**
+ * Where an opening of `width` dragged to `cursor` lands within one room:
+ * the nearest wall with a free stretch for it, the offset centered on the
+ * cursor's projection then slid clear of the wall's existing holes (which
+ * include a neighbor's portal cuts on shared walls). Walls that can't fit
+ * the width fall through to the next nearest. Null when no wall fits.
+ */
+export function openingAt(
+  roomId: string,
+  solids: WallSolid[],
+  cursor: Point,
+  width: number,
+  snap = true,
+): OpeningPlacement | null {
+  const candidates = solids
+    .map((solid) => ({ solid, ...projectToSolid(solid, cursor) }))
+    .sort((a, b) => a.distance - b.distance);
+  for (const { solid, along } of candidates) {
+    const offset = slideOpening(
+      solid.length,
+      width,
+      solid.holes,
+      along - width / 2,
+      snap ? OPENING_GRID : 0,
+    );
+    if (offset === null) continue;
+    return {
+      roomId,
+      wallIndex: solid.index,
+      offset,
+      width,
+      solid,
+      guides: snap ? openingCornerGuides(solid, offset, width) : [],
+    };
+  }
+  return null;
+}
+
+/**
+ * `openingAt` across every room: the candidate whose landed band center sits
+ * nearest the cursor wins — this is how a drag near a shared wall inserts
+ * into the room the cursor is closest to (the door then swings into it).
+ */
+export function openingAcrossRooms(
+  roomSolids: Array<{ roomId: string; solids: WallSolid[] }>,
+  cursor: Point,
+  width: number,
+  snap = true,
+): OpeningPlacement | null {
+  let best: OpeningPlacement | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const { roomId, solids } of roomSolids) {
+    const candidate = openingAt(roomId, solids, cursor, width, snap);
+    if (!candidate) continue;
+    const center = wallPoint(
+      candidate.solid,
+      candidate.offset + width / 2,
+      WALL_THICKNESS / 2,
+    );
+    const distance = Math.hypot(center.x - cursor.x, center.y - cursor.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = candidate;
+    }
+  }
+  return best;
 }
 
 /**
