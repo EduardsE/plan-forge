@@ -186,6 +186,35 @@ body {
   background-size: 100% 100%;
 }
 
+/*
+ * The shell grid animates its library column between 0 and 306px (the track
+ * count is constant, so grid-template-columns interpolates). The canvas
+ * resizes undebounced each frame of the flight (resize={{ debounce: 0 }} on
+ * the R3F <Canvas>), so the room glides with the drawer instead of jumping.
+ */
+.planner-grid {
+  transition: grid-template-columns 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/*
+ * The closed drawer sits clipped behind its 0-width column; hide it for
+ * real once the slide-out finishes (the delay keeps the closing animation
+ * visible), and instantly un-hide on open.
+ */
+.library-drawer[data-open='false'] {
+  visibility: hidden;
+  transition: visibility 0s 240ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planner-grid {
+    transition: none;
+  }
+  .library-drawer[data-open='false'] {
+    transition: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

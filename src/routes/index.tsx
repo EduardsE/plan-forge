@@ -845,23 +845,20 @@ function Planner() {
   }, [floor]);
 
   return (
+    // The library column animates 0 ↔ 306px (the track count stays constant
+    // so grid-template-columns interpolates; `planner-grid` in styles.css
+    // owns the transition). The canvas resizes undebounced every frame of
+    // the flight, so the room glides instead of jumping.
     <div
-      className="grid h-screen w-screen overflow-hidden bg-[var(--frame)]"
-      style={
-        objectsOpen
-          ? {
-              gridTemplateColumns: "64px 306px 1fr 320px",
-              gridTemplateRows: "56px 1fr 38px",
-              gridTemplateAreas:
-                "'rail header header inspector' 'rail library canvas inspector' 'rail library status inspector'",
-            }
-          : {
-              gridTemplateColumns: "64px 1fr 320px",
-              gridTemplateRows: "56px 1fr 38px",
-              gridTemplateAreas:
-                "'rail header inspector' 'rail canvas inspector' 'rail status inspector'",
-            }
-      }
+      className="planner-grid grid h-screen w-screen overflow-hidden bg-[var(--frame)]"
+      style={{
+        gridTemplateColumns: objectsOpen
+          ? "64px 306px 1fr 320px"
+          : "64px 0px 1fr 320px",
+        gridTemplateRows: "56px 1fr 38px",
+        gridTemplateAreas:
+          "'rail header header inspector' 'rail library canvas inspector' 'rail library status inspector'",
+      }}
     >
       <NavRail
         activeMode={viewMode}
@@ -986,13 +983,24 @@ function Planner() {
         placingName={placing?.item.name ?? null}
         openingTool={openingTool}
       />
-      {objectsOpen && (
-        <ObjectsPanel
-          placingId={placing?.item.id ?? null}
-          onStartPlacing={startPlacing}
-          onClose={() => setLibraryOpen(false)}
-        />
-      )}
+      {/* Always mounted so the drawer can slide: the wrapper clips while its
+          column animates, the fixed-width panel pins to the right edge so it
+          emerges rather than reflows. `inert` keeps the closed drawer out of
+          tab order and hit testing. */}
+      <div
+        className="library-drawer relative min-h-0 overflow-hidden"
+        style={{ gridArea: "library" }}
+        data-open={objectsOpen}
+        inert={!objectsOpen}
+      >
+        <div className="absolute inset-y-0 right-0 w-[306px]">
+          <ObjectsPanel
+            placingId={placing?.item.id ?? null}
+            onStartPlacing={startPlacing}
+            onClose={() => setLibraryOpen(false)}
+          />
+        </div>
+      </div>
       <Inspector
         floor={floor}
         unit={unit}

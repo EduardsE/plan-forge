@@ -53,10 +53,7 @@ export function ObjectsPanel({
   const items = filterCatalog(query, category);
 
   return (
-    <div
-      className="flex min-h-0 flex-col border-[var(--hairline)] border-r bg-[var(--panel)]"
-      style={{ gridArea: "library" }}
-    >
+    <div className="flex h-full min-h-0 flex-col border-[var(--hairline)] border-r bg-[var(--panel)]">
       <div className="flex items-center justify-between px-[18px] pt-4 pb-3">
         <div className="flex items-center gap-[9px]">
           <span className="font-bold text-[17px] text-[var(--ink-900)]">
