@@ -137,9 +137,10 @@ Floor-wide graph editor, normal undo, no room pre-selection:
 
 ## Persistence
 
-v5 payload stores `{ floor: { name?, nodes, edges, openings, furniture, rooms }, unit,
-savedAt }` with the usual paranoid validation (dangling node refs, duplicate ids,
-non-finite coords → "no save"). `READABLE_VERSIONS = [5]`: older payloads are treated
+v6 payload (the codebase is already at v5) stores `{ floor: { name?, nodes, edges,
+openings, furniture, rooms }, unit, savedAt }` with the usual paranoid validation
+(dangling node refs, duplicate ids,
+non-finite coords → "no save"). `READABLE_VERSIONS = [6]`: older payloads are treated
 as no-save (owner's call — destructive is fine). The sample fixture
 (`sample-room.ts`) is rebuilt in graph form.
 
@@ -157,7 +158,7 @@ as no-save (owner's call — destructive is fine). The sample fixture
 
 ## Scope & sequencing
 
-Phase-8-sized (comparable to Phase 7's M1–M6): pure graph model first, then persistence
+phase-sized (Phase 9; comparable to Phase 7's M1–M6): pure graph model first, then persistence
 + sample fixture, scenes, draw mode, openings/mounts, furniture policy — one spec, a
 multi-task implementation plan (each task one session, verified headless, committed).
 Backlog items **W2** (true-thickness draft preview — subsumed: walls are always
