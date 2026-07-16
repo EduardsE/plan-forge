@@ -142,6 +142,39 @@ describe("faceLabelPoint / sideOfPoint", () => {
     expect(pointInOutline(poly, p)).toBe(true);
   });
 
+  it("label point lies inside a tiny L whose bbox defeats a coarse lattice", () => {
+    // Bbox 0.19 x 0.19 — a fixed 0.2 m lattice samples only the bbox min
+    // corner, which sits in the notch; the centroid is in the notch too.
+    // Area 0.19^2 - 0.16^2 = 0.0105 m^2, well above the face minimum.
+    const poly = [
+      { x: 0.16, y: 0 },
+      { x: 0.19, y: 0 },
+      { x: 0.19, y: 0.19 },
+      { x: 0, y: 0.19 },
+      { x: 0, y: 0.16 },
+      { x: 0.16, y: 0.16 },
+    ];
+    const p = faceLabelPoint(poly);
+    expect(pointInOutline(poly, p)).toBe(true);
+  });
+
+  it("label point lies inside a thin V sliver that dodges every lattice sample", () => {
+    // A bent strip 0.6 mm thick whose arm slopes are incommensurate with
+    // the lattice step, so the bbox scan finds nothing and the guaranteed
+    // interior-point construction must deliver. Centroid sits in the notch
+    // under the apex; area ~0.0012 m^2, above the face minimum.
+    const poly = [
+      { x: 0, y: 0.0006 },
+      { x: 1, y: 0.4806 },
+      { x: 2.03, y: 0.0006 },
+      { x: 2.03, y: 0 },
+      { x: 1, y: 0.48 },
+      { x: 0, y: 0 },
+    ];
+    const p = faceLabelPoint(poly);
+    expect(pointInOutline(poly, p)).toBe(true);
+  });
+
   it("sideOfPoint is antisymmetric across the line", () => {
     const a = { x: 0, y: 0 };
     const b = { x: 4, y: 0 };

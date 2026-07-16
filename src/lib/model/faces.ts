@@ -27,6 +27,8 @@ const EPS = 1e-6;
 const MIN_FACE_AREA = 1e-4;
 /** Lattice spacing for the concave-polygon label-point fallback scan. */
 const LABEL_LATTICE = 0.2;
+/** Smallest lattice step the label scan will shrink to for tiny polygons. */
+const LABEL_LATTICE_FLOOR = 1e-3;
 
 function round(v: number): number {
   return Math.round(v * 1e4) / 1e4;
@@ -174,11 +176,69 @@ function polygonCentroid(polygon: Point[]): Point {
   return { x: cx / (6 * signedArea), y: cy / (6 * signedArea) };
 }
 
+/** Whether `p` lies in the closed triangle (a, b, c): all edge cross
+ * products carry the same sign (boundary counts as inside). */
+function pointInTriangle(p: Point, a: Point, b: Point, c: Point): boolean {
+  const d1 = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+  const d2 = (c.x - b.x) * (p.y - b.y) - (c.y - b.y) * (p.x - b.x);
+  const d3 = (a.x - c.x) * (p.y - c.y) - (a.y - c.y) * (p.x - c.x);
+  const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+  const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(hasNeg && hasPos);
+}
+
+/**
+ * A point strictly inside any simple polygon — the classic construction
+ * (O'Rourke): the lowest-leftmost vertex `v` is convex; with neighbors `p`
+ * and `n`, either no other vertex intrudes into triangle (p, v, n) and its
+ * centroid is interior, or the intruding vertex `q` farthest from line p–n
+ * sees `v` across the interior, so the midpoint of v–q is interior.
+ */
+function guaranteedInteriorPoint(polygon: Point[]): Point {
+  const count = polygon.length;
+  let vi = 0;
+  for (let i = 1; i < count; i++) {
+    const c = polygon[i];
+    const v = polygon[vi];
+    if (c.x < v.x || (c.x === v.x && c.y < v.y)) vi = i;
+  }
+  const v = polygon[vi];
+  const prev = polygon[(vi - 1 + count) % count];
+  const next = polygon[(vi + 1) % count];
+
+  let q: Point | null = null;
+  let qDist = -1;
+  for (let i = 0; i < count; i++) {
+    if (i === vi) continue;
+    const c = polygon[i];
+    if ((c.x === v.x && c.y === v.y) || c === prev || c === next) continue;
+    if (!pointInTriangle(c, prev, v, next)) continue;
+    // Distance from line prev–next, up to a constant factor: |cross|.
+    const dist = Math.abs(
+      (next.x - prev.x) * (c.y - prev.y) - (next.y - prev.y) * (c.x - prev.x),
+    );
+    if (dist > qDist) {
+      qDist = dist;
+      q = c;
+    }
+  }
+  if (!q) {
+    return {
+      x: (prev.x + v.x + next.x) / 3,
+      y: (prev.y + v.y + next.y) / 3,
+    };
+  }
+  return { x: (v.x + q.x) / 2, y: (v.y + q.y) / 2 };
+}
+
 /**
  * A point inside `polygon` suitable for placing a room's area/name label:
  * the area centroid when it lands inside (convex and most real rooms), or
- * else the inside point of a 0.2 m bbox lattice scan nearest the centroid
- * (concave shapes, where the centroid can fall outside).
+ * else the inside sample of a bbox lattice scan nearest the centroid — step
+ * 0.2 m, shrunk to an eighth of the bbox for small polygons so tiny faces
+ * still get samples. If even the lattice finds nothing (a sliver dodging
+ * every sample), falls back to `guaranteedInteriorPoint`, so the result is
+ * inside for any simple polygon with positive area.
  */
 export function faceLabelPoint(polygon: Point[]): Point {
   const centroid = polygonCentroid(polygon);
@@ -194,11 +254,15 @@ export function faceLabelPoint(polygon: Point[]): Point {
     if (p.x > maxX) maxX = p.x;
     if (p.y > maxY) maxY = p.y;
   }
+  const step = Math.max(
+    LABEL_LATTICE_FLOOR,
+    Math.min(LABEL_LATTICE, (maxX - minX) / 8, (maxY - minY) / 8),
+  );
 
   let best: Point | null = null;
   let bestDist = Number.POSITIVE_INFINITY;
-  for (let x = minX; x <= maxX + EPS; x += LABEL_LATTICE) {
-    for (let y = minY; y <= maxY + EPS; y += LABEL_LATTICE) {
+  for (let x = minX; x <= maxX + EPS; x += step) {
+    for (let y = minY; y <= maxY + EPS; y += step) {
       const p = { x, y };
       if (!pointInOutline(polygon, p)) continue;
       const dist = Math.hypot(p.x - centroid.x, p.y - centroid.y);
@@ -208,7 +272,7 @@ export function faceLabelPoint(polygon: Point[]): Point {
       }
     }
   }
-  return best ?? centroid;
+  return best ?? guaranteedInteriorPoint(polygon);
 }
 
 /**
