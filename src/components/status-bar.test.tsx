@@ -101,13 +101,14 @@ describe("StatusBar", () => {
     expect(screen.getByText("Drawing — 3 corners placed")).toBeTruthy();
   });
 
-  it("counts placed objects in objects mode and names a live placement", () => {
-    const { rerender } = renderBar({ mode: "objects" });
+  it("counts placed objects while the library is open and names a live placement", () => {
+    const { rerender } = renderBar({ mode: "3d", libraryOpen: true });
     expect(screen.getByText(/objects placed/)).toBeTruthy();
 
     rerender(
       <StatusBar
-        mode="objects"
+        mode="3d"
+        libraryOpen
         floor={oneRoomFloor()}
         cameraReadout={createCameraReadoutStore()}
         unit="m"

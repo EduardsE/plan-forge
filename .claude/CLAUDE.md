@@ -11,7 +11,7 @@ The shell is a fixed three-zone grid, not floating panels: 64px icon rail (left)
 - **Draw (1c)** is where a room is born — you click corners on the grid, walls get live editable length labels, snapping keeps everything at 90°. Output: a dimensioned outline.
 - **2D plan (1b)** is the analytical lens on that outline — architectural wall strokes, labeled furniture footprints, dimension lines, floor area. Best for precise arranging.
 - **3D dollhouse (1a)** is the experiential lens — same room, orbitable, furnished. The canvas under it is a **studio spotlight pool** (mockup 3d): plain `#EDEDEA`, a soft radial light pool behind the model, a dark contact shadow grounding the room — no grid. The 2D/draw canvas is paper `#F1F1ED` with a faint dot grid instead.
-- **Objects (2d)** is the furnishing flow — a 306px library column docks between rail and canvas (inspector yields), cards drag onto the floor, blue dashed ghost footprint + guide lines with distance pills show snaps before you drop.
+- **Objects library (2d, amended 2026-07-16)** is the furnishing flow, folded into the rail's single Furnish item rather than a mode of its own — a 306px library column docks between rail and canvas **while the inspector stays docked** (departing from mockup 2d's "inspector yields"), works under either lens, cards drag onto the floor or the plan, blue dashed ghost footprint + guide lines with distance pills show snaps before you drop.
 
 The 2D|3D switch is the hinge of the whole product: one model, instant lens switch, identical chrome so nothing about the tooling changes when the view does.
 

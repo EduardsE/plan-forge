@@ -69,7 +69,7 @@ import type { ViewMode } from "#/lib/view-mode";
 
 /**
  * The R3F workspace canvas: one scene for both lenses, switched by camera.
- * 3D (and objects) mode orbits a perspective camera; 2D and draw mode look
+ * The 3D lens orbits a perspective camera; 2D and draw mode look
  * straight down through an orthographic one. The zoom pill drives the rig
  * through `CameraApi`; the status bar and pill listen on the readout store.
  *
@@ -971,38 +971,40 @@ export function PlannerCanvas({
             />
           )
         ) : (
-          <>
-            <RoomScene
+          <RoomScene
+            rooms={floor.rooms}
+            selectedId={selectedId}
+            unit={unit}
+            snapEnabled={snapEnabled}
+            onSelectItem={selectItem}
+            onMoveItem={moveItem}
+            onMoveActiveChange={handleRoomDragActive}
+          />
+        )}
+        {/* The placement ghost raycasts the active camera onto the floor
+				    plane, so the same drag lands in either lens — the 2D plan and
+				    the 3D dollhouse are both drop targets. */}
+        {!drawing &&
+          placingItem &&
+          (isWallItem(placingItem.id) ? (
+            <WallMountGhost
               rooms={floor.rooms}
-              selectedId={selectedId}
+              item={placingItem}
               unit={unit}
               snapEnabled={snapEnabled}
-              onSelectItem={selectItem}
-              onMoveItem={moveItem}
-              onMoveActiveChange={handleRoomDragActive}
+              onPlace={placeMountedItem}
+              onCancel={onPlacingEnd}
             />
-            {placingItem &&
-              (isWallItem(placingItem.id) ? (
-                <WallMountGhost
-                  rooms={floor.rooms}
-                  item={placingItem}
-                  unit={unit}
-                  snapEnabled={snapEnabled}
-                  onPlace={placeMountedItem}
-                  onCancel={onPlacingEnd}
-                />
-              ) : (
-                <PlacementGhost
-                  rooms={floor.rooms}
-                  item={placingItem}
-                  unit={unit}
-                  snapEnabled={snapEnabled}
-                  onPlace={placeDraggedItem}
-                  onCancel={onPlacingEnd}
-                />
-              ))}
-          </>
-        )}
+          ) : (
+            <PlacementGhost
+              rooms={floor.rooms}
+              item={placingItem}
+              unit={unit}
+              snapEnabled={snapEnabled}
+              onPlace={placeDraggedItem}
+              onCancel={onPlacingEnd}
+            />
+          ))}
       </Canvas>
     </div>
   );

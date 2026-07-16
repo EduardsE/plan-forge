@@ -115,10 +115,10 @@ export function WorkspaceHeader({
         {draftClosed ? "Editing outline" : "Drawing"}
       </StatusChip>
     );
+  } else if (placingName) {
+    chip = <StatusChip tone="blue">Placing</StatusChip>;
   } else if (mode === "2d" && openingTool) {
     chip = <StatusChip tone="blue">Placing {openingTool}</StatusChip>;
-  } else if (mode === "objects" && placingName) {
-    chip = <StatusChip tone="blue">Placing</StatusChip>;
   }
   const is2dActive = mode === "2d" || mode === "draw";
 

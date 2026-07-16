@@ -90,6 +90,25 @@ export const Route = createFileRoute("/")({ component: Planner });
 
 function Planner() {
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
+  // The docked objects library (screen 2d). A panel, not a mode: it coexists
+  // with the inspector in either furnish lens and only the draw task hides
+  // it (the flag survives a draw round trip).
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  // The lens to return to when the rail's Furnish button exits draw mode.
+  const lastLensRef = useRef<"2d" | "3d">("3d");
+  useEffect(() => {
+    if (viewMode !== "draw") lastLensRef.current = viewMode;
+  }, [viewMode]);
+  const handleFurnish = useCallback(() => {
+    if (viewMode === "draw") {
+      // Furnish from draw = "I want to place objects now": back to the last
+      // lens with the library docked.
+      setViewMode(lastLensRef.current);
+      setLibraryOpen(true);
+    } else {
+      setLibraryOpen((open) => !open);
+    }
+  }, [viewMode]);
   // The floor lives inside a bounded undo/redo history. Discrete mutations
   // (add/rotate/duplicate/delete, opening edits, outline close) go through
   // `setRoom` = one undo step each; the continuous drags stream through
@@ -516,11 +535,11 @@ function Planner() {
     [],
   );
   const endPlacing = useCallback(() => setPlacing(null), []);
-  // Leaving objects mode mid-drag (Escape only cancels the drag) drops the
-  // session with it.
+  // Entering draw or closing the library mid-drag (Escape only cancels the
+  // drag) drops the session with it.
   useEffect(() => {
-    if (viewMode !== "objects") setPlacing(null);
-  }, [viewMode]);
+    if (viewMode === "draw" || !libraryOpen) setPlacing(null);
+  }, [viewMode, libraryOpen]);
 
   const placeCorner = useCallback(
     (point: Point) =>
@@ -802,10 +821,10 @@ function Planner() {
     settleRoom,
   ]);
 
-  // Screen 2d: in objects mode the library docks as its own column between
-  // rail and canvas, and the inspector yields the right edge to give the
-  // canvas room (the header spans across instead).
-  const objectsOpen = viewMode === "objects";
+  // Screen 2d, amended 2026-07-16: the library docks as its own column
+  // between rail and canvas while the inspector keeps the right edge — the
+  // place → tweak → place loop never has to swap panels.
+  const objectsOpen = libraryOpen && viewMode !== "draw";
 
   // Studio pool sized to the whole-floor bbox: at fit zoom the model's
   // on-screen extent scales with each plan axis over the diagonal, so the
@@ -831,10 +850,10 @@ function Planner() {
       style={
         objectsOpen
           ? {
-              gridTemplateColumns: "64px 306px 1fr",
+              gridTemplateColumns: "64px 306px 1fr 320px",
               gridTemplateRows: "56px 1fr 38px",
               gridTemplateAreas:
-                "'rail header header' 'rail library canvas' 'rail library status'",
+                "'rail header header inspector' 'rail library canvas inspector' 'rail library status inspector'",
             }
           : {
               gridTemplateColumns: "64px 1fr 320px",
@@ -847,6 +866,7 @@ function Planner() {
       <NavRail
         activeMode={viewMode}
         onSelectMode={setViewMode}
+        onFurnish={handleFurnish}
         settingsOpen={settingsOpen}
         onToggleSettings={toggleSettings}
       />
@@ -950,6 +970,7 @@ function Planner() {
       </div>
       <StatusBar
         mode={viewMode}
+        libraryOpen={objectsOpen}
         floor={floor}
         selectedRoomName={selectedRoom?.name ?? null}
         portalStatus={portalStatus}
@@ -965,32 +986,31 @@ function Planner() {
         placingName={placing?.item.name ?? null}
         openingTool={openingTool}
       />
-      {objectsOpen ? (
+      {objectsOpen && (
         <ObjectsPanel
           placingId={placing?.item.id ?? null}
           onStartPlacing={startPlacing}
-          onClose={() => setViewMode("3d")}
-        />
-      ) : (
-        <Inspector
-          floor={floor}
-          unit={unit}
-          mode={viewMode}
-          selectedRoom={selectedRoom}
-          selectedItem={selectedItem}
-          portalStatus={portalStatus}
-          draftCornerCount={draft.corners.length}
-          draftClosed={draft.closed}
-          onResize={resizeSelected}
-          onRotateTo={rotateSelectedTo}
-          onElevate={elevateSelected}
-          onMoveTo={moveSelectedTo}
-          onRecolor={recolorSelected}
-          onRotate90={rotateSelected90}
-          onClone={cloneSelected}
-          onDelete={deleteSelected}
+          onClose={() => setLibraryOpen(false)}
         />
       )}
+      <Inspector
+        floor={floor}
+        unit={unit}
+        mode={viewMode}
+        selectedRoom={selectedRoom}
+        selectedItem={selectedItem}
+        portalStatus={portalStatus}
+        draftCornerCount={draft.corners.length}
+        draftClosed={draft.closed}
+        onResize={resizeSelected}
+        onRotateTo={rotateSelectedTo}
+        onElevate={elevateSelected}
+        onMoveTo={moveSelectedTo}
+        onRecolor={recolorSelected}
+        onRotate90={rotateSelected90}
+        onClone={cloneSelected}
+        onDelete={deleteSelected}
+      />
     </div>
   );
 }

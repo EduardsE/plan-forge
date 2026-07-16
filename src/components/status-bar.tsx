@@ -9,6 +9,8 @@ import type { ViewMode } from "#/lib/view-mode";
 
 interface StatusBarProps {
   mode: ViewMode;
+  /** The objects library is docked — the left context counts placed objects. */
+  libraryOpen?: boolean;
   floor: Floor;
   /** Name of the selected item's containing room (floor-wide selection). */
   selectedRoomName?: string | null;
@@ -45,12 +47,12 @@ function drawStatusText(cornerCount: number, editing: boolean): string {
   return `Drawing — ${cornerCount} ${noun} placed`;
 }
 
-/** Snap label per mode, matching the 2b/2d status bars. */
+/** Snap label per mode, matching the 2b/2d status bars (a live placement
+ * drag upgrades it to the 2d screen's "walls + objects" wording). */
 const SNAP_LABEL: Record<ViewMode, string> = {
   "3d": "Snap",
   "2d": "Snap",
   draw: "Snap 90°",
-  objects: "Snap · walls + objects",
 };
 
 /**
@@ -61,6 +63,7 @@ const SNAP_LABEL: Record<ViewMode, string> = {
  */
 export function StatusBar({
   mode,
+  libraryOpen = false,
   floor,
   selectedRoomName = null,
   cameraReadout,
@@ -100,14 +103,14 @@ export function StatusBar({
     : (floor.rooms[0]?.name ?? "Untitled room");
   if (mode === "draw") {
     context = drawStatusText(draftCornerCount, draftClosed);
+  } else if (placingName) {
+    context = `Placing “${placingName}” — drop to confirm`;
   } else if (mode === "2d" && openingTool) {
     context = `Placing a ${openingTool} — click a wall to insert it`;
   } else if (mode === "2d" && portalStatus) {
     context = portalStatus;
-  } else if (mode === "objects") {
-    context = placingName
-      ? `Placing “${placingName}” — drop to confirm`
-      : `${objectCount} objects placed`;
+  } else if (libraryOpen) {
+    context = `${objectCount} objects placed`;
   }
 
   // Right-edge camera readout: orbit angles under the perspective camera,
@@ -162,7 +165,7 @@ export function StatusBar({
               color: snapEnabled ? "var(--blue)" : "var(--ink-300)",
             }}
           />
-          {SNAP_LABEL[mode]}
+          {placingName ? "Snap · walls + objects" : SNAP_LABEL[mode]}
         </button>
         <button
           type="button"

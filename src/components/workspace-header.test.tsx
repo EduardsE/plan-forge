@@ -26,7 +26,6 @@ describe("WorkspaceHeader", () => {
     ["2d", "2D"],
     ["draw", "2D"],
     ["3d", "3D"],
-    ["objects", "3D"],
   ])("marks the %s segment active in %s view mode", (mode, activeLabel) => {
     renderHeader({ mode });
 

@@ -1,4 +1,4 @@
-import { Box, Eye, Pencil, SlidersHorizontal, Sofa } from "lucide-react";
+import { Pencil, SlidersHorizontal, Sofa } from "lucide-react";
 import { Tooltip } from "#/components/tooltip";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -6,6 +6,9 @@ import type { ViewMode } from "#/lib/view-mode";
 interface NavRailProps {
   activeMode: ViewMode;
   onSelectMode: (mode: ViewMode) => void;
+  /** Furnish: from draw it returns to the last lens with the library open;
+   * already furnishing, it toggles the docked objects library. */
+  onFurnish: () => void;
   /** The Settings popover is open — the Settings button lights up like a mode. */
   settingsOpen: boolean;
   onToggleSettings: () => void;
@@ -14,16 +17,15 @@ interface NavRailProps {
 interface NavItemDef {
   label: string;
   icon: typeof Pencil;
-  /** null = the Settings toggle, which opens the popover instead of a lens. */
-  mode: ViewMode | null;
+  /** Which action the button fires — tasks, not lenses (the header's 2D|3D
+   * switch owns the lens). */
+  action: "draw" | "furnish" | "settings";
 }
 
 const NAV_ITEMS: NavItemDef[] = [
-  { label: "Draw", icon: Pencil, mode: "draw" },
-  { label: "Furnish", icon: Sofa, mode: "3d" },
-  { label: "Objects", icon: Box, mode: "objects" },
-  { label: "Views", icon: Eye, mode: "2d" },
-  { label: "Settings", icon: SlidersHorizontal, mode: null },
+  { label: "Draw", icon: Pencil, action: "draw" },
+  { label: "Furnish", icon: Sofa, action: "furnish" },
+  { label: "Settings", icon: SlidersHorizontal, action: "settings" },
 ];
 
 /**
@@ -35,6 +37,7 @@ const NAV_ITEMS: NavItemDef[] = [
 export function NavRail({
   activeMode,
   onSelectMode,
+  onFurnish,
   settingsOpen,
   onToggleSettings,
 }: NavRailProps) {
@@ -67,9 +70,18 @@ export function NavRail({
         </svg>
       </div>
 
-      {NAV_ITEMS.map(({ label, icon: Icon, mode }) => {
-        const isSettings = mode === null;
-        const isActive = isSettings ? settingsOpen : mode === activeMode;
+      {NAV_ITEMS.map(({ label, icon: Icon, action }) => {
+        const isSettings = action === "settings";
+        const isActive = isSettings
+          ? settingsOpen
+          : action === "furnish"
+            ? activeMode !== "draw"
+            : activeMode === "draw";
+        const onClick = isSettings
+          ? onToggleSettings
+          : action === "furnish"
+            ? onFurnish
+            : () => onSelectMode("draw");
         return (
           <Tooltip
             key={label}
@@ -83,7 +95,7 @@ export function NavRail({
               aria-current={!isSettings && isActive ? "page" : undefined}
               aria-expanded={isSettings ? settingsOpen : undefined}
               data-settings-anchor={isSettings ? "" : undefined}
-              onClick={isSettings ? onToggleSettings : () => onSelectMode(mode)}
+              onClick={onClick}
               className={cn(
                 "relative flex h-10 w-10 items-center justify-center rounded-[10px]",
                 isActive
