@@ -16,6 +16,7 @@ import { ObjectsPanel } from "#/components/objects-panel";
 import { PlacementDragLayer } from "#/components/placement-drag-layer";
 import { SettingsPopover } from "#/components/settings-popover";
 import { StatusBar } from "#/components/status-bar";
+import { TimeOfDayControl } from "#/components/time-of-day-control";
 import { WorkspaceHeader } from "#/components/workspace-header";
 import { ZoomPill } from "#/components/zoom-pill";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
@@ -38,6 +39,7 @@ import {
   settleHistory,
   undoHistory,
 } from "#/lib/history";
+import { DEFAULT_TIME_OF_DAY, LIGHTING, type TimeOfDay } from "#/lib/lighting";
 import {
   allFurnitureOf,
   type CatalogItem,
@@ -460,6 +462,8 @@ function Planner() {
   // the lit state the mockups show.
   const [gridVisible, setGridVisible] = useState(true);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  // Time-of-day lighting for the 3D lens (ephemeral, like the toggles above).
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(DEFAULT_TIME_OF_DAY);
   // Fullscreen targets the workspace pane (canvas + its chrome), so the nav
   // rail drops away but the toolbars ride along.
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -846,8 +850,14 @@ function Planner() {
       style["--pool-w"] = `max(${w}vw, 540px)`;
       style["--pool-h"] = `max(${h}vh, 400px)`;
     }
+    // Tint the 3D studio-pool gradient stops to match the hour, so the canvas
+    // background shares the sun's warmth (styles.css consumes these).
+    const [pool0, pool1, pool2] = LIGHTING[timeOfDay].pool;
+    style["--pool-0"] = pool0;
+    style["--pool-1"] = pool1;
+    style["--pool-2"] = pool2;
     return style;
-  }, [derived.rooms]);
+  }, [derived.rooms, timeOfDay]);
 
   return (
     // The library column animates 0 ↔ 306px (the track count stays constant
@@ -919,6 +929,7 @@ function Planner() {
               unit={unit}
               gridVisible={gridVisible}
               snapEnabled={snapEnabled}
+              timeOfDay={timeOfDay}
               drawTool={drawTool}
               chainNode={chainNode}
               onExtendChain={extendChain}
@@ -951,6 +962,9 @@ function Planner() {
           onZoomOut={() => cameraApiRef.current?.zoomOut()}
           onZoomToFit={() => cameraApiRef.current?.zoomToFit()}
         />
+        {viewMode === "3d" && (
+          <TimeOfDayControl value={timeOfDay} onChange={setTimeOfDay} />
+        )}
         {placing && (
           <PlacementDragLayer
             item={placing.item}

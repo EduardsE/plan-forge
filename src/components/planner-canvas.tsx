@@ -38,6 +38,7 @@ import {
   planFitZoom,
   wrapAngle,
 } from "#/lib/camera";
+import type { TimeOfDay } from "#/lib/lighting";
 import {
   addFloorOpening,
   addFurniture,
@@ -604,6 +605,8 @@ export interface PlannerCanvasProps {
   /** Bottom-left toggles: show the reference grid, and snap while editing. */
   gridVisible: boolean;
   snapEnabled: boolean;
+  /** Time-of-day lighting preset (3D lens) — drives the sun/ambient/fill. */
+  timeOfDay: TimeOfDay;
   /** Draw-mode state, owned by the route. Draw edits the wall graph live. */
   drawTool: DrawTool;
   /** Id of the chain's last node (wall tool), or null for no active chain. */
@@ -641,6 +644,7 @@ export function PlannerCanvas({
   unit,
   gridVisible,
   snapEnabled,
+  timeOfDay,
   drawTool,
   chainNode,
   onExtendChain,
@@ -984,6 +988,7 @@ export function PlannerCanvas({
             selectedOpeningId={selectedOpeningId}
             unit={unit}
             snapEnabled={snapEnabled}
+            timeOfDay={timeOfDay}
             onSelectItem={selectItem}
             onMoveItem={moveItem}
             onMoveActiveChange={handleRoomDragActive}

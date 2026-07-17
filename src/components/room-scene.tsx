@@ -33,6 +33,7 @@ import {
   partHullScale,
   partScale,
 } from "#/lib/furniture-parts";
+import { LIGHTING, type TimeOfDay } from "#/lib/lighting";
 import type {
   Bounds,
   DerivedRoom,
@@ -83,18 +84,6 @@ const WALL_EDGE_COLOR = "#ede2ce";
 const WINDOW_FRAME_COLOR = "#e6dbc6";
 const WINDOW_FRAME_SIZE = 0.09;
 const PANE_COLORS = ["#fff6de", "#ffe9c2"] as const;
-
-/**
- * The sun — a warm directional light that casts real shadows, so the window
- * holes throw daylight patches across the floor. Elevation is kept moderate so
- * the patches rake out into the room rather than pooling under the sill; the
- * rake offset swings the azimuth off dead-behind-the-camera so beams fall
- * diagonally instead of straight at the viewer.
- */
-const SUN_COLOR = "#fff1cf";
-const SUN_INTENSITY = 2.7;
-const SUN_ELEVATION = MathUtils.degToRad(38);
-const SUN_RAKE = MathUtils.degToRad(22);
 
 /** Mockup's selection stroke: rgba(58,91,240,.7) on the desk chair faces. */
 const SELECTION_COLOR = "#3a5bf0";
@@ -781,10 +770,19 @@ function FurnitureMesh({
 function SunLight({
   center,
   radius,
+  color,
+  intensity,
+  elevationDeg,
+  rakeDeg,
 }: {
   center: [number, number, number];
   /** Half the floor's bounding diagonal, plus margin. */
   radius: number;
+  /** Preset-driven sun colour, brightness and geometry (see #/lib/lighting). */
+  color: string;
+  intensity: number;
+  elevationDeg: number;
+  rakeDeg: number;
 }) {
   const lightRef = useRef<DirectionalLight | null>(null);
   const target = useMemo(() => new Object3D(), []);
@@ -797,16 +795,18 @@ function SunLight({
   useFrame(({ camera }) => {
     const light = lightRef.current;
     if (!light) return;
-    // Center → camera azimuth in the XZ plane; the sun sits opposite it.
+    const elevation = MathUtils.degToRad(elevationDeg);
+    // Center → camera azimuth in the XZ plane; the sun sits opposite it, so its
+    // beams enter through the standing far walls, plus the preset's rake swing.
     const camAz = Math.atan2(
       camera.position.z - center[2],
       camera.position.x - center[0],
     );
-    const sunAz = camAz + Math.PI + SUN_RAKE;
-    const ground = Math.cos(SUN_ELEVATION) * distance;
+    const sunAz = camAz + Math.PI + MathUtils.degToRad(rakeDeg);
+    const ground = Math.cos(elevation) * distance;
     light.position.set(
       center[0] + Math.cos(sunAz) * ground,
-      center[1] + Math.sin(SUN_ELEVATION) * distance,
+      center[1] + Math.sin(elevation) * distance,
       center[2] + Math.sin(sunAz) * ground,
     );
   });
@@ -815,8 +815,8 @@ function SunLight({
     <>
       <directionalLight
         ref={lightRef}
-        color={SUN_COLOR}
-        intensity={SUN_INTENSITY}
+        color={color}
+        intensity={intensity}
         castShadow
         shadow-mapSize={[2048, 2048]}
         // Negative bias + normalBias keep acne and light-leaks out of the thin
@@ -836,7 +836,13 @@ function SunLight({
 }
 
 /** Warm key light from the window side, aimed at the room center. */
-function KeyLight({ center }: { center: [number, number, number] }) {
+function KeyLight({
+  center,
+  intensity,
+}: {
+  center: [number, number, number];
+  intensity: number;
+}) {
   const lightRef = useRef<DirectionalLight | null>(null);
   const target = useMemo(() => new Object3D(), []);
   useLayoutEffect(() => {
@@ -849,7 +855,7 @@ function KeyLight({ center }: { center: [number, number, number] }) {
         ref={lightRef}
         position={[center[0] + 3.5, 7, center[2] - 6.5]}
         color="#ffe9c4"
-        intensity={0.38}
+        intensity={intensity}
       />
       <primitive object={target} />
     </>
@@ -924,6 +930,8 @@ export interface RoomSceneProps {
   unit: Unit;
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
   snapEnabled: boolean;
+  /** The lighting preset driving the sun, ambient and fill (3D lens). */
+  timeOfDay: TimeOfDay;
   onSelectItem: (id: string) => void;
   /** Live update during a move drag (already snapped; wall items carry
    * mount). Furniture is floor-level — the write-back re-partitions the item
@@ -949,6 +957,7 @@ export function RoomScene({
   selectedOpeningId,
   unit,
   snapEnabled,
+  timeOfDay,
   onSelectItem,
   onMoveItem,
   onMoveActiveChange,
@@ -989,23 +998,32 @@ export function RoomScene({
   );
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
+  const lighting = LIGHTING[timeOfDay];
   return (
     <group>
-      {/* Ambient + key + fill dropped from their pre-sun levels so the shadowed
-          floor sits below white — that headroom is what lets the sun patch read
-          as genuinely brighter under the flat (untone-mapped) renderer. */}
-      {/* Ambient + key + fill dropped from their pre-sun levels so the shadowed
-          floor sits well below white — that headroom is what lets the sun patch
-          read as genuinely brighter under the flat (untone-mapped) renderer. */}
-      <ambientLight color="#fff2de" intensity={0.42} />
-      <KeyLight center={center} />
+      {/* The time-of-day preset drives all four lights. Ambient + key + fill sit
+          well below white so the shadowed floor keeps headroom — that headroom
+          is what lets the sun patch read as genuinely brighter under the flat
+          (untone-mapped) renderer. */}
+      <ambientLight
+        color={lighting.ambient.color}
+        intensity={lighting.ambient.intensity}
+      />
+      <KeyLight center={center} intensity={lighting.key} />
       {/* Cool fill from the open side so hidden-wall views don't go flat. */}
       <directionalLight
         position={[center[0] - 6, 5, center[2] + 7]}
         color="#e8eef7"
-        intensity={0.18}
+        intensity={lighting.fill}
       />
-      <SunLight center={center} radius={sunRadius} />
+      <SunLight
+        center={center}
+        radius={sunRadius}
+        color={lighting.sun.color}
+        intensity={lighting.sun.intensity}
+        elevationDeg={lighting.sun.elevationDeg}
+        rakeDeg={lighting.sun.rakeDeg}
+      />
       {bounds && <FloorContactShadow bounds={bounds} />}
       <Walls solids={solids} posts={posts} />
       <RoomOpenings

@@ -177,13 +177,16 @@ body {
  */
 .workspace-canvas[data-view-mode='3d'] {
   background-color: var(--studio);
+  /* The three stop colours are set from JS per time-of-day preset (see the
+     canvasStyle memo in routes/index.tsx); the fallbacks are the Day look. */
   background-image: radial-gradient(
     var(--pool-w, max(54vw, 540px)) var(--pool-h, max(56vh, 400px)) at 47% 44%,
-    rgba(255, 255, 255, 0.95),
-    rgba(214, 216, 222, 0.55) 62%,
-    rgba(120, 126, 146, 0.3) 100%
+    var(--pool-0, rgba(255, 255, 255, 0.95)),
+    var(--pool-1, rgba(214, 216, 222, 0.55)) 62%,
+    var(--pool-2, rgba(120, 126, 146, 0.3)) 100%
   );
   background-size: 100% 100%;
+  transition: background-image 0.35s ease;
 }
 
 /*
