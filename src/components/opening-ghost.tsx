@@ -2,17 +2,22 @@ import { useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useState } from "react";
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import { SnapGuides } from "#/components/snap-guides";
-import type { CatalogItem, OpeningKind, Point, Room } from "#/lib/model";
-import { type OpeningPlacement, openingAcrossRooms } from "#/lib/opening-place";
+import type {
+  CatalogItem,
+  DerivedRoom,
+  Floor,
+  OpeningKind,
+  Point,
+} from "#/lib/model";
+import { type OpeningPlacement, openingAt } from "#/lib/opening-place";
 import { wallPoint } from "#/lib/plan-scene";
 import {
-  buildWallSolids,
+  buildEdgeSolids,
   DOOR_HEIGHT,
   WALL_THICKNESS,
   WINDOW_HEAD,
   WINDOW_SILL,
 } from "#/lib/room-scene";
-import { floorSeamData } from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -32,8 +37,10 @@ const GHOST_COLOR = "#3a5bf0";
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 
 export interface OpeningGhostProps {
-  /** Every room of the floor; the insert targets the nearest fitting wall. */
-  rooms: Room[];
+  /** The graph floor — the insert targets the nearest fitting edge. */
+  floor: Floor;
+  /** Derived rooms, for the edges' face adjacency (wall heights, sides). */
+  rooms: DerivedRoom[];
   /** The dragged catalog card; its id is the opening kind. */
   item: CatalogItem;
   unit: Unit;
@@ -44,6 +51,7 @@ export interface OpeningGhostProps {
 }
 
 export function OpeningGhost({
+  floor,
   rooms,
   item,
   unit,
@@ -57,18 +65,9 @@ export function OpeningGhost({
   const kind = item.id as OpeningKind;
   const width = item.footprint.width;
 
-  // The same wall solids the scenes render: their holes carry this room's
-  // openings *and* the neighbor's portal cuts on shared walls, so the slide
-  // clamps clear of both.
-  const roomSolids = useMemo(() => {
-    const seamData = floorSeamData(rooms);
-    return rooms
-      .filter((room) => room.outline.length >= 3)
-      .map((room) => ({
-        roomId: room.id,
-        solids: buildWallSolids(room, undefined, seamData.get(room.id)),
-      }));
-  }, [rooms]);
+  // The same wall solids the scenes render: one per edge, holes for every
+  // opening on it, so the slide clamps clear of both rooms' openings.
+  const solids = useMemo(() => buildEdgeSolids(floor, rooms), [floor, rooms]);
 
   useEffect(() => {
     const raycaster = new Raycaster();
@@ -88,7 +87,7 @@ export function OpeningGhost({
         : null;
     };
     const resolve = (point: Point): OpeningPlacement | null =>
-      openingAcrossRooms(roomSolids, point, width, snapEnabled);
+      openingAt(solids, point, width, snapEnabled);
     const handleMove = (event: PointerEvent) => {
       const point = toFloor(event);
       setPlacement(point ? resolve(point) : null);
@@ -107,18 +106,14 @@ export function OpeningGhost({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [roomSolids, width, kind, snapEnabled, camera, gl, onPlace, onCancel]);
+  }, [solids, width, kind, snapEnabled, camera, gl, onPlace, onCancel]);
 
   if (!placement) return null;
   const { solid, offset } = placement;
-  // On a shared wall the rendered wall straddles the line (a half-thickness
-  // fill each side), so the band centers on it too.
+  // The wall straddles the edge line (± half thickness), so the band centers
+  // on the line.
   const mid = offset + width / 2;
-  const onSeam = (solid.seams ?? []).some(
-    (span) => span.start <= mid && mid <= span.end,
-  );
-  const base = onSeam ? -WALL_THICKNESS / 2 : 0;
-  const center = wallPoint(solid, mid, base + WALL_THICKNESS / 2);
+  const center = wallPoint(solid, mid, 0);
   const bottom = kind === "window" ? WINDOW_SILL : 0;
   const top = kind === "window" ? WINDOW_HEAD : DOOR_HEIGHT;
 

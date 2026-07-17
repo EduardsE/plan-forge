@@ -1,15 +1,15 @@
-import { type OpeningKind, type Point, type Room, wallsOf } from "#/lib/model";
+import { type OpeningKind, type Point, sideOfPoint } from "#/lib/model";
 import type { PlacementGuide } from "#/lib/place";
 import { PLACEMENT_GRID } from "#/lib/place";
 import { wallPoint } from "#/lib/plan-scene";
-import { WALL_THICKNESS, type WallSolid } from "#/lib/room-scene";
+import type { WallSolid } from "#/lib/room-scene";
 
 /**
  * Pure placement math for the door/window tools: where a click or drag along
- * a wall actually lands an opening, and the distance-to-corner guides drawn
- * while it moves. Everything is in wall-local offsets (meters from the wall's
- * start corner), so it works for walls at any angle — rendering and pointer
- * projection live in `plan-openings.tsx`.
+ * an edge actually lands an opening, and the distance-to-corner guides drawn
+ * while it moves. Offsets are edge-local (meters from the edge's node `a`), so
+ * they work for walls at any angle — rendering and pointer projection live in
+ * `plan-openings.tsx`.
  */
 
 /** Default leaf/frame widths for a freshly inserted opening, meters. */
@@ -101,75 +101,18 @@ export function slideOpening(
 export const MIN_OPENING_WIDTH = 0.3;
 
 /**
- * Set an opening's width from the chip's field, keeping its center where it
- * is as far as the wall allows. The width clamps into the free stretch the
- * opening currently occupies (its wall minus the other openings there, and
- * minus `blocked` — extra occupied spans such as a neighbor room's portal
- * holes on a shared wall), and the near-edge offset re-clamps so nothing
- * overlaps. Unknown ids and non-finite widths return the room unchanged.
- */
-export function resizeOpening(
-  room: Room,
-  id: string,
-  width: number,
-  blocked: WallSpan[] = [],
-): Room {
-  const opening = room.openings.find((entry) => entry.id === id);
-  if (!opening || !Number.isFinite(width)) return room;
-  const wall = wallsOf(room.outline).find((w) => w.index === opening.wallIndex);
-  if (!wall) return room;
-  const wallLength = Math.hypot(
-    wall.end.x - wall.start.x,
-    wall.end.y - wall.start.y,
-  );
-  // The free gap around the opening: from the nearest neighbor edge (or wall
-  // corner) on each side.
-  let gapStart = 0;
-  let gapEnd = wallLength;
-  const others: WallSpan[] = [
-    ...room.openings
-      .filter(
-        (other) => other.id !== id && other.wallIndex === opening.wallIndex,
-      )
-      .map((other) => ({ start: other.offset, width: other.width })),
-    ...blocked,
-  ];
-  for (const other of others) {
-    const end = other.start + other.width;
-    if (end <= opening.offset + EPS) gapStart = Math.max(gapStart, end);
-    if (other.start + EPS >= opening.offset + opening.width) {
-      gapEnd = Math.min(gapEnd, other.start);
-    }
-  }
-  const clampedWidth = Math.min(
-    Math.max(width, MIN_OPENING_WIDTH),
-    gapEnd - gapStart,
-  );
-  const center = opening.offset + opening.width / 2;
-  const offset = Math.min(
-    Math.max(center - clampedWidth / 2, gapStart),
-    gapEnd - clampedWidth,
-  );
-  if (clampedWidth === opening.width && offset === opening.offset) return room;
-  return {
-    ...room,
-    openings: room.openings.map((entry) =>
-      entry.id === id ? { ...entry, offset, width: clampedWidth } : entry,
-    ),
-  };
-}
-
-/**
- * Where a catalog door/window card dragged to a floor point would insert.
- * The wall solid rides along so the ghost can render the band (and detect
- * seam-centering) without re-finding it.
+ * Where a catalog door/window card dragged to a floor point would insert: the
+ * host edge, the edge-local near-edge offset, and which face (`side`) it opens
+ * onto. The wall solid rides along so the ghost can render the band without
+ * re-finding it.
  */
 export interface OpeningPlacement {
-  roomId: string;
-  wallIndex: number;
-  /** Wall-local near-edge offset, snapped/clamped clear of `solid.holes`. */
+  edgeId: string;
+  /** Edge-local near-edge offset, snapped/clamped clear of `solid.holes`. */
   offset: number;
   width: number;
+  /** The face the opening opens onto (`sideOfPoint` sign). */
+  side: 1 | -1;
   solid: WallSolid;
   guides: PlacementGuide[];
 }
@@ -190,15 +133,26 @@ function projectToSolid(
   return { along, distance: Math.hypot(cursor.x - proj.x, cursor.y - proj.y) };
 }
 
+/** Which face the cursor lies on for a placed opening: the sole room's side
+ * on a one-face wall, else the side the cursor sits on (a portal wall can open
+ * either way, a dangling wall opens toward the cursor). */
+function placementSide(solid: WallSolid, cursor: Point): 1 | -1 {
+  if (solid.faces === 1) return solid.faceSides[0];
+  const end = {
+    x: solid.start.x + solid.dir.x * solid.length,
+    y: solid.start.y + solid.dir.y * solid.length,
+  };
+  return sideOfPoint(solid.start, end, cursor);
+}
+
 /**
- * Where an opening of `width` dragged to `cursor` lands within one room:
- * the nearest wall with a free stretch for it, the offset centered on the
- * cursor's projection then slid clear of the wall's existing holes (which
- * include a neighbor's portal cuts on shared walls). Walls that can't fit
- * the width fall through to the next nearest. Null when no wall fits.
+ * Where an opening of `width` dragged to `cursor` lands across the floor: the
+ * nearest edge with a free stretch for it, the offset centered on the cursor's
+ * projection then slid clear of the edge's existing holes (both rooms'). Edges
+ * that can't fit the width fall through to the next nearest. Null when none
+ * fit. A drag near a shared wall opens onto the room the cursor is nearest.
  */
 export function openingAt(
-  roomId: string,
   solids: WallSolid[],
   cursor: Point,
   width: number,
@@ -217,45 +171,15 @@ export function openingAt(
     );
     if (offset === null) continue;
     return {
-      roomId,
-      wallIndex: solid.index,
+      edgeId: solid.edgeId,
       offset,
       width,
+      side: placementSide(solid, cursor),
       solid,
       guides: snap ? openingCornerGuides(solid, offset, width) : [],
     };
   }
   return null;
-}
-
-/**
- * `openingAt` across every room: the candidate whose landed band center sits
- * nearest the cursor wins — this is how a drag near a shared wall inserts
- * into the room the cursor is closest to (the door then swings into it).
- */
-export function openingAcrossRooms(
-  roomSolids: Array<{ roomId: string; solids: WallSolid[] }>,
-  cursor: Point,
-  width: number,
-  snap = true,
-): OpeningPlacement | null {
-  let best: OpeningPlacement | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const { roomId, solids } of roomSolids) {
-    const candidate = openingAt(roomId, solids, cursor, width, snap);
-    if (!candidate) continue;
-    const center = wallPoint(
-      candidate.solid,
-      candidate.offset + width / 2,
-      WALL_THICKNESS / 2,
-    );
-    const distance = Math.hypot(center.x - cursor.x, center.y - cursor.y);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = candidate;
-    }
-  }
-  return best;
 }
 
 /**

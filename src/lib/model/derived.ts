@@ -270,18 +270,32 @@ export function edgeOffsetOf(
   return Math.max(0, Math.min(Math.min(t0, t1), edge.length - width));
 }
 
-/** Whether derived wall `wallIndex` runs opposite the edge `ref` names. */
-function wallReversed(
+/**
+ * "Living room ↔ Kitchen" for the portal an opening forms, or null for a
+ * plain (exterior or unshared) opening — reimplemented from the graph's edge
+ * face-adjacency: an opening whose host edge borders two rooms is a portal.
+ * The room the opening opens into (its `side`) reads first.
+ */
+export function portalLabel(
+  rooms: DerivedRoom[],
   floor: Floor,
-  ref: WallRef,
-  room: DerivedRoom,
-  i: number,
-) {
-  const nodes = nodesMap(floor);
-  const edge = edgeLine(edgesMap(floor).get(ref.edgeId), nodes);
-  const wall = wallLine(room.outline, i);
-  if (!edge || !wall) return false;
-  return edge.dir.x * wall.dir.x + edge.dir.y * wall.dir.y < 0;
+  openingId: string,
+): string | null {
+  const opening = floor.openings.find((o) => o.id === openingId);
+  if (!opening) return null;
+  const adjacent = rooms.filter((room) =>
+    room.wallRefs.some((ref) => ref.edgeId === opening.edgeId),
+  );
+  if (adjacent.length < 2) return null;
+  const owner =
+    adjacent.find((room) =>
+      room.wallRefs.some(
+        (ref) => ref.edgeId === opening.edgeId && ref.side === opening.side,
+      ),
+    ) ?? adjacent[0];
+  const other = adjacent.find((room) => room !== owner) ?? adjacent[1];
+  const name = (room: DerivedRoom) => room.name ?? "Untitled room";
+  return `${name(owner)} ↔ ${name(other)}`;
 }
 
 function applyFurnitureDiff(
@@ -315,84 +329,6 @@ function applyFurnitureDiff(
   return { ...floor, furniture: [...furniture, ...added] };
 }
 
-function applyOpeningDiff(
-  floor: Floor,
-  room: DerivedRoom,
-  next: RoomOpening[],
-): Floor {
-  const prevById = new Map(room.openings.map((o) => [o.id, o]));
-  const nextById = new Map(next.map((o) => [o.id, o]));
-  let changed = false;
-
-  const rewriteHinge = (
-    n: RoomOpening,
-    ref: WallRef,
-  ): "start" | "end" | undefined => {
-    if (n.hinge === undefined) return undefined;
-    return wallReversed(floor, ref, room, n.wallIndex)
-      ? n.hinge === "start"
-        ? "end"
-        : "start"
-      : n.hinge;
-  };
-
-  const kept: Opening[] = [];
-  for (const stored of floor.openings) {
-    const n = nextById.get(stored.id);
-    const p = prevById.get(stored.id);
-    if (p && !n) {
-      changed = true; // removed from this room
-      continue;
-    }
-    if (p && n && p !== n) {
-      const ref: WallRef = { edgeId: stored.edgeId, side: stored.side };
-      const offset = edgeOffsetOf(
-        floor,
-        ref,
-        room,
-        n.wallIndex,
-        n.offset,
-        n.width,
-      );
-      const rewritten: Opening = { ...stored, offset, width: n.width };
-      const hinge = rewriteHinge(n, ref);
-      if (hinge === undefined) delete rewritten.hinge;
-      else rewritten.hinge = hinge;
-      kept.push(rewritten);
-      changed = true;
-    } else {
-      kept.push(stored);
-    }
-  }
-  for (const n of next) {
-    if (prevById.has(n.id)) continue;
-    const ref = room.wallRefs[n.wallIndex];
-    if (!ref) continue;
-    const offset = edgeOffsetOf(
-      floor,
-      ref,
-      room,
-      n.wallIndex,
-      n.offset,
-      n.width,
-    );
-    const opening: Opening = {
-      id: n.id,
-      kind: n.kind,
-      edgeId: ref.edgeId,
-      offset,
-      width: n.width,
-      side: ref.side,
-    };
-    const hinge = rewriteHinge(n, ref);
-    if (hinge !== undefined) opening.hinge = hinge;
-    kept.push(opening);
-    changed = true;
-  }
-  if (!changed) return floor;
-  return { ...floor, openings: kept };
-}
-
 function applyRecordDiff(
   floor: Floor,
   roomId: string,
@@ -423,9 +359,11 @@ function applyRecordDiff(
 
 /**
  * Apply a per-room edit (expressed against the derived room `roomId`) back to
- * the graph floor: furniture, opening, and name/height diffs are mapped onto
- * `floor.furniture` / `floor.openings` / `floor.rooms`, then normalized. A
- * no-op edit (fn returns the same room) returns the same floor reference.
+ * the graph floor: furniture and name/height diffs are mapped onto
+ * `floor.furniture` / `floor.rooms`, then normalized. Openings are no longer
+ * routed here — they mutate the graph directly through the floor-level setters
+ * in `model/openings.ts`. A no-op edit (fn returns the same room) returns the
+ * same floor reference.
  */
 export function updateDerivedRoom(
   floor: Floor,
@@ -439,7 +377,6 @@ export function updateDerivedRoom(
   if (next === room) return floor;
 
   let nextFloor = applyFurnitureDiff(floor, room.furniture, next.furniture);
-  nextFloor = applyOpeningDiff(nextFloor, room, next.openings);
   nextFloor = applyRecordDiff(nextFloor, roomId, room, next);
   if (nextFloor === floor) return floor;
   return reconcileFloor(nextFloor);

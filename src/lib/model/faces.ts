@@ -297,7 +297,7 @@ export function insetPolygon(polygon: Point[], inset: number): Point[] | null {
     const len = Math.hypot(dx, dy);
     if (len < EPS) return null;
     const dir = { x: dx / len, y: dy / len };
-    // buildWallSolids convention (room-scene.ts): outward is the right
+    // room-scene.ts convention: outward is the right
     // normal for the sample's positive winding; inward is its negation.
     const outward = { x: dir.y * sign, y: -dir.x * sign };
     const inward = { x: -outward.x, y: -outward.y };

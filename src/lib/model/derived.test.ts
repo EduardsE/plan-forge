@@ -6,7 +6,6 @@ import {
   updateDerivedRoom,
 } from "./derived";
 import { updateFurniture } from "./furniture";
-import { moveOpening } from "./openings";
 import { setRoomName, setRoomWallHeight } from "./room";
 import { makeFloor } from "./test-fixtures";
 import type { Floor, Point } from "./types";
@@ -95,18 +94,6 @@ describe("updateDerivedRoom", () => {
     // Identity fn → same floor reference.
     const same = updateDerivedRoom(floor, derived, "living", (room) => room);
     expect(same).toBe(floor);
-  });
-
-  it("rewrites a moved opening onto its edge", () => {
-    const floor = makeFloor();
-    const derived = deriveFloor(floor);
-    const next = updateDerivedRoom(floor, derived, "living", (room) =>
-      moveOpening(room, "door-BE", 2.0),
-    );
-    const stored = next.openings.find((o) => o.id === "door-BE");
-    expect(stored?.edgeId).toBe("BE");
-    expect(stored?.offset).toBeCloseTo(2.05, 2);
-    expect(stored?.side).toBe(1);
   });
 
   it("renames the room record and sets its ceiling height", () => {

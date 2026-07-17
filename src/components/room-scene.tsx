@@ -32,28 +32,24 @@ import {
 } from "#/lib/furniture-parts";
 import type {
   Bounds,
+  DerivedRoom,
   Floor,
   FurnitureItem,
   FurnitureUpdate,
   Point,
   Room,
 } from "#/lib/model";
-import { floorBounds, stackSurfaceHeight, wallHeightOf } from "#/lib/model";
+import { floorBounds, stackSurfaceHeight } from "#/lib/model";
 import {
-  buildWallSolids,
-  cornerPosts,
-  holeSeamGap,
-  type NeighborWalls,
-  portalThresholds,
-  postCoveredByWalls,
+  buildEdgeSolids,
+  type NodePost,
+  nodePosts,
   SLAB_THICKNESS,
   STUB_WALL_HEIGHT,
   stubSpans,
   WALL_THICKNESS,
   type WallSolid,
-  wallPieces,
 } from "#/lib/room-scene";
-import { floorSeamData } from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -358,196 +354,114 @@ function WindowDressing({
 }
 
 /**
- * The four per-frame display groups of one wall: seam (shared) and plain
- * stretches cut down independently, each flipping between its full-height
- * and stub rendition. The frame loop writes `visible` straight onto these.
+ * The two per-frame display groups of one wall: full-height and cut-down
+ * stub. The frame loop writes `visible` straight onto these — one solid per
+ * edge, so a shared wall has a single pair (no more seam/plain split).
  */
 interface WallDisplay {
-  plainFull: Group | null;
-  plainStub: Group | null;
-  seamFull: Group | null;
-  seamStub: Group | null;
+  full: Group | null;
+  stub: Group | null;
 }
 
 function WallMesh({
   solid,
-  wallHeight,
   display,
 }: {
   solid: WallSolid;
-  wallHeight: number;
   /** Owned by `Walls`; the group refs below register themselves into it. */
   display: WallDisplay;
 }) {
-  const wall = wallTexture(wallHeight);
-  // One extrusion per constant-thickness piece: shared (seam) stretches are
-  // half as thick — the abutting room extrudes the other half on its side of
-  // the wall line, so together the party wall reads as one, not doubled.
-  // Each piece also builds its cut-down stub: the same footprint at stub
-  // height, with door/portal holes widened into full gaps (`stubSpans`).
-  // The stub reuses the full wall texture, so it keeps the real baseboard.
-  const pieces = useMemo(
-    () =>
-      wallPieces(solid).map((piece) => {
-        const shape = new Shape();
-        shape.moveTo(piece.start, 0);
-        shape.lineTo(piece.end, 0);
-        shape.lineTo(piece.end, wallHeight);
-        shape.lineTo(piece.start, wallHeight);
-        shape.closePath();
-        for (const hole of piece.holes) {
-          const path = new Path();
-          path.moveTo(hole.start, hole.bottom);
-          path.lineTo(hole.start + hole.width, hole.bottom);
-          path.lineTo(hole.start + hole.width, hole.top);
-          path.lineTo(hole.start, hole.top);
-          path.closePath();
-          shape.holes.push(path);
-        }
-        const thickness = piece.seam ? WALL_THICKNESS / 2 : WALL_THICKNESS;
-        const stubShapes = stubSpans(piece).map((span) => {
-          const stub = new Shape();
-          stub.moveTo(span.start, 0);
-          stub.lineTo(span.end, 0);
-          stub.lineTo(span.end, STUB_WALL_HEIGHT);
-          stub.lineTo(span.start, STUB_WALL_HEIGHT);
-          stub.closePath();
-          return stub;
-        });
-        return {
-          start: piece.start,
-          seam: piece.seam,
-          thickness,
-          geometry: new ExtrudeGeometry(shape, {
-            depth: thickness,
+  const wall = wallTexture(solid.height);
+  // One extrusion for the whole edge, holes cut for every opening on it, plus
+  // its cut-down stub (door holes widened into full gaps, windows left as
+  // solid stub — `stubSpans`). The stub reuses the wall texture for baseboard.
+  const geometry = useMemo(() => {
+    const shape = new Shape();
+    shape.moveTo(0, 0);
+    shape.lineTo(solid.length, 0);
+    shape.lineTo(solid.length, solid.height);
+    shape.lineTo(0, solid.height);
+    shape.closePath();
+    for (const hole of solid.holes) {
+      const path = new Path();
+      path.moveTo(hole.start, hole.bottom);
+      path.lineTo(hole.start + hole.width, hole.bottom);
+      path.lineTo(hole.start + hole.width, hole.top);
+      path.lineTo(hole.start, hole.top);
+      path.closePath();
+      shape.holes.push(path);
+    }
+    const full = new ExtrudeGeometry(shape, {
+      depth: WALL_THICKNESS,
+      bevelEnabled: false,
+    });
+    const stubShapes = stubSpans(solid).map((span) => {
+      const stub = new Shape();
+      stub.moveTo(span.start, 0);
+      stub.lineTo(span.end, 0);
+      stub.lineTo(span.end, STUB_WALL_HEIGHT);
+      stub.lineTo(span.start, STUB_WALL_HEIGHT);
+      stub.closePath();
+      return stub;
+    });
+    const stub =
+      stubShapes.length > 0
+        ? new ExtrudeGeometry(stubShapes, {
+            depth: WALL_THICKNESS,
             bevelEnabled: false,
-          }),
-          stubGeometry:
-            stubShapes.length > 0
-              ? new ExtrudeGeometry(stubShapes, {
-                  depth: thickness,
-                  bevelEnabled: false,
-                })
-              : null,
-        };
-      }),
-    [solid, wallHeight],
-  );
+          })
+        : null;
+    return { full, stub };
+  }, [solid]);
 
-  // rotation-y mapping local +X onto the wall direction sends local +Z to
-  // plan (-dir.y, dir.x); when that lands inward, shift the extrusion so the
-  // wall body sits outside the outline.
   const rotationY = Math.atan2(-solid.dir.y, solid.dir.x);
-  const localZOutward =
-    solid.outward.x * -solid.dir.y + solid.outward.y * solid.dir.x > 0;
-  const zOffset = (thickness: number) => (localZOutward ? 0 : -thickness);
-  /** Wall-local z of a point `outward` meters outward from the wall line. */
-  const zOutward = (outward: number) => (localZOutward ? outward : -outward);
-  const pieceMesh = (
-    piece: (typeof pieces)[number],
-    geometry: ExtrudeGeometry,
-  ) => (
-    <mesh
-      key={piece.start}
-      geometry={geometry}
-      position-z={zOffset(piece.thickness)}
-      raycast={noRaycast}
-    >
+  // The extrusion runs local z 0..WALL_THICKNESS; shift it so the wall body
+  // straddles the edge line (± half thickness), independent of `outward`.
+  const zOffset = -WALL_THICKNESS / 2;
+  const wallMesh = (geom: ExtrudeGeometry) => (
+    <mesh geometry={geom} position-z={zOffset} raycast={noRaycast}>
       <meshLambertMaterial attach="material-0" map={wall} />
       <meshLambertMaterial attach="material-1" color={WALL_EDGE_COLOR} />
     </mesh>
   );
-  // Window dressing (frame + glowing pane + light) rides in its stretch's
-  // full-height group: a cut-down wall can't host a floating window. A
-  // phantom window is a neighbor's portal — the owning side draws the one
-  // frame, centered on the wall assembly (gap / 2 outward from the owning
-  // line) so it spans both rooms' halves.
-  const dressings = (seam: boolean) =>
-    solid.holes
-      .filter(
-        (hole) =>
-          hole.kind === "window" &&
-          !hole.phantom &&
-          (holeSeamGap(solid, hole) !== null) === seam,
-      )
-      .map((hole) => (
-        <WindowDressing
-          key={hole.start}
-          hole={hole}
-          zCenter={
-            seam
-              ? zOutward((holeSeamGap(solid, hole) ?? 0) / 2)
-              : zOffset(WALL_THICKNESS) + WALL_THICKNESS / 2
-          }
-        />
-      ));
+  const windows = solid.holes.filter((hole) => hole.kind === "window");
+  // A back-to-back doorway: the wall (centered on the line) covers the bare
+  // strip between the two rooms' inset slabs, but the door hole cuts it, so
+  // bridge that stretch at floor level. Only two-face edges have the strip.
+  const thresholds =
+    solid.faces === 2 ? solid.holes.filter((hole) => hole.kind === "door") : [];
 
   return (
     <group position={[solid.start.x, 0, solid.start.y]} rotation-y={rotationY}>
       <group
         ref={(group) => {
-          display.plainFull = group;
+          display.full = group;
         }}
       >
-        {pieces
-          .filter((piece) => !piece.seam)
-          .map((piece) => pieceMesh(piece, piece.geometry))}
-        {dressings(false)}
+        {wallMesh(geometry.full)}
+        {windows.map((hole) => (
+          <WindowDressing key={hole.id} hole={hole} zCenter={0} />
+        ))}
       </group>
       <group
         ref={(group) => {
-          display.seamFull = group;
-        }}
-      >
-        {pieces
-          .filter((piece) => piece.seam)
-          .map((piece) => pieceMesh(piece, piece.geometry))}
-        {dressings(true)}
-      </group>
-      <group
-        ref={(group) => {
-          display.plainStub = group;
+          display.stub = group;
         }}
         visible={false}
       >
-        {pieces
-          .filter((piece) => !piece.seam && piece.stubGeometry)
-          .map((piece) =>
-            pieceMesh(piece, piece.stubGeometry as ExtrudeGeometry),
-          )}
+        {geometry.stub && wallMesh(geometry.stub)}
       </group>
-      <group
-        ref={(group) => {
-          display.seamStub = group;
-        }}
-        visible={false}
-      >
-        {pieces
-          .filter((piece) => piece.seam && piece.stubGeometry)
-          .map((piece) =>
-            pieceMesh(piece, piece.stubGeometry as ExtrudeGeometry),
-          )}
-      </group>
-      {/* Back-to-back seams leave a slab-deep strip neither room's platform
-          covers; bridge it under floor-reaching portals so doorways don't
-          open onto a trench. Floor-level, so it never joins the cutaway. */}
-      {portalThresholds(solid).map((threshold) => (
+      {thresholds.map((hole) => (
         <mesh
-          key={threshold.start}
+          key={hole.id}
           position={[
-            (threshold.start + threshold.end) / 2,
+            hole.start + hole.width / 2,
             FLOOR_TOP - SLAB_THICKNESS / 2,
-            zOutward(threshold.gap / 2),
+            0,
           ]}
           raycast={noRaycast}
         >
-          <boxGeometry
-            args={[
-              threshold.end - threshold.start,
-              SLAB_THICKNESS,
-              threshold.gap,
-            ]}
-          />
+          <boxGeometry args={[hole.width, SLAB_THICKNESS, WALL_THICKNESS]} />
           <meshLambertMaterial color={THRESHOLD_COLOR} />
         </mesh>
       ))}
@@ -555,52 +469,20 @@ function WallMesh({
   );
 }
 
-/** One room's walls, plus the neighbor rooms' as a post-cover source. */
-interface RoomWalls extends NeighborWalls {
-  neighbors: NeighborWalls[];
-}
-
-/** Walls + corner posts with the per-frame dollhouse cutaway. */
-function Walls({ walls }: { walls: RoomWalls }) {
-  const { solids, wallHeight, neighbors } = walls;
-  // A junction post that sits entirely inside a flush neighbor's wall is
-  // dropped — the neighbor draws that volume, and the duplicate's coincident
-  // faces would z-fight as a patchy strip on the shared wall.
-  const posts = useMemo(
-    () =>
-      cornerPosts(solids).filter(
-        (post) =>
-          !neighbors.some((other) =>
-            postCoveredByWalls(post, wallHeight, other),
-          ),
-      ),
-    [solids, wallHeight, neighbors],
+/**
+ * Every wall of the floor (one solid per edge) plus filler posts at the
+ * graph's corner/junction nodes, with the per-frame dollhouse cutaway: a
+ * two-face wall always stubs while orbiting (it always occludes one of its
+ * rooms), a 0/1-face wall stubs only when it faces the camera.
+ */
+function Walls({ solids, posts }: { solids: WallSolid[]; posts: NodePost[] }) {
+  const displays = useMemo<WallDisplay[]>(
+    () => solids.map(() => ({ full: null, stub: null })),
+    [solids],
   );
-  /** Wall index → position in `solids` (zero-length walls are skipped). */
+  /** Solid index → array position, for a post's incident-edge tall-check. */
   const solidPosition = useMemo(
     () => new Map(solids.map((solid, i) => [solid.index, i])),
-    [solids],
-  );
-  /** Which stretch kinds each wall has (drives the tall-post decision). */
-  const stretchKinds = useMemo(
-    () =>
-      solids.map((solid) => {
-        const pieces = wallPieces(solid);
-        return {
-          hasPlain: pieces.some((piece) => !piece.seam),
-          hasSeam: pieces.some((piece) => piece.seam),
-        };
-      }),
-    [solids],
-  );
-  const displays = useMemo<WallDisplay[]>(
-    () =>
-      solids.map(() => ({
-        plainFull: null,
-        plainStub: null,
-        seamFull: null,
-        seamStub: null,
-      })),
     [solids],
   );
   const postFullRefs = useRef<(Mesh | null)[]>([]);
@@ -613,34 +495,27 @@ function Walls({ walls }: { walls: RoomWalls }) {
       const midX = solid.start.x + (solid.dir.x * solid.length) / 2;
       const midZ = solid.start.y + (solid.dir.y * solid.length) / 2;
       const toCamX = camera.position.x - midX;
-      const toCamY = camera.position.y - wallHeight / 2;
+      const toCamY = camera.position.y - solid.height / 2;
       const toCamZ = camera.position.z - midZ;
       const distance = Math.hypot(toCamX, toCamY, toCamZ) || 1;
       const facing =
         (toCamX * solid.outward.x + toCamZ * solid.outward.y) / distance;
-      // Straight-down (plan) views keep every wall full; the cutaway only
-      // applies while orbiting. Plain stretches cut down when they face the
-      // camera; shared (seam) stretches cut down at every orbit — a party
-      // wall always occludes one of its two rooms.
+      // Straight-down (plan) views keep every wall full. Otherwise a two-face
+      // wall always cuts down; a 0/1-face wall cuts down when it faces us.
       const planLike = toCamY / distance > PLAN_UPNESS;
-      const plainFull = planLike || facing < HIDE_FACING_THRESHOLD;
-      const seamFull = planLike;
+      const full =
+        planLike || (solid.faces < 2 && facing < HIDE_FACING_THRESHOLD);
       const display = displays[i];
-      if (display.plainFull) display.plainFull.visible = plainFull;
-      if (display.plainStub) display.plainStub.visible = !plainFull;
-      if (display.seamFull) display.seamFull.visible = seamFull;
-      if (display.seamStub) display.seamStub.visible = !seamFull;
-      tall[i] =
-        (stretchKinds[i].hasPlain && plainFull) ||
-        (stretchKinds[i].hasSeam && seamFull);
+      if (display.full) display.full.visible = full;
+      if (display.stub) display.stub.visible = !full;
+      tall[i] = full;
     }
     for (const [i, post] of posts.entries()) {
-      const a = solidPosition.get(post.walls[0]);
-      const b = solidPosition.get(post.walls[1]);
-      // A post stands full only next to a wall that still stands full;
-      // between two stubs it cuts down with them.
-      const postTall =
-        (a !== undefined && tall[a]) || (b !== undefined && tall[b]);
+      // A post stands full while any wall meeting it still stands full.
+      const postTall = post.edgeIndices.some((index) => {
+        const p = solidPosition.get(index);
+        return p !== undefined && tall[p];
+      });
       const full = postFullRefs.current[i];
       const stub = postStubRefs.current[i];
       if (full) full.visible = postTall;
@@ -651,26 +526,18 @@ function Walls({ walls }: { walls: RoomWalls }) {
   return (
     <group>
       {solids.map((solid, i) => (
-        <WallMesh
-          key={solid.index}
-          solid={solid}
-          wallHeight={wallHeight}
-          display={displays[i]}
-        />
+        <WallMesh key={solid.edgeId} solid={solid} display={displays[i]} />
       ))}
       {posts.map((post, i) => (
-        <group
-          key={`${post.walls[0]}-${post.walls[1]}`}
-          position={[post.center.x, 0, post.center.y]}
-        >
+        <group key={post.nodeId} position={[post.center.x, 0, post.center.y]}>
           <mesh
             ref={(mesh) => {
               postFullRefs.current[i] = mesh;
             }}
-            position-y={wallHeight / 2}
+            position-y={post.height / 2}
             raycast={noRaycast}
           >
-            <boxGeometry args={[WALL_THICKNESS, wallHeight, WALL_THICKNESS]} />
+            <boxGeometry args={[WALL_THICKNESS, post.height, WALL_THICKNESS]} />
             <meshLambertMaterial color={WALL_EDGE_COLOR} />
           </mesh>
           <mesh
@@ -879,17 +746,15 @@ function stackTopsOf(furniture: FurnitureItem[]): Map<string, number> {
   return tops;
 }
 
-/** One room of the floor: platform, cutaway walls, furniture bodies. */
+/** One room of the floor: platform and furniture bodies (walls are floor-
+ * level now — one solid per graph edge, drawn once by `RoomScene`). */
 function RoomLayer({
   room,
-  walls,
   selectedId,
   onSelectItem,
   onDragStart,
 }: {
   room: Room;
-  /** The room's derived wall solids + the neighbor rooms' (from `RoomScene`). */
-  walls: RoomWalls;
   selectedId: string | null;
   onSelectItem: (id: string) => void;
   onDragStart: (
@@ -912,7 +777,6 @@ function RoomLayer({
   return (
     <group>
       <Platform outline={room.outline} />
-      <Walls walls={walls} />
       {room.furniture.map((item) => (
         <FurnitureMesh
           key={item.id}
@@ -929,9 +793,9 @@ function RoomLayer({
 }
 
 export interface RoomSceneProps {
-  /** Every room of the floor, all drawn; "which room" is derived per item. */
-  rooms: Room[];
-  /** The graph floor — wall-mount drags re-anchor to its edges. */
+  /** Every derived room of the floor; walls are built from the graph edges. */
+  rooms: DerivedRoom[];
+  /** The graph floor — walls are one solid per edge; mounts re-anchor to it. */
   floor: Floor;
   selectedId: string | null;
   unit: Unit;
@@ -963,23 +827,10 @@ export function RoomScene({
   // Lights aim at the whole floor's center, so a two-room flat reads as one
   // warmly lit model rather than per-room hotspots.
   const bounds = useMemo(() => floorBounds(rooms), [rooms]);
-  // Shared walls + portal cuts, derived from the outlines every render pass
-  // (never stored): each room draws its half of a party wall and cuts gaps
-  // for the neighbor's doors/windows on it.
-  const seamData = useMemo(() => floorSeamData(rooms), [rooms]);
-  // One wall-solid derivation per room, each bundled with the other rooms'
-  // as neighbors: `Walls` hides the corner posts a flush neighbor's wall
-  // already fills (they'd z-fight on the shared junction).
-  const wallSets = useMemo<RoomWalls[]>(() => {
-    const sets = rooms.map((room) => ({
-      solids: buildWallSolids(room, wallHeightOf(room), seamData.get(room.id)),
-      wallHeight: wallHeightOf(room),
-    }));
-    return sets.map((set, i) => ({
-      ...set,
-      neighbors: sets.filter((_, j) => j !== i),
-    }));
-  }, [rooms, seamData]);
+  // One wall solid per graph edge (dangling walls included), plus filler
+  // posts at the corner/junction nodes — all floor-level now, drawn once.
+  const solids = useMemo(() => buildEdgeSolids(floor, rooms), [floor, rooms]);
+  const posts = useMemo(() => nodePosts(floor, solids), [floor, solids]);
   const center: [number, number, number] = bounds
     ? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
     : [0, 0, 0];
@@ -1012,11 +863,11 @@ export function RoomScene({
         intensity={0.45}
       />
       {bounds && <FloorContactShadow bounds={bounds} />}
-      {rooms.map((room, i) => (
+      <Walls solids={solids} posts={posts} />
+      {rooms.map((room) => (
         <RoomLayer
           key={room.id}
           room={room}
-          walls={wallSets[i]}
           selectedId={selectedId}
           onSelectItem={onSelectItem}
           onDragStart={(item, grabPoint, screen, grabHeight) =>

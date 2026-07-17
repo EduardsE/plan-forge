@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { overlappingFurnitureIds } from "#/lib/collision";
-import { floorPortals } from "#/lib/seams";
-import { deriveFloor } from "./derived";
+import { deriveFloor, portalLabel } from "./derived";
 import { floorArea, outlineBounds, wallLength, wallsOf } from "./geometry";
 import {
   createSampleFloor,
@@ -87,17 +86,14 @@ describe("createSampleFloor", () => {
   });
 
   it("connects the two rooms through the door on the shared edge", () => {
-    const derived = deriveFloor(createSampleFloor());
-    const portals = floorPortals(derived.rooms);
-    const door = portals.find((portal) => portal.openingId === "door-1");
-    expect(door).toBeDefined();
-    expect([door?.roomId, door?.otherRoomId].sort()).toEqual([
-      "kitchen",
-      "living-room",
-    ]);
+    const floor = createSampleFloor();
+    const derived = deriveFloor(floor);
+    const label = portalLabel(derived.rooms, floor, "door-1");
+    expect(label).toBeTruthy();
+    expect(label?.split(" ↔ ").sort()).toEqual(["Kitchen", "Living room"]);
     // The windows sit on exterior edges — no portal.
-    expect(portals.some((p) => p.openingId === "window-1")).toBe(false);
-    expect(portals.some((p) => p.openingId === "kitchen-window-1")).toBe(false);
+    expect(portalLabel(derived.rooms, floor, "window-1")).toBeNull();
+    expect(portalLabel(derived.rooms, floor, "kitchen-window-1")).toBeNull();
   });
 
   it("lands every furniture item inside a room, no overlaps", () => {

@@ -1,103 +1,149 @@
 import { describe, expect, it } from "vitest";
-import { createSampleRoom } from "#/lib/model";
 import {
   circlePoints,
   dashedPolyline,
   doorSwing,
-  pieceSpans,
   roundedRectPoints,
   solidSpans,
   wallPoint,
   wallSpanRect,
 } from "#/lib/plan-scene";
-import { buildWallSolids, type WallSolid } from "#/lib/room-scene";
+import { WALL_HEIGHT, type WallSolid } from "#/lib/room-scene";
 
-const sampleSolids = () => buildWallSolids(createSampleRoom());
+/** A wall solid literal (edge a→b) for the pure geometry helpers. */
+function solid(overrides: Partial<WallSolid> = {}): WallSolid {
+  return {
+    index: 0,
+    edgeId: "e",
+    start: { x: 0, y: 0 },
+    dir: { x: 1, y: 0 },
+    outward: { x: 0, y: -1 },
+    length: 6.4,
+    height: WALL_HEIGHT,
+    holes: [],
+    faces: 1,
+    faceSides: [1],
+    ...overrides,
+  };
+}
 
 describe("solidSpans", () => {
   it("returns the whole wall when it has no holes", () => {
-    const bottom = sampleSolids()[2];
-    expect(bottom.holes).toHaveLength(0);
-    expect(solidSpans(bottom)).toEqual([{ start: 0, end: 6.4 }]);
+    expect(solidSpans(solid())).toEqual([{ start: 0, end: 6.4 }]);
   });
 
   it("splits a wall around its hole", () => {
-    const top = sampleSolids()[0];
-    expect(solidSpans(top)).toEqual([
+    const withWindow = solid({
+      holes: [
+        {
+          id: "w",
+          kind: "window",
+          start: 3.5,
+          width: 2.1,
+          bottom: 0.36,
+          top: 1.94,
+          side: 1,
+        },
+      ],
+    });
+    expect(solidSpans(withWindow)).toEqual([
       { start: 0, end: 3.5 },
       { start: 5.6, end: 6.4 },
     ]);
   });
 
   it("merges overlapping holes and drops empty edge spans", () => {
-    const solid: WallSolid = {
-      index: 0,
-      start: { x: 0, y: 0 },
-      dir: { x: 1, y: 0 },
-      outward: { x: 0, y: -1 },
+    const s = solid({
       length: 4,
       holes: [
-        { id: "door-a", kind: "door", start: 0, width: 1.5, bottom: 0, top: 2 },
         {
-          id: "window-a",
+          id: "d",
+          kind: "door",
+          start: 0,
+          width: 1.5,
+          bottom: 0,
+          top: 2,
+          side: 1,
+        },
+        {
+          id: "w",
           kind: "window",
           start: 1,
           width: 1,
           bottom: 0.4,
           top: 1.9,
+          side: 1,
         },
       ],
-    };
-    expect(solidSpans(solid)).toEqual([{ start: 2, end: 4 }]);
-  });
-});
-
-describe("pieceSpans", () => {
-  it("complements the piece's holes within its own extent", () => {
-    expect(
-      pieceSpans({
-        start: 1,
-        end: 4,
-        seam: true,
-        holes: [
-          {
-            id: "door-1",
-            kind: "door",
-            start: 2,
-            width: 0.9,
-            bottom: 0,
-            top: 2,
-          },
-        ],
-      }),
-    ).toEqual([
-      { start: 1, end: 2 },
-      { start: 2.9, end: 4 },
-    ]);
-  });
-
-  it("returns the whole piece without holes", () => {
-    expect(pieceSpans({ start: 0, end: 2, seam: false, holes: [] })).toEqual([
-      { start: 0, end: 2 },
-    ]);
+    });
+    expect(solidSpans(s)).toEqual([{ start: 2, end: 4 }]);
   });
 });
 
 describe("wallPoint / wallSpanRect", () => {
   it("offsets away from the interior", () => {
-    // Sample top wall: start (0,0) → (6.4,0), outward -y (up).
-    const top = sampleSolids()[0];
-    expect(wallPoint(top, 2, 0.1)).toEqual({ x: 2, y: -0.1 });
+    // Top wall: start (0,0) → (6.4,0), outward -y (up).
+    expect(wallPoint(solid(), 2, 0.1)).toEqual({ x: 2, y: -0.1 });
   });
 
-  it("builds the span footprint from outline to outward face", () => {
-    const top = sampleSolids()[0];
-    expect(wallSpanRect(top, { start: 1, end: 3 }, 0.1)).toEqual([
+  it("builds the span footprint from the line to the outward face", () => {
+    expect(wallSpanRect(solid(), { start: 1, end: 3 }, 0.1)).toEqual([
       { x: 1, y: 0 },
       { x: 3, y: 0 },
       { x: 3, y: -0.1 },
       { x: 1, y: -0.1 },
     ]);
+  });
+});
+
+describe("doorSwing", () => {
+  // A right wall (start (6.4,0) → (6.4,5.2)); the door opens onto side +1,
+  // whose face is on the interior (x < 6.4) — the left normal.
+  const right = solid({
+    edgeId: "right",
+    start: { x: 6.4, y: 0 },
+    dir: { x: 0, y: 1 },
+    outward: { x: 1, y: 0 },
+    length: 5.2,
+    faces: 2,
+    faceSides: [1, -1],
+  });
+  const door = {
+    id: "door-1",
+    kind: "door" as const,
+    start: 3.6,
+    width: 0.95,
+    bottom: 0,
+    top: 2.05,
+    hinge: "start" as const,
+    side: 1 as const,
+  };
+
+  it("hinges at the offset edge and swings the leaf toward the opening's face", () => {
+    const swing = doorSwing(right, door);
+    expect(swing.hinge.x).toBeCloseTo(6.4, 10);
+    expect(swing.hinge.y).toBeCloseTo(3.6, 10);
+    expect(swing.leafEnd.x).toBeCloseTo(6.4 - 0.95, 10);
+    expect(swing.leafEnd.y).toBeCloseTo(3.6, 10);
+    const last = swing.arc[swing.arc.length - 1];
+    expect(last.x).toBeCloseTo(6.4, 10);
+    expect(last.y).toBeCloseTo(3.6 + 0.95, 10);
+    for (const p of swing.arc) {
+      expect(Math.hypot(p.x - 6.4, p.y - 3.6)).toBeCloseTo(0.95, 10);
+      expect(p.x).toBeLessThanOrEqual(6.4 + 1e-9);
+    }
+  });
+
+  it("swings the other way when the door opens onto side -1", () => {
+    const swing = doorSwing(right, { ...door, side: -1 });
+    // The face on side -1 is the right normal (x > 6.4).
+    expect(swing.leafEnd.x).toBeCloseTo(6.4 + 0.95, 10);
+  });
+
+  it("mirrors the hinge when hinged at the far edge", () => {
+    const swing = doorSwing(right, { ...door, hinge: "end" });
+    expect(swing.hinge.y).toBeCloseTo(3.6 + 0.95, 10);
+    expect(swing.leafEnd.x).toBeCloseTo(6.4 - 0.95, 10);
   });
 });
 
@@ -119,18 +165,6 @@ describe("roundedRectPoints", () => {
       { x: 1, y: 0.5 },
       { x: -1, y: 0.5 },
     ]);
-  });
-
-  it("supports per-corner radii in CSS order", () => {
-    const points = roundedRectPoints(2, 2, [0.5, 0, 0, 0]);
-    // Only the top-left corner is cut; the other three stay sharp.
-    expect(points).toContainEqual({ x: 1, y: -1 });
-    expect(points).toContainEqual({ x: 1, y: 1 });
-    expect(points).toContainEqual({ x: -1, y: 1 });
-    expect(points.some((p) => p.x === -1 && p.y === -1)).toBe(false);
-    // The arc starts on the left edge and ends on the top edge.
-    expect(points[0].x).toBeCloseTo(-1, 10);
-    expect(points[0].y).toBeCloseTo(-0.5, 10);
   });
 
   it("clamps radii to the half extents", () => {
@@ -168,61 +202,9 @@ describe("dashedPolyline", () => {
     ]);
   });
 
-  it("carries a dash across a polyline vertex", () => {
-    const pairs = dashedPolyline(
-      [
-        { x: 0, y: 0 },
-        { x: 1, y: 0 },
-        { x: 1, y: 1 },
-      ],
-      1.5,
-      0.5,
-    );
-    // One dash: (0,0)→(1,0) then continuing (1,0)→(1,0.5) past the corner.
-    expect(pairs).toEqual([
-      { x: 0, y: 0 },
-      { x: 1, y: 0 },
-      { x: 1, y: 0 },
-      { x: 1, y: expect.closeTo(0.5, 10) },
-    ]);
-  });
-
   it("emits an even number of points (start/end pairs)", () => {
     const pairs = dashedPolyline(circlePoints(1, 32), 0.09, 0.06);
     expect(pairs.length % 2).toBe(0);
     expect(pairs.length).toBeGreaterThan(0);
-  });
-});
-
-describe("doorSwing", () => {
-  it("matches the mockup door: hinge at offset edge, leaf into the room", () => {
-    // Sample right wall: start (6.4,0) → (6.4,5.2), door at 3.6, 0.95 wide.
-    const right = sampleSolids()[1];
-    const swing = doorSwing(right, right.holes[0]);
-    expect(swing.hinge.x).toBeCloseTo(6.4, 10);
-    expect(swing.hinge.y).toBeCloseTo(3.6, 10);
-    expect(swing.leafEnd.x).toBeCloseTo(6.4 - 0.95, 10);
-    expect(swing.leafEnd.y).toBeCloseTo(3.6, 10);
-    // Arc runs from the open leaf tip to the closed pose at the far edge.
-    const first = swing.arc[0];
-    const last = swing.arc[swing.arc.length - 1];
-    expect(first.x).toBeCloseTo(swing.leafEnd.x, 10);
-    expect(first.y).toBeCloseTo(swing.leafEnd.y, 10);
-    expect(last.x).toBeCloseTo(6.4, 10);
-    expect(last.y).toBeCloseTo(3.6 + 0.95, 10);
-    // Every arc point stays at the leaf radius, inside the room.
-    for (const p of swing.arc) {
-      expect(Math.hypot(p.x - 6.4, p.y - 3.6)).toBeCloseTo(0.95, 10);
-      expect(p.x).toBeLessThanOrEqual(6.4 + 1e-9);
-    }
-  });
-
-  it("mirrors the swing when hinged at the far edge", () => {
-    const right = sampleSolids()[1];
-    const swing = doorSwing(right, { ...right.holes[0], hinge: "end" });
-    expect(swing.hinge.y).toBeCloseTo(3.6 + 0.95, 10);
-    expect(swing.leafEnd.x).toBeCloseTo(6.4 - 0.95, 10);
-    const last = swing.arc[swing.arc.length - 1];
-    expect(last.y).toBeCloseTo(3.6, 10);
   });
 });

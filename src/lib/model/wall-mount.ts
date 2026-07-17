@@ -48,7 +48,7 @@ function signedDoubleArea(outline: Point[]): number {
 
 /**
  * The wall frames of a closed outline, indexed by wall index. Mirrors the
- * outward-normal derivation in `buildWallSolids` (interior on the wall's left
+ * outward-normal derivation in `room-scene.ts` (interior on the wall's left
  * for the sample's winding). Degenerate outlines (< 3 corners) yield no frames.
  */
 export function wallFrames(outline: Point[]): MountFrame[] {

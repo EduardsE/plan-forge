@@ -39,32 +39,33 @@ import {
   wrapAngle,
 } from "#/lib/camera";
 import {
+  addFloorOpening,
   addFurniture,
-  addOpening,
   type Bounds,
   type CatalogItem,
+  type DerivedRoom,
   type Floor,
   type FurnitureUpdate,
-  flipDoorHinge,
+  flipFloorOpeningHinge,
+  flipFloorOpeningSide,
   floorBounds,
   isOpeningItem,
   isWallItem,
-  moveOpening,
+  moveFloorOpening,
+  type Opening,
   type OpeningKind,
   type Point,
   type Room,
-  type RoomOpening,
-  removeOpening,
+  removeFloorOpening,
+  resizeFloorOpening,
   roomAtPoint,
   roomById,
   roomOfFurniture,
-  roomOfOpening,
   type Stack,
   updateFurniture,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
-import { type OpeningPlacement, resizeOpening } from "#/lib/opening-place";
-import { floorPortals } from "#/lib/seams";
+import type { OpeningPlacement } from "#/lib/opening-place";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -564,11 +565,15 @@ export interface PlannerCanvasProps {
   floor: Floor;
   /** The floor's derived rooms — scenes render these; "which room" for an
    * edit resolves from them. */
-  rooms: Room[];
+  rooms: DerivedRoom[];
   /** A discrete mutation of one room — one undo step in the floor history. */
   onRoomChange: (roomId: string, room: Room) => void;
   /** A mid-drag state: applied live but not a history step of its own. */
   onRoomPreview: (roomId: string, room: Room) => void;
+  /** A discrete whole-floor mutation (opening edits) — one undo step. */
+  onFloorChange: (floor: Floor) => void;
+  /** A mid-drag whole-floor state (opening slide) — not its own step. */
+  onFloorPreview: (floor: Floor) => void;
   /** A room drag began/ended (however) — the route settles the previews
    * into one step on end, and stands its keyboard editing down meanwhile. */
   onRoomDragActiveChange: (active: boolean) => void;
@@ -612,6 +617,8 @@ export function PlannerCanvas({
   rooms,
   onRoomChange,
   onRoomPreview,
+  onFloorChange,
+  onFloorPreview,
   onRoomDragActiveChange,
   viewMode,
   selectedId,
@@ -698,74 +705,53 @@ export function PlannerCanvas({
     [rooms, onRoomPreview],
   );
 
-  // A door/window card released on a wall (the ghost resolved which room's
-  // wall and the clamped offset).
+  // A door/window card released on a wall (the ghost resolved the host edge,
+  // the clamped edge-local offset, and which face it opens onto).
   const placeOpeningItem = useCallback(
     (kind: OpeningKind, placement: OpeningPlacement) => {
-      const owner = roomById(rooms, placement.roomId);
-      if (!owner) return;
-      const opening: RoomOpening = {
+      const opening: Opening = {
         id: crypto.randomUUID(),
         kind,
-        wallIndex: placement.wallIndex,
+        edgeId: placement.edgeId,
         offset: placement.offset,
         width: placement.width,
+        side: placement.side,
       };
       if (kind === "door") opening.hinge = "start";
-      onRoomChange(owner.id, addOpening(owner, opening));
+      onFloorChange(addFloorOpening(floor, opening));
       // Selection follows the insert (like a drop), ready to drag/adjust.
       selectOpening(opening.id);
       onPlacingEnd();
     },
-    [rooms, onRoomChange, selectOpening, onPlacingEnd],
+    [floor, onFloorChange, selectOpening, onPlacingEnd],
   );
   const moveOpeningTo = useCallback(
-    // Streams per pointermove during an opening slide, like moveItem.
-    (id: string, offset: number) => {
-      const owner = roomOfOpening(rooms, id);
-      if (owner) onRoomPreview(owner.id, moveOpening(owner, id, offset));
-    },
-    [rooms, onRoomPreview],
+    // Streams per pointermove during an opening slide (edge coordinates).
+    (id: string, offset: number) =>
+      onFloorPreview(moveFloorOpening(floor, id, offset)),
+    [floor, onFloorPreview],
   );
   const flipHinge = useCallback(
-    (id: string) => {
-      const owner = roomOfOpening(rooms, id);
-      if (owner) onRoomChange(owner.id, flipDoorHinge(owner, id));
-    },
-    [rooms, onRoomChange],
+    (id: string) => onFloorChange(flipFloorOpeningHinge(floor, id)),
+    [floor, onFloorChange],
+  );
+  const flipSide = useCallback(
+    (id: string) => onFloorChange(flipFloorOpeningSide(floor, id)),
+    [floor, onFloorChange],
   );
   const resizeOpeningTo = useCallback(
-    // A committed width from the opening chip's field; `resizeOpening` owns
-    // the clamping and returns the same room for no-ops (no empty undo step).
-    // On a shared wall, the neighbor room's portal holes there block growth
-    // exactly like this room's own openings.
-    (id: string, width: number) => {
-      const owner = roomOfOpening(rooms, id);
-      if (!owner) return;
-      const opening = owner.openings.find((entry) => entry.id === id);
-      if (!opening) return;
-      const blocked = floorPortals(rooms)
-        .filter(
-          (portal) =>
-            portal.otherRoomId === owner.id &&
-            portal.otherWallIndex === opening.wallIndex,
-        )
-        .map((portal) => ({
-          start: portal.otherOffset,
-          width: portal.otherWidth,
-        }));
-      const next = resizeOpening(owner, id, width, blocked);
-      if (next !== owner) onRoomChange(owner.id, next);
-    },
-    [rooms, onRoomChange],
+    // A committed width from the chip's field; `resizeFloorOpening` owns the
+    // clamping (clear of the edge's other openings) and no-ops by reference.
+    (id: string, width: number) =>
+      onFloorChange(resizeFloorOpening(floor, id, width)),
+    [floor, onFloorChange],
   );
   const deleteOpening = useCallback(
     (id: string) => {
-      const owner = roomOfOpening(rooms, id);
-      if (owner) onRoomChange(owner.id, removeOpening(owner, id));
+      onFloorChange(removeFloorOpening(floor, id));
       setSelectedOpeningId(null);
     },
-    [rooms, onRoomChange, setSelectedOpeningId],
+    [floor, onFloorChange, setSelectedOpeningId],
   );
 
   // A placement drag takes over the scene; a leftover selection chip would
@@ -939,6 +925,7 @@ export function PlannerCanvas({
               onSelectOpening={selectOpening}
               onMoveOpening={moveOpeningTo}
               onFlipDoorHinge={flipHinge}
+              onFlipOpeningSide={flipSide}
               onDeleteOpening={deleteOpening}
               onResizeOpening={resizeOpeningTo}
             />
@@ -962,6 +949,7 @@ export function PlannerCanvas({
           placingItem &&
           (isOpeningItem(placingItem.id) ? (
             <OpeningGhost
+              floor={floor}
               rooms={rooms}
               item={placingItem}
               unit={unit}

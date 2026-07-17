@@ -1,5 +1,5 @@
 import type { Point } from "#/lib/model";
-import type { WallHole, WallPiece, WallSolid } from "#/lib/room-scene";
+import type { WallHole, WallSolid } from "#/lib/room-scene";
 
 /**
  * Pure geometry for the 2D plan lens: turns wall solids and footprints into
@@ -43,11 +43,6 @@ function complementSpans(
  */
 export function solidSpans(solid: WallSolid): Span[] {
   return complementSpans(solid.holes, 0, solid.length);
-}
-
-/** The solid-masonry stretches of one constant-thickness wall piece. */
-export function pieceSpans(piece: WallPiece): Span[] {
-  return complementSpans(piece.holes, piece.start, piece.end);
 }
 
 /**
@@ -193,7 +188,9 @@ export interface DoorSwing {
 
 /**
  * Swing geometry for a door hole, hinged per `hole.hinge` (default
- * `"start"`), drawn open at 90° into the room interior.
+ * `"start"`), drawn open at 90° toward the face the door opens onto
+ * (`hole.side`) — a portal door swings into the room it belongs to, not
+ * whichever way the one solid's `outward` happens to point.
  */
 export function doorSwing(
   solid: WallSolid,
@@ -207,7 +204,12 @@ export function doorSwing(
     0,
   );
   const radius = hole.width;
-  const interior = { x: -solid.outward.x, y: -solid.outward.y };
+  // The normal toward `hole.side`'s face: +1 is the left normal
+  // (`sideOfPoint`-positive), -1 the right normal.
+  const interior =
+    hole.side === 1
+      ? { x: -solid.dir.y, y: solid.dir.x }
+      : { x: solid.dir.y, y: -solid.dir.x };
   const towardFar = hingeAtStart
     ? solid.dir
     : { x: -solid.dir.x, y: -solid.dir.y };

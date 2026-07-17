@@ -47,6 +47,7 @@ import {
   type Footprint,
   floorBounds,
   type Point,
+  portalLabel,
   type Room,
   reconcileFloor,
   removeFurniture,
@@ -67,7 +68,6 @@ import {
   serializeSavedState,
 } from "#/lib/persistence";
 import { PLACEMENT_GRID } from "#/lib/place";
-import { floorPortals, portalLabel } from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -131,12 +131,20 @@ function Planner() {
   // The first derived room anchors the header breadcrumb; everything
   // selection-shaped resolves its owning room from the item id instead.
   const room = derived.rooms[0] as Room | undefined;
-  // Whole-floor commits ("New room" and — post-G5 — draw mode's edits).
+  // Whole-floor commits ("New room", draw mode's edits, opening edits). One
+  // undo step; a same-reference no-op lands nowhere.
   const setFloor = useCallback((next: Floor) => {
     setFloorHistory((history) =>
       next === history.current ? history : commitHistory(history, next),
     );
   }, []);
+  // A mid-drag whole-floor state (an opening slide): a preview like a
+  // furniture drag's, folded into one step when the drag settles.
+  const previewFloor = useCallback(
+    (next: Floor) =>
+      setFloorHistory((history) => previewHistory(history, next)),
+    [],
+  );
   // One derived room's discrete mutation, addressed by id — one undo step.
   // `updateDerivedRoom` runs the edit back through the graph and keeps the
   // pure setters' no-op contract at floor level (a same-reference room yields
@@ -202,21 +210,12 @@ function Planner() {
   );
   const portalStatus = useMemo(() => {
     if (!selectedOpeningId || viewMode !== "2d") return null;
-    const owner = derived.rooms.find((entry) =>
-      entry.openings.some((opening) => opening.id === selectedOpeningId),
-    );
-    const opening = owner?.openings.find(
-      (entry) => entry.id === selectedOpeningId,
-    );
+    const opening = floor.openings.find((o) => o.id === selectedOpeningId);
     if (!opening) return null;
-    const label = portalLabel(
-      derived.rooms,
-      floorPortals(derived.rooms),
-      selectedOpeningId,
-    );
+    const label = portalLabel(derived.rooms, floor, selectedOpeningId);
     if (!label) return null;
     return `${opening.kind === "door" ? "Door" : "Window"} connects ${label}`;
-  }, [selectedOpeningId, viewMode, derived]);
+  }, [selectedOpeningId, viewMode, derived, floor]);
   // One commit against the room owning `itemId`, resolved inside the
   // functional update so bursts never work from a stale floor. One history
   // step per commit; same-reference no-ops land nowhere.
@@ -788,6 +787,8 @@ function Planner() {
               rooms={derived.rooms}
               onRoomChange={commitRoom}
               onRoomPreview={previewRoom}
+              onFloorChange={setFloor}
+              onFloorPreview={previewFloor}
               onRoomDragActiveChange={handleRoomDragActive}
               viewMode={viewMode}
               selectedId={selectedId}

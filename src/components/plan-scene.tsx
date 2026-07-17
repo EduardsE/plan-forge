@@ -20,6 +20,7 @@ import { RotateHandle } from "#/components/rotate-handle";
 import { SelectionChip } from "#/components/selection-chip";
 import { overlappingFurnitureIds } from "#/lib/collision";
 import type {
+  DerivedRoom,
   Floor,
   FurnitureItem,
   FurnitureUpdate,
@@ -32,34 +33,26 @@ import {
   floorBounds,
   furnitureDisplayName,
   outlineBounds,
+  portalLabel,
 } from "#/lib/model";
 import { rotatedFootprintSize } from "#/lib/place";
 import {
   circlePoints,
   dashedPolyline,
   doorSwing,
-  pieceSpans,
   roundedRectPoints,
+  solidSpans,
   wallPoint,
-  wallSpanRect,
 } from "#/lib/plan-scene";
 import {
-  buildWallSolids,
-  cornerPosts,
-  holeSeamGap,
-  portalThresholds,
+  buildEdgeSolids,
+  type NodePost,
+  nodePosts,
+  type Span,
   WALL_THICKNESS,
   type WallHole,
   type WallSolid,
-  wallPieces,
 } from "#/lib/room-scene";
-import {
-  floorPortals,
-  floorSeamData,
-  floorSeams,
-  portalLabel,
-  type RoomSeamData,
-} from "#/lib/seams";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -195,6 +188,18 @@ function shapeFromPoints(points: Point[]): Shape {
   return shape;
 }
 
+/** The plan footprint of a wall span: a rect straddling the edge line
+ * (± half thickness), as 4 corners in plan coordinates. */
+function bandRect(solid: WallSolid, span: Span): [Point, Point, Point, Point] {
+  const half = WALL_THICKNESS / 2;
+  return [
+    wallPoint(solid, span.start, -half),
+    wallPoint(solid, span.end, -half),
+    wallPoint(solid, span.end, half),
+    wallPoint(solid, span.start, half),
+  ];
+}
+
 /** A mesh lying flat on the floor built from plan-coordinate shapes. */
 function FlatShape({
   shapes,
@@ -305,25 +310,15 @@ function PlanShadow({
   );
 }
 
-/** Window symbol: white break in the wall crossed by three parallel lines.
- * `base` shifts the symbol across the wall — 0 spans the wall band outward
- * of the outline (exterior walls); on a shared wall `(gap - t) / 2` centers
- * it on the assembly (flush: straddling the outline line; back-to-back:
- * the slab between the two lines). */
-function WindowSymbol({
-  solid,
-  hole,
-  base = 0,
-}: {
-  solid: WallSolid;
-  hole: WallHole;
-  base?: number;
-}) {
+/** Window symbol: three parallel lines crossing the wall band, centered on
+ * the edge line (the wall now straddles it ± half thickness). */
+function WindowSymbol({ solid, hole }: { solid: WallSolid; hole: WallHole }) {
   const inset = 0.02;
+  const half = WALL_THICKNESS / 2;
   const lines: Array<{ offset: number; width: number }> = [
-    { offset: base + inset, width: 3 },
-    { offset: base + WALL_THICKNESS / 2, width: 2 },
-    { offset: base + WALL_THICKNESS - inset, width: 3 },
+    { offset: -half + inset, width: 3 },
+    { offset: 0, width: 2 },
+    { offset: half - inset, width: 3 },
   ];
   return (
     <group>
@@ -370,57 +365,38 @@ function DoorSymbol({ solid, hole }: { solid: WallSolid; hole: WallHole }) {
 }
 
 /** One wall's openings: the white break in the navy fill, then the symbol.
- * On shared stretches there is no break — the gap shows the neighbor's floor
- * running through the portal (plus a painted threshold where a back-to-back
- * seam leaves a bare strip between the two floors) — and phantom holes (a
- * neighbor's portal cuts) draw no symbol either: the owning side has it. */
+ * A break paints over the plan's drop shadow behind an exterior wall's band;
+ * a two-face (shared) wall has no break — the doorway shows the neighbor's
+ * floor running through the portal. There is one solid per edge, so both
+ * rooms' openings are here and each draws exactly once. */
 function WallOpenings({ solid }: { solid: WallSolid }) {
-  // Breaks paint over whatever sits under the wall band beyond the outline
-  // (the plan's drop shadow); clipped per piece so a hole straddling a seam
-  // boundary breaks only where this room's wall is full thickness.
   const breakShapes = useMemo(
     () =>
-      wallPieces(solid)
-        .filter((piece) => !piece.seam)
-        .flatMap((piece) =>
-          piece.holes.map((hole) =>
+      solid.faces < 2
+        ? solid.holes.map((hole) =>
             shapeFromPoints(
-              wallSpanRect(
-                solid,
-                { start: hole.start, end: hole.start + hole.width },
-                WALL_THICKNESS,
-              ),
+              bandRect(solid, {
+                start: hole.start,
+                end: hole.start + hole.width,
+              }),
             ),
-          ),
-        )
-        .concat(
-          portalThresholds(solid).map((threshold) =>
-            shapeFromPoints(wallSpanRect(solid, threshold, threshold.gap)),
-          ),
-        ),
+          )
+        : [],
     [solid],
   );
-  const symbolHoles = solid.holes.filter((hole) => !hole.phantom);
   if (solid.holes.length === 0) return null;
   return (
     <group>
       {breakShapes.length > 0 && (
         <FlatShape shapes={breakShapes} y={OPENING_Y} color={FLOOR_COLOR} />
       )}
-      {symbolHoles.map((hole) => {
-        if (hole.kind !== "window") {
-          return <DoorSymbol key={hole.start} solid={solid} hole={hole} />;
-        }
-        const gap = holeSeamGap(solid, hole);
-        return (
-          <WindowSymbol
-            key={hole.start}
-            solid={solid}
-            hole={hole}
-            base={gap === null ? 0 : (gap - WALL_THICKNESS) / 2}
-          />
-        );
-      })}
+      {solid.holes.map((hole) =>
+        hole.kind !== "window" ? (
+          <DoorSymbol key={hole.id} solid={solid} hole={hole} />
+        ) : (
+          <WindowSymbol key={hole.id} solid={solid} hole={hole} />
+        ),
+      )}
     </group>
   );
 }
@@ -726,88 +702,25 @@ function DimensionLine({
   );
 }
 
-export interface PlanRoomLayerProps {
-  room: Room;
-  /** The room's shared-wall data (portal cuts + half-thickness seams). */
-  seamData?: RoomSeamData;
-  /** "Living ↔ Kitchen" per portal opening id, for the selection chip. */
-  portalLabels?: Map<string, string>;
-  /** Floor-wide furniture selection; only this room's items can match. */
-  selectedId?: string | null;
-  unit: Unit;
-  /**
-   * Interactive rendering (the 2D lens): pickable footprints and the
-   * opening pick strips/tools. Off for draw-mode context rooms, where the
-   * layer is a static backdrop under the draft being edited.
-   */
-  interactive?: boolean;
-  selectedOpeningId?: string | null;
-  onSelectItem?: (id: string) => void;
-  onDragStart?: (
-    item: FurnitureItem,
-    floorPoint: Point,
-    screen: { x: number; y: number },
-  ) => void;
-  onSelectOpening?: (id: string) => void;
-  onMoveOpening?: (id: string, offset: number) => void;
-  onFlipDoorHinge?: (id: string) => void;
-  onDeleteOpening?: (id: string) => void;
-  onResizeOpening?: (id: string, width: number) => void;
-  onDragActiveChange?: (active: boolean) => void;
-}
-
 /**
- * One room of the floor as an architectural drawing: shadow, floor sheet,
- * wall fills, opening symbols, furniture footprints, and the room's area
- * card. The floor-level concerns — selection chip, rotate handle, the move
- * drag session, whole-floor dimension lines — live in `PlanScene`.
+ * Every wall of the floor as architectural fill (one navy rect per solid
+ * span, straddling the edge line), the filler posts at the graph's junction
+ * nodes, and each wall's opening symbols. Floor-level, since a shared wall
+ * belongs to two rooms — drawn once by `PlanScene`.
  */
-export function PlanRoomLayer({
-  room,
-  seamData,
-  portalLabels,
-  selectedId = null,
-  unit,
-  interactive = false,
-  selectedOpeningId = null,
-  onSelectItem,
-  onDragStart,
-  onSelectOpening,
-  onMoveOpening,
-  onFlipDoorHinge,
-  onDeleteOpening,
-  onResizeOpening,
-  onDragActiveChange,
-}: PlanRoomLayerProps) {
-  const solids = useMemo(
-    () => buildWallSolids(room, undefined, seamData),
-    [room, seamData],
-  );
-  const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
-  const area = useMemo(() => floorArea(room.outline), [room.outline]);
-  const floorShape = useMemo(
-    () => (room.outline.length >= 3 ? shapeFromPoints(room.outline) : null),
-    [room.outline],
-  );
+function WallLayer({
+  solids,
+  posts,
+}: {
+  solids: WallSolid[];
+  posts: NodePost[];
+}) {
   const wallShapes = useMemo(() => {
-    // Per constant-thickness piece: shared stretches fill at half thickness
-    // (the neighbor fills its half on the other side of the line, so the
-    // party wall reads as one wall, not two).
     const shapes = solids.flatMap((solid) =>
-      wallPieces(solid).flatMap((piece) =>
-        pieceSpans(piece).map((span) =>
-          shapeFromPoints(
-            wallSpanRect(
-              solid,
-              span,
-              piece.seam ? WALL_THICKNESS / 2 : WALL_THICKNESS,
-            ),
-          ),
-        ),
-      ),
+      solidSpans(solid).map((span) => shapeFromPoints(bandRect(solid, span))),
     );
     const half = WALL_THICKNESS / 2;
-    for (const post of cornerPosts(solids)) {
+    for (const post of posts) {
       shapes.push(
         shapeFromPoints([
           { x: post.center.x - half, y: post.center.y - half },
@@ -818,7 +731,52 @@ export function PlanRoomLayer({
       );
     }
     return shapes;
-  }, [solids]);
+  }, [solids, posts]);
+  return (
+    <group>
+      {wallShapes.length > 0 && (
+        <FlatShape shapes={wallShapes} y={WALL_Y} color={WALL_COLOR} />
+      )}
+      {solids.map((solid) => (
+        <WallOpenings key={solid.edgeId} solid={solid} />
+      ))}
+    </group>
+  );
+}
+
+export interface PlanRoomLayerProps {
+  room: Room;
+  /** Floor-wide furniture selection; only this room's items can match. */
+  selectedId?: string | null;
+  /** Interactive rendering (the 2D lens): pickable footprints. */
+  interactive?: boolean;
+  onSelectItem?: (id: string) => void;
+  onDragStart?: (
+    item: FurnitureItem,
+    floorPoint: Point,
+    screen: { x: number; y: number },
+  ) => void;
+}
+
+/**
+ * One room of the floor as an architectural drawing: shadow, floor sheet,
+ * furniture footprints, and the room's area card. Walls, opening symbols and
+ * the floor-level concerns (selection chip, rotate handle, move-drag session,
+ * dimension lines, opening tools) live in `PlanScene`.
+ */
+export function PlanRoomLayer({
+  room,
+  selectedId = null,
+  interactive = false,
+  onSelectItem,
+  onDragStart,
+}: PlanRoomLayerProps) {
+  const bounds = useMemo(() => outlineBounds(room.outline), [room.outline]);
+  const area = useMemo(() => floorArea(room.outline), [room.outline]);
+  const floorShape = useMemo(
+    () => (room.outline.length >= 3 ? shapeFromPoints(room.outline) : null),
+    [room.outline],
+  );
   // Overlap warnings are a per-room concern: furniture belongs to exactly
   // one room, and containment keeps footprints inside it — items in
   // different rooms can't overlap.
@@ -835,26 +793,6 @@ export function PlanRoomLayer({
         <shapeGeometry args={[floorShape]} />
         <meshBasicMaterial map={floorTexture()} />
       </mesh>
-      {wallShapes.length > 0 && (
-        <FlatShape shapes={wallShapes} y={WALL_Y} color={WALL_COLOR} />
-      )}
-      {solids.map((solid) => (
-        <WallOpenings key={solid.index} solid={solid} />
-      ))}
-      {interactive && (
-        <PlanOpenings
-          solids={solids}
-          selectedId={selectedOpeningId}
-          portalLabels={portalLabels}
-          unit={unit}
-          onSelect={onSelectOpening ?? (() => {})}
-          onMove={onMoveOpening ?? (() => {})}
-          onFlipHinge={onFlipDoorHinge ?? (() => {})}
-          onDelete={onDeleteOpening ?? (() => {})}
-          onResize={onResizeOpening ?? (() => {})}
-          onDragActiveChange={onDragActiveChange ?? (() => {})}
-        />
-      )}
       {room.furniture.map((item) => {
         const footprint = (active: boolean) =>
           catalogItemById(item.catalogId)?.category === "plants" ? (
@@ -911,9 +849,9 @@ export function PlanRoomLayer({
 }
 
 export interface PlanSceneProps {
-  /** Every room of the floor, all drawn; "which room" is derived per item. */
-  rooms: Room[];
-  /** The graph floor — wall-mount drags re-anchor to its edges. */
+  /** Every derived room of the floor; walls are built from the graph edges. */
+  rooms: DerivedRoom[];
+  /** The graph floor — walls are one solid per edge; mounts re-anchor to it. */
   floor: Floor;
   selectedId: string | null;
   /** Selected opening id — never set together with `selectedId`. */
@@ -936,6 +874,8 @@ export interface PlanSceneProps {
   /** Live re-offset during an opening drag (already snapped). */
   onMoveOpening: (id: string, offset: number) => void;
   onFlipDoorHinge: (id: string) => void;
+  /** Flip which room a portal door opens into (edges with two faces only). */
+  onFlipOpeningSide: (id: string) => void;
   onDeleteOpening: (id: string) => void;
   /** A committed width from the opening chip's field. */
   onResizeOpening: (id: string, width: number) => void;
@@ -954,26 +894,26 @@ export function PlanScene({
   onSelectOpening,
   onMoveOpening,
   onFlipDoorHinge,
+  onFlipOpeningSide,
   onDeleteOpening,
   onResizeOpening,
 }: PlanSceneProps) {
   const bounds = useMemo(() => floorBounds(rooms), [rooms]);
-  // Shared walls + portals, derived from the outlines every render pass
-  // (never stored): each room fills its half of a party wall, cuts gaps for
-  // the neighbor's openings on it, and the chip labels the connection.
-  const { seamData, portalLabels } = useMemo(() => {
-    const seams = floorSeams(rooms);
-    const portals = floorPortals(rooms, seams);
-    return {
-      seamData: floorSeamData(rooms, seams, portals),
-      portalLabels: new Map(
-        portals.map((portal) => [
-          portal.openingId,
-          portalLabel(rooms, portals, portal.openingId) ?? "",
+  // One wall solid per graph edge + filler posts at the junction nodes, drawn
+  // once (a shared wall belongs to two rooms). Portal labels come from the
+  // graph's edge face-adjacency.
+  const solids = useMemo(() => buildEdgeSolids(floor, rooms), [floor, rooms]);
+  const posts = useMemo(() => nodePosts(floor, solids), [floor, solids]);
+  const portalLabels = useMemo(
+    () =>
+      new Map(
+        floor.openings.map((opening) => [
+          opening.id,
+          portalLabel(rooms, floor, opening.id) ?? "",
         ]),
       ),
-    };
-  }, [rooms]);
+    [rooms, floor],
+  );
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
   // The owning room is derived from the item id — selection and drags are
@@ -994,24 +934,28 @@ export function PlanScene({
         <PlanRoomLayer
           key={room.id}
           room={room}
-          seamData={seamData.get(room.id)}
-          portalLabels={portalLabels}
           selectedId={selectedId}
-          unit={unit}
           interactive
-          selectedOpeningId={selectedOpeningId}
           onSelectItem={onSelectItem}
           onDragStart={(item, floorPoint, screen) =>
             beginDrag(item, room.id, floorPoint, screen)
           }
-          onSelectOpening={onSelectOpening}
-          onMoveOpening={onMoveOpening}
-          onFlipDoorHinge={onFlipDoorHinge}
-          onDeleteOpening={onDeleteOpening}
-          onResizeOpening={onResizeOpening}
-          onDragActiveChange={onMoveActiveChange}
         />
       ))}
+      <WallLayer solids={solids} posts={posts} />
+      <PlanOpenings
+        solids={solids}
+        selectedId={selectedOpeningId}
+        portalLabels={portalLabels}
+        unit={unit}
+        onSelect={onSelectOpening}
+        onMove={onMoveOpening}
+        onFlipHinge={onFlipDoorHinge}
+        onFlipSide={onFlipOpeningSide}
+        onDelete={onDeleteOpening}
+        onResize={onResizeOpening}
+        onDragActiveChange={onMoveActiveChange}
+      />
       {selectedItem && selectedRoom && !selectedItem.mount && !drag && (
         <RotateHandle
           item={selectedItem}

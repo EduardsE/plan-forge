@@ -1,6 +1,6 @@
 import { Html, Line, useCursor } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import { ArrowLeftRight, Trash2 } from "lucide-react";
+import { ArrowLeftRight, DoorOpen, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Shape } from "three";
 import {
@@ -260,14 +260,17 @@ function ChipWidthField({
   );
 }
 
-/** The selected opening's chip: flip hinge (doors), delete, editable width.
- * A portal opening also names the connection it makes ("Living ↔ Kitchen"). */
+/** The selected opening's chip: flip hinge (doors), flip which room a portal
+ * opens into (two-face walls only), delete, editable width. A portal opening
+ * also names the connection it makes ("Living ↔ Kitchen"). */
 function OpeningChip({
   solid,
   hole,
   connects,
+  showSideFlip,
   unit,
   onFlipHinge,
+  onFlipSide,
   onDelete,
   onResize,
 }: {
@@ -275,8 +278,11 @@ function OpeningChip({
   hole: WallHole;
   /** Derived portal label ("Living ↔ Kitchen"), or null off shared walls. */
   connects: string | null;
+  /** The host edge borders two rooms — the door can open either way. */
+  showSideFlip: boolean;
   unit: Unit;
   onFlipHinge: (id: string) => void;
+  onFlipSide: (id: string) => void;
   onDelete: (id: string) => void;
   onResize: (id: string, width: number) => void;
 }) {
@@ -309,6 +315,18 @@ function OpeningChip({
                 onClick={() => onFlipHinge(hole.id)}
               >
                 <ArrowLeftRight size={17} strokeWidth={1.6} />
+              </button>
+            </Tooltip>
+          )}
+          {showSideFlip && (
+            <Tooltip label="Flip which room it opens into" side="bottom">
+              <button
+                type="button"
+                aria-label="Flip which room it opens into"
+                className={`${ACTION_BUTTON_CLASS} text-[var(--ink-600)]`}
+                onClick={() => onFlipSide(hole.id)}
+              >
+                <DoorOpen size={17} strokeWidth={1.6} />
               </button>
             </Tooltip>
           )}
@@ -425,6 +443,8 @@ export interface PlanOpeningsProps {
   /** Live re-offset during a drag (already snapped). */
   onMove: (id: string, offset: number) => void;
   onFlipHinge: (id: string) => void;
+  /** Flip which room a portal door opens into (two-face walls only). */
+  onFlipSide: (id: string) => void;
   onDelete: (id: string) => void;
   /** A committed width from the chip's field (the clamping is the caller's). */
   onResize: (id: string, width: number) => void;
@@ -440,6 +460,7 @@ export function PlanOpenings({
   onSelect,
   onMove,
   onFlipHinge,
+  onFlipSide,
   onDelete,
   onResize,
   onDragActiveChange,
@@ -470,12 +491,11 @@ export function PlanOpenings({
     end();
   }, [end]);
 
-  // Phantom holes (a neighbor's portal cuts) are not this room's to pick,
-  // select, or chip — the owning room's PlanOpenings carries all of that,
-  // and its pick target already spans both sides of the shared wall.
+  // One solid per edge carries every opening on it (both rooms'); each is
+  // picked, selected and chipped exactly once, here.
   const selected = useMemo(() => {
     for (const solid of solids) {
-      const hole = solid.holes.find((h) => h.id === selectedId && !h.phantom);
+      const hole = solid.holes.find((h) => h.id === selectedId);
       if (hole) return { solid, hole };
     }
     return null;
@@ -487,26 +507,26 @@ export function PlanOpenings({
   return (
     <group>
       {solids.map((solid) =>
-        solid.holes
-          .filter((hole) => !hole.phantom)
-          .map((hole) => (
-            <OpeningTarget
-              key={hole.id}
-              solid={solid}
-              hole={hole}
-              selected={hole.id === selectedId}
-              onSelect={onSelect}
-              onDragStart={beginDrag}
-            />
-          )),
+        solid.holes.map((hole) => (
+          <OpeningTarget
+            key={hole.id}
+            solid={solid}
+            hole={hole}
+            selected={hole.id === selectedId}
+            onSelect={onSelect}
+            onDragStart={beginDrag}
+          />
+        )),
       )}
       {selected && (
         <OpeningChip
           solid={selected.solid}
           hole={selected.hole}
           connects={portalLabels?.get(selected.hole.id) ?? null}
+          showSideFlip={selected.solid.faces === 2}
           unit={unit}
           onFlipHinge={onFlipHinge}
+          onFlipSide={onFlipSide}
           onDelete={onDelete}
           onResize={onResize}
         />
