@@ -4,6 +4,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  type Object3D,
 } from "three";
 import { describe, expect, it } from "vitest";
 
@@ -21,7 +22,7 @@ function sampleModel() {
   return { scene, fabric, wood };
 }
 
-function meshes(root: ReturnType<typeof sampleModel>["scene"]): Mesh[] {
+function meshes(root: Object3D): Mesh[] {
   const found: Mesh[] = [];
   root.traverse((obj) => {
     if (obj instanceof Mesh) found.push(obj);
