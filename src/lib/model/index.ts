@@ -5,6 +5,7 @@ export * from "./floor";
 export * from "./furniture";
 export * from "./geometry";
 export * from "./graph";
+export * from "./models";
 export * from "./openings";
 export * from "./room";
 export * from "./room-match";
