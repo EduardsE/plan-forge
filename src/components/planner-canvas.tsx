@@ -587,25 +587,20 @@ export interface PlannerCanvasProps {
   /** Bottom-left toggles: show the reference grid, and snap while editing. */
   gridVisible: boolean;
   snapEnabled: boolean;
-  /** Draw-mode state, owned by the route (the header shows the count). */
+  /** Draw-mode state, owned by the route. Draw edits the wall graph live. */
   drawTool: DrawTool;
-  draftCorners: Point[];
-  /** Closed draft: draw mode is reshaping a room, not placing corners. */
-  draftClosed: boolean;
-  /** The room the draft edits; null while drafting a brand-new room. */
-  draftRoomId: string | null;
-  /** A context room was clicked in draw mode — re-target the session. */
-  onActivateDraftRoom: (roomId: string) => void;
-  onPlaceCorner: (point: Point) => void;
+  /** Id of the chain's last node (wall tool), or null for no active chain. */
+  chainNode: string | null;
+  onExtendChain: (from: Point, to: Point) => void;
+  onEndChain: () => void;
   onPlaceRect: (a: Point, b: Point) => void;
-  onSetDraftSegmentLength: (segmentIndex: number, meters: number) => void;
-  onRequestCloseDraft: () => void;
-  onMoveDraftCorner: (index: number, point: Point) => void;
-  onSplitDraftWall: (wallIndex: number, point: Point) => void;
-  onDeleteDraftCorner: (index: number) => void;
-  /** Select-state wall/grid click: apply the session, start a new wall draw
-   * with its first corner at `point`. */
-  onStartDraw: (point: Point) => void;
+  onNodeMovePreview: (nodeId: string, point: Point) => void;
+  onNodeMoveSettle: (nodeId: string, point: Point) => void;
+  onNodeMoveCancel: (nodeId: string, original: Point) => void;
+  onBeginSplitDrag: (edgeId: string, point: Point) => string | null;
+  onSetEdgeLength: (edgeId: string, length: number) => void;
+  onDeleteNode: (nodeId: string) => void;
+  onDeleteEdge: (edgeId: string) => void;
   /** Catalog item mid-drag from the objects panel, if any. */
   placingItem: CatalogItem | null;
   /** Placement session over — dropped or cancelled (route clears it). */
@@ -629,18 +624,17 @@ export function PlannerCanvas({
   gridVisible,
   snapEnabled,
   drawTool,
-  draftCorners,
-  draftClosed,
-  draftRoomId,
-  onActivateDraftRoom,
-  onPlaceCorner,
+  chainNode,
+  onExtendChain,
+  onEndChain,
   onPlaceRect,
-  onSetDraftSegmentLength,
-  onRequestCloseDraft,
-  onMoveDraftCorner,
-  onSplitDraftWall,
-  onDeleteDraftCorner,
-  onStartDraw,
+  onNodeMovePreview,
+  onNodeMoveSettle,
+  onNodeMoveCancel,
+  onBeginSplitDrag,
+  onSetEdgeLength,
+  onDeleteNode,
+  onDeleteEdge,
   placingItem,
   onPlacingEnd,
 }: PlannerCanvasProps) {
@@ -847,13 +841,9 @@ export function PlannerCanvas({
     <div
       className={cn(
         "absolute inset-0 isolate",
-        // The drawn crosshair replaces the OS cursor only while placing
-        // corners — a closed draft is reshaped with the normal pointer.
-        drawing &&
-          renderPlan &&
-          drawTool === "wall" &&
-          !draftClosed &&
-          "cursor-none",
+        // The drawn crosshair replaces the OS cursor while the wall tool is
+        // active — other tools reshape with the normal pointer.
+        drawing && renderPlan && drawTool === "wall" && "cursor-none",
       )}
       onPointerDown={(event) => {
         pointerDownRef.current = { x: event.clientX, y: event.clientY };
@@ -917,26 +907,23 @@ export function PlannerCanvas({
         {renderPlan ? (
           drawing ? (
             <DrawScene
-              corners={draftCorners}
-              closed={draftClosed}
-              // Every room the draft is *not* editing: a plan backdrop, a
-              // snap target, and (in select mode) a click re-targets the
-              // session onto it.
-              contextRooms={rooms.filter((entry) => entry.id !== draftRoomId)}
+              floor={floor}
+              rooms={rooms}
               unit={unit}
               snapEnabled={snapEnabled}
-              placing={drawTool === "wall" && !draftClosed}
-              rectMode={drawTool === "rect"}
-              onActivateRoom={onActivateDraftRoom}
-              onPlaceCorner={onPlaceCorner}
+              tool={drawTool}
+              chainNode={chainNode}
+              onExtendChain={onExtendChain}
+              onEndChain={onEndChain}
               onPlaceRect={onPlaceRect}
-              onSetSegmentLength={onSetDraftSegmentLength}
-              onRequestClose={onRequestCloseDraft}
-              onMoveCorner={onMoveDraftCorner}
-              onSplitWall={onSplitDraftWall}
-              onDeleteCorner={onDeleteDraftCorner}
-              onStartDraw={onStartDraw}
-              onDragActiveChange={setSceneDragActive}
+              onNodeMovePreview={onNodeMovePreview}
+              onNodeMoveSettle={onNodeMoveSettle}
+              onNodeMoveCancel={onNodeMoveCancel}
+              onNodeDragActiveChange={setSceneDragActive}
+              onBeginSplitDrag={onBeginSplitDrag}
+              onSetEdgeLength={onSetEdgeLength}
+              onDeleteNode={onDeleteNode}
+              onDeleteEdge={onDeleteEdge}
             />
           ) : (
             <PlanScene

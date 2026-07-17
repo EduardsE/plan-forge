@@ -1,9 +1,11 @@
+import type { DrawTool } from "#/components/draw-tool-stack";
+
 /**
- * Bottom-center helper hint bar for draw mode (mockup screen 1c): what a
- * click does plus the ⏎ / esc keys, in a dark ink pill (the one dark element on the Paper canvas, like the tooltips). The rect tool swaps
- * the copy to its two-click gesture; otherwise editing an existing outline (a
- * closed draft) shows the reshaping gestures, and fresh drawing the placement
- * ones.
+ * Bottom-center helper hint bar for draw mode (mockup screen 1c): what a click
+ * does, in a dark ink pill (the one dark element on the Paper canvas, like the
+ * tooltips). The copy tracks the active tool — the rect tool swaps to its
+ * two-click gesture; the wall/select tools show the live graph gestures (drag
+ * any corner, chain walls, split, delete).
  */
 
 function Key({ children }: { children: string }) {
@@ -25,18 +27,16 @@ function Hint({ children }: { children: React.ReactNode }) {
 const DIVIDER = <span className="text-white/25">·</span>;
 
 export function DrawHintBar({
-  editing = false,
-  rect = false,
-  multiRoom = false,
+  tool,
+  chaining = false,
 }: {
-  editing?: boolean;
-  rect?: boolean;
-  /** More than one room on the floor: clicking another room edits it. */
-  multiRoom?: boolean;
+  tool: DrawTool;
+  /** A wall chain is in progress — esc ends it. */
+  chaining?: boolean;
 }) {
   return (
     <div className="-translate-x-1/2 absolute bottom-11 left-1/2 flex items-center gap-2.5 rounded-[9px] bg-[var(--ink-900)] px-4 py-2 shadow-[0_14px_34px_rgba(15,27,61,0.25)]">
-      {rect ? (
+      {tool === "rect" ? (
         <>
           <Hint>Click two opposite corners</Hint>
           {DIVIDER}
@@ -44,38 +44,28 @@ export function DrawHintBar({
             <Key>esc</Key> cancel
           </Hint>
         </>
-      ) : editing ? (
+      ) : tool === "wall" ? (
         <>
-          <Hint>Drag corners to reshape</Hint>
+          <Hint>Click to chain walls</Hint>
           {DIVIDER}
-          <Hint>Click to draw a new room</Hint>
-          {DIVIDER}
-          <Hint>Right-click for corner options</Hint>
-          {multiRoom && (
+          <Hint>Snaps onto existing walls &amp; corners</Hint>
+          {chaining && (
             <>
               {DIVIDER}
-              <Hint>Click another room to edit it</Hint>
+              <Hint>
+                <Key>esc</Key> ends the chain
+              </Hint>
             </>
           )}
-          {DIVIDER}
-          <Hint>
-            <Key>⏎</Key> apply
-          </Hint>
-          {DIVIDER}
-          <Hint>
-            <Key>esc</Key> revert
-          </Hint>
         </>
       ) : (
         <>
-          <Hint>Click to place corner</Hint>
+          <Hint>Drag corners anywhere</Hint>
+          {DIVIDER}
+          <Hint>Click a wall to split</Hint>
           {DIVIDER}
           <Hint>
-            <Key>⏎</Key> close room
-          </Hint>
-          {DIVIDER}
-          <Hint>
-            <Key>esc</Key> cancel
+            <Key>del</Key> removes a corner or wall
           </Hint>
         </>
       )}

@@ -146,8 +146,7 @@ function dedupeEdges(
 
 /**
  * Replace `edge` with two pieces split at distance `t` (0 < t < length) from
- * `edge.a`, joined through `splitNodeId`. Openings on `edge` re-home by
- * center — same convention as `splitOutlineWall` (`outline-edit.ts:227`).
+ * `edge.a`, joined through `splitNodeId`. Openings on `edge` re-home by center.
  */
 function splitEdgeAt(
   edges: WallEdge[],

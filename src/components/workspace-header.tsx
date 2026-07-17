@@ -21,8 +21,6 @@ interface WorkspaceHeaderProps {
   canRedo: boolean;
   /** "Present" = browser fullscreen on the workspace pane. */
   onFullscreen: () => void;
-  /** Draw mode is editing the existing outline, not drawing a fresh one. */
-  draftClosed?: boolean;
   /** Catalog item mid-placement; flips the status chip to "Placing". */
   placingName?: string | null;
 }
@@ -99,18 +97,13 @@ export function WorkspaceHeader({
   canUndo,
   canRedo,
   onFullscreen,
-  draftClosed = false,
   placingName = null,
 }: WorkspaceHeaderProps) {
   // Activity beats autosave on the chip: an armed opening tool, a live
   // placement drag, or draw mode each announce themselves in blue.
   let chip = <SavedChip savedAt={savedAt} />;
   if (mode === "draw") {
-    chip = (
-      <StatusChip tone="blue">
-        {draftClosed ? "Editing outline" : "Drawing"}
-      </StatusChip>
-    );
+    chip = <StatusChip tone="blue">Drawing</StatusChip>;
   } else if (placingName) {
     chip = <StatusChip tone="blue">Placing</StatusChip>;
   }

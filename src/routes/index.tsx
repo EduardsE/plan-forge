@@ -20,7 +20,16 @@ import { WorkspaceHeader } from "#/components/workspace-header";
 import { ZoomPill } from "#/components/zoom-pill";
 import { type CameraApi, createCameraReadoutStore } from "#/lib/camera";
 import { containRoomFurniture, nudgeFurniture } from "#/lib/collision";
-import { rectangleOutline, setSegmentLength } from "#/lib/draw";
+import { rectangleOutline } from "#/lib/draw";
+import {
+  addWallSegment,
+  deleteEdge,
+  deleteNode,
+  moveNodePreview,
+  setEdgeLength,
+  settleNodeMove,
+  splitEdgeAt,
+} from "#/lib/graph-edit";
 import {
   commitHistory,
   createHistory,
@@ -41,7 +50,6 @@ import {
   type Room,
   reconcileFloor,
   removeFurniture,
-  roomById,
   roomOfFurniture,
   rotateFurniture,
   setFurnitureColorway,
@@ -54,14 +62,6 @@ import {
   updateFurniture,
 } from "#/lib/model";
 import {
-  draftFromRoom,
-  emptyOutlineDraft,
-  type OutlineDraft,
-  removeOutlineCorner,
-  setClosedSegmentLength,
-  splitOutlineWall,
-} from "#/lib/outline-edit";
-import {
   deserializeSavedState,
   STORAGE_KEY,
   serializeSavedState,
@@ -73,17 +73,6 @@ import type { ViewMode } from "#/lib/view-mode";
 
 /** Shift-arrow nudge step, meters — the "fine" 1 cm move. */
 const FINE_NUDGE_STEP = 0.01;
-
-/**
- * Draw-mode editing is disabled for Task G4: the lens still renders the
- * derived outlines, but pointer handlers are inert and nothing commits back
- * to the graph. G5 rebuilds draw directly on the wall graph
- * (`lib/graph-edit.ts`).
- */
-const DRAW_EDITING_DISABLED = true;
-
-/** Inert handler for the disabled draw-editing pointer callbacks. */
-const noop = () => {};
 
 /** A fresh, empty graph floor — the "New room" reset target. */
 function emptyFloor(): Floor {
@@ -130,6 +119,11 @@ function Planner() {
     createHistory(createSampleFloor()),
   );
   const floor = floorHistory.current;
+  // Live floor for handlers that must compute a graph edit *and* read its
+  // result synchronously (chain extend / split-then-drag both need the id the
+  // reconcile minted before the state update flushes).
+  const floorRef = useRef(floor);
+  floorRef.current = floor;
   // Rooms are *derived* from the graph (`deriveFloor`): scenes, readouts, and
   // every per-room edit speak this `Room[]` view; the graph `Floor` is what
   // history/persistence hold. Recomputed on each floor change.
@@ -185,11 +179,10 @@ function Planner() {
   const settleRoom = useCallback(() => setFloorHistory(settleHistory), []);
   const undoRoom = useCallback(() => setFloorHistory(undoHistory), []);
   const redoRoom = useCallback(() => setFloorHistory(redoHistory), []);
-  // Draw mode edits the draft, not the room — floor history sits it out
-  // (undoing the floor underneath a seeded draft would silently desync them).
-  const historyActive = viewMode !== "draw";
-  const canUndo = historyActive && floorHistory.past.length > 0;
-  const canRedo = historyActive && floorHistory.future.length > 0;
+  // Draw edits the graph live (Phase 9) — undo/redo stay active in draw mode,
+  // like every other lens.
+  const canUndo = floorHistory.past.length > 0;
+  const canRedo = floorHistory.future.length > 0;
   const [unit, setUnit] = useState<Unit>("m");
   // The furniture selection is route state so the inspector (outside the
   // canvas) and the in-scene picking/label share one selection. The canvas
@@ -440,68 +433,21 @@ function Planner() {
     setSavedAt(now);
   }, [storageReady, floor, unit]);
 
-  // The draw-mode draft outline. Owned here (not by the canvas) so the
-  // header's status line can count corners and committing can become the
-  // room. The draft carries the id of the floor room it edits; a null id
-  // means committing *adds* a new room to the floor (the wall/rect tools).
-  // Entering draw mode reopens the first room's outline as a *closed*
-  // editable draft ("Draw" starts as "edit this room" — clicking another
-  // room re-targets the session); only an empty outline — right after New
-  // room — starts the open from-scratch draft. Leaving draw mode applies a
-  // closed draft, so lens switches never lose edits; esc reverts it instead.
-  const [draft, setDraft] = useState(() => emptyOutlineDraft());
-  const [drawTool, setDrawTool] = useState<DrawTool>("wall");
-  // Draw editing is disabled this task (G5 rebuilds it on the graph): the
-  // draft is view-only, so committing it never writes back to the floor.
-  const applyDraft = useCallback((_finished: OutlineDraft) => {
-    // Intentionally inert until G5. See `DRAW_EDITING_DISABLED`.
+  // Draw mode edits the wall graph live (Phase 9). Session state is just the
+  // active tool plus the chain's last node id (wall tool; null = no chain);
+  // there is no draft/commit — every edit is a normal graph mutation with
+  // normal undo.
+  const [drawTool, setDrawTool] = useState<DrawTool>("select");
+  const [chainNode, setChainNode] = useState<string | null>(null);
+  // Switching tools ends any open chain (a half-drawn wall never carries over).
+  const handleDrawToolChange = useCallback((tool: DrawTool) => {
+    setChainNode(null);
+    setDrawTool(tool);
   }, []);
-  const prevViewModeRef = useRef(viewMode);
+  // Leaving draw mode ends the chain too.
   useEffect(() => {
-    const prev = prevViewModeRef.current;
-    if (prev === viewMode) return;
-    prevViewModeRef.current = viewMode;
-    if (viewMode === "draw") {
-      // Seed from the first room; an in-progress draft (fresh corners mid
-      // new-room drawing) survives the round trip through another lens. The
-      // tool follows the seed: a closed draft reshapes (Select), an empty
-      // room draws from scratch (Wall).
-      if (draft.corners.length === 0 && room) {
-        const seeded = draftFromRoom(room);
-        setDraft(seeded);
-        setDrawTool(seeded.closed ? "select" : "wall");
-      }
-    } else if (prev === "draw" && draft.closed) {
-      applyDraft(draft);
-      setDraft(emptyOutlineDraft());
-    }
-  }, [viewMode, room, draft, applyDraft]);
-  // Wall/rect are *add-room* tools: picking one over a reshape session
-  // applies the session first (switching tools never silently loses edits)
-  // and starts a fresh new-room draft.
-  const handleDrawToolChange = useCallback(
-    (tool: DrawTool) => {
-      if (tool !== "select" && draft.closed) {
-        applyDraft(draft);
-        setDraft(emptyOutlineDraft());
-      }
-      setDrawTool(tool);
-    },
-    [draft, applyDraft],
-  );
-  // Clicking another room in draw mode re-targets the session onto it,
-  // applying whatever the current draft holds first.
-  const activateDraftRoom = useCallback(
-    (targetId: string) => {
-      if (targetId === draft.roomId) return;
-      const target = roomById(derived.rooms, targetId);
-      if (!target) return;
-      if (draft.closed) applyDraft(draft);
-      setDraft(draftFromRoom(target));
-      setDrawTool("select");
-    },
-    [derived, draft, applyDraft],
-  );
+    if (viewMode !== "draw") setChainNode(null);
+  }, [viewMode]);
 
   // A live placement drag from the objects panel. Owned here so the header
   // status line, the panel's "placing…" card, the DOM drag layer and the
@@ -522,141 +468,133 @@ function Planner() {
     if (viewMode === "draw" || !libraryOpen) setPlacing(null);
   }, [viewMode, libraryOpen]);
 
-  const placeCorner = useCallback(
-    (point: Point) =>
-      setDraft((current) =>
-        current.closed
-          ? current
-          : { ...current, corners: [...current.corners, point] },
-      ),
-    [],
-  );
-  // The rect tool's two clicks: close the draft as a fresh rectangle and
-  // hand off to Select so its corners drag / lengths edit like any closed
-  // draft. The draft's target rides along — a new-room rect commits as a new
-  // room, the New-room flow's rect fills its empty room.
+  // Wall tool: extend the chain by one wall (`from` → `to`). One undo step
+  // each; the chain's next node is the reconciled node nearest the landed
+  // point (welding onto an existing corner returns that corner's id).
+  const extendChain = useCallback((from: Point, to: Point) => {
+    const current = floorRef.current;
+    const next = addWallSegment(current, from, to);
+    if (next === current) return;
+    let landed: string | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const node of next.nodes) {
+      const d = Math.hypot(node.x - to.x, node.y - to.y);
+      if (d < bestDistance) {
+        bestDistance = d;
+        landed = node.id;
+      }
+    }
+    setFloorHistory((history) =>
+      next === history.current ? history : commitHistory(history, next),
+    );
+    setChainNode(landed);
+  }, []);
+  const endChain = useCallback(() => setChainNode(null), []);
+  // Rect tool: compose the four walls into ONE floor value → one undo step,
+  // then hand off to Select (drag corners / edit lengths like any wall).
   const placeRect = useCallback((a: Point, b: Point) => {
     const corners = rectangleOutline(a, b);
     if (!corners) return;
-    setDraft((current) => ({
-      roomId: current.roomId,
-      corners,
-      closed: true,
-      openings: [],
-    }));
+    setFloorHistory((history) => {
+      let f = history.current;
+      for (let i = 0; i < 4; i++) {
+        f = addWallSegment(f, corners[i], corners[(i + 1) % 4]);
+      }
+      return f === history.current ? history : commitHistory(history, f);
+    });
     setDrawTool("select");
   }, []);
-  const setDraftSegmentLength = useCallback(
-    (segmentIndex: number, meters: number) =>
-      setDraft((current) => ({
-        ...current,
-        corners: current.closed
-          ? setClosedSegmentLength(current.corners, segmentIndex, meters)
-          : setSegmentLength(current.corners, segmentIndex, meters),
-      })),
-    [],
-  );
-  const moveDraftCorner = useCallback(
-    (index: number, point: Point) =>
-      setDraft((current) =>
-        index < current.corners.length
-          ? {
-              ...current,
-              corners: current.corners.map((corner, i) =>
-                i === index ? point : corner,
-              ),
-            }
-          : current,
+  // A node drag: previews stream (raw, no weld mid-gesture), the release
+  // settles into one step (welds fire in `settleNodeMove`), esc restores the
+  // node to where the drag began (no step at all).
+  const nodeMovePreview = useCallback(
+    (nodeId: string, point: Point) =>
+      setFloorHistory((history) =>
+        previewHistory(
+          history,
+          moveNodePreview(history.current, nodeId, point),
+        ),
       ),
     [],
   );
-  const splitDraftWall = useCallback(
-    (wallIndex: number, point: Point) =>
-      setDraft((current) => {
-        if (!current.closed) return current;
-        const split = splitOutlineWall(
-          current.corners,
-          current.openings,
-          wallIndex,
-          point,
-        );
-        return {
-          ...current,
-          corners: split.outline,
-          openings: split.openings,
-        };
-      }),
+  const nodeMoveSettle = useCallback(
+    (nodeId: string, point: Point) =>
+      setFloorHistory((history) =>
+        settleHistory(
+          previewHistory(
+            history,
+            settleNodeMove(history.current, nodeId, point),
+          ),
+        ),
+      ),
     [],
   );
-  const deleteDraftCorner = useCallback(
-    (index: number) =>
-      setDraft((current) => {
-        if (!current.closed) return current;
-        const removed = removeOutlineCorner(
-          current.corners,
-          current.openings,
-          index,
-        );
-        return removed.outline === current.corners
-          ? current
-          : {
-              ...current,
-              corners: removed.outline,
-              openings: removed.openings,
-            };
-      }),
+  const nodeMoveCancel = useCallback(
+    (nodeId: string, original: Point) =>
+      setFloorHistory((history) =>
+        settleHistory(
+          previewHistory(
+            history,
+            moveNodePreview(history.current, nodeId, original),
+          ),
+        ),
+      ),
     [],
   );
-  // A wall/grid click in draw mode's select state: apply the reshape
-  // session (like picking the Wall tool — clicks never silently lose
-  // edits) and open a fresh new-room chain with its first corner at the
-  // clicked point. A stray click in select mode over an open chain just
-  // places the corner, as the wall tool would.
-  const startDrawAt = useCallback(
-    (point: Point) => {
-      if (draft.closed) {
-        applyDraft(draft);
-        setDraft({
-          roomId: null,
-          corners: [point],
-          closed: false,
-          openings: [],
-        });
-      } else {
-        setDraft({ ...draft, corners: [...draft.corners, point] });
-      }
-      setDrawTool("wall");
+  // Select tool: click a wall to split it, then drag the new node. The split
+  // is one undo step; the drag that follows settles into a second. Returns the
+  // reconciled new node's id so the scene can pick up the drag immediately.
+  const beginSplitDrag = useCallback(
+    (edgeId: string, point: Point): string | null => {
+      const current = floorRef.current;
+      const next = splitEdgeAt(current, edgeId, point);
+      if (next === current) return null;
+      const newNode = next.nodes.find(
+        (n) => !current.nodes.some((o) => o.id === n.id),
+      );
+      setFloorHistory((history) =>
+        next === history.current ? history : commitHistory(history, next),
+      );
+      return newNode ? newNode.id : null;
     },
-    [draft, applyDraft],
+    [],
   );
-  // ⏎ (or clicking the start corner while drawing) commits the draft: the
-  // outline becomes its room — or a brand-new room — openings re-anchor to
-  // their (possibly resized or split) walls, and furniture stays wherever it
-  // still fits inside.
-  const closeDraft = useCallback(() => {
-    if (draft.corners.length < 3) return;
-    applyDraft(draft);
-    setDraft(emptyOutlineDraft());
-    setViewMode("2d");
-  }, [draft, applyDraft]);
-  // Esc reverts an edit session to its room as it stands; a fresh open
-  // draft (or an uncommitted new-room rectangle) just clears, keeping its
-  // target.
-  const cancelDraft = useCallback(
-    () =>
-      setDraft((current) => {
-        if (current.closed && current.roomId !== null) {
-          const target = roomById(derived.rooms, current.roomId);
-          if (target) return draftFromRoom(target);
-        }
-        return emptyOutlineDraft(current.roomId);
+  // A length pill commit: `setEdgeLength` keeps the near end (node `a`) fixed,
+  // so the far corner (and every wall sharing it) moves — one undo step.
+  const setEdgeLen = useCallback(
+    (edgeId: string, length: number) =>
+      setFloorHistory((history) => {
+        const next = setEdgeLength(history.current, edgeId, length, "a");
+        return next === history.current
+          ? history
+          : commitHistory(history, next);
       }),
-    [derived],
+    [],
+  );
+  const deleteNodeCmd = useCallback(
+    (nodeId: string) =>
+      setFloorHistory((history) => {
+        const next = deleteNode(history.current, nodeId);
+        return next === history.current
+          ? history
+          : commitHistory(history, next);
+      }),
+    [],
+  );
+  const deleteEdgeCmd = useCallback(
+    (edgeId: string) =>
+      setFloorHistory((history) => {
+        const next = deleteEdge(history.current, edgeId);
+        return next === history.current
+          ? history
+          : commitHistory(history, next);
+      }),
+    [],
   );
 
   // The "new room" escape hatch: clear the floor down to an empty graph
   // (autosave persists the cleared state, wiping the old save) and drop into
-  // draw mode — which is view-only until G5 rebuilds drawing on the graph.
+  // draw mode with the wall tool armed to draw from scratch.
   const startNewRoom = useCallback(() => {
     if (
       !window.confirm(
@@ -666,35 +604,15 @@ function Planner() {
       return;
     }
     setFloor(reconcileFloor(emptyFloor()));
-    setDraft(emptyOutlineDraft(null));
+    setChainNode(null);
     setDrawTool("wall");
     setViewMode("draw");
   }, [setFloor]);
 
-  // ⏎ commits the draft into the room model, esc cancels it (reverting an
-  // edit session) — unless the keystroke belongs to the inline length input
-  // (or a corner drag, which swallows both in its capture-phase handler).
+  // ⌘Z / ⇧⌘Z (ctrl on non-mac) step the floor history in every lens — draw
+  // included (Phase 9) — and keystrokes inside inputs keep their native undo.
+  // Chain-end / node delete keys live in `draw-scene.tsx` (local hover state).
   useEffect(() => {
-    if (viewMode !== "draw") return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.target instanceof HTMLElement &&
-        event.target.closest("input, textarea, [contenteditable]")
-      ) {
-        return;
-      }
-      if (event.key === "Enter") closeDraft();
-      else if (event.key === "Escape") cancelDraft();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [viewMode, closeDraft, cancelDraft]);
-
-  // ⌘Z / ⇧⌘Z (ctrl on non-mac) step the room history, everywhere history is
-  // live — draw mode sits out (see `historyActive`), and keystrokes inside
-  // inputs keep their native undo.
-  useEffect(() => {
-    if (!historyActive) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
       if (event.key.toLowerCase() !== "z") return;
@@ -710,7 +628,7 @@ function Planner() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [historyActive, undoRoom, redoRoom]);
+  }, [undoRoom, redoRoom]);
 
   // Keyboard editing on the selection (every lens but draw, which has no
   // furniture selection): arrows nudge by the placement grid step (shift =
@@ -855,7 +773,6 @@ function Planner() {
         canUndo={canUndo}
         canRedo={canRedo}
         onFullscreen={toggleFullscreen}
-        draftClosed={draft.closed}
         placingName={placing?.item.name ?? null}
       />
       <div
@@ -883,24 +800,17 @@ function Planner() {
               gridVisible={gridVisible}
               snapEnabled={snapEnabled}
               drawTool={drawTool}
-              draftCorners={draft.corners}
-              draftClosed={draft.closed}
-              draftRoomId={draft.roomId}
-              onActivateDraftRoom={
-                DRAW_EDITING_DISABLED ? noop : activateDraftRoom
-              }
-              onPlaceCorner={DRAW_EDITING_DISABLED ? noop : placeCorner}
-              onPlaceRect={DRAW_EDITING_DISABLED ? noop : placeRect}
-              onSetDraftSegmentLength={
-                DRAW_EDITING_DISABLED ? noop : setDraftSegmentLength
-              }
-              onRequestCloseDraft={closeDraft}
-              onMoveDraftCorner={DRAW_EDITING_DISABLED ? noop : moveDraftCorner}
-              onSplitDraftWall={DRAW_EDITING_DISABLED ? noop : splitDraftWall}
-              onDeleteDraftCorner={
-                DRAW_EDITING_DISABLED ? noop : deleteDraftCorner
-              }
-              onStartDraw={DRAW_EDITING_DISABLED ? noop : startDrawAt}
+              chainNode={chainNode}
+              onExtendChain={extendChain}
+              onEndChain={endChain}
+              onPlaceRect={placeRect}
+              onNodeMovePreview={nodeMovePreview}
+              onNodeMoveSettle={nodeMoveSettle}
+              onNodeMoveCancel={nodeMoveCancel}
+              onBeginSplitDrag={beginSplitDrag}
+              onSetEdgeLength={setEdgeLen}
+              onDeleteNode={deleteNodeCmd}
+              onDeleteEdge={deleteEdgeCmd}
               placingItem={placing?.item ?? null}
               onPlacingEnd={endPlacing}
             />
@@ -912,11 +822,7 @@ function Planner() {
               tool={drawTool}
               onToolChange={handleDrawToolChange}
             />
-            <DrawHintBar
-              editing={draft.closed}
-              rect={drawTool === "rect"}
-              multiRoom={floor.rooms.length > 1}
-            />
+            <DrawHintBar tool={drawTool} chaining={chainNode !== null} />
           </>
         )}
         <ZoomPill
@@ -946,8 +852,7 @@ function Planner() {
         onToggleGrid={() => setGridVisible((on) => !on)}
         snapEnabled={snapEnabled}
         onToggleSnap={() => setSnapEnabled((on) => !on)}
-        draftCornerCount={draft.corners.length}
-        draftClosed={draft.closed}
+        nodeCount={floor.nodes.length}
         placingName={placing?.item.name ?? null}
       />
       {/* Always mounted so the drawer can slide: the wrapper clips while its
@@ -975,8 +880,7 @@ function Planner() {
         selectedRoom={selectedRoom}
         selectedItem={selectedItem}
         portalStatus={portalStatus}
-        draftCornerCount={draft.corners.length}
-        draftClosed={draft.closed}
+        nodeCount={floor.nodes.length}
         onResize={resizeSelected}
         onRotateTo={rotateSelectedTo}
         onElevate={elevateSelected}

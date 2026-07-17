@@ -93,10 +93,10 @@ describe("StatusBar", () => {
     expect(screen.getByText(/Grid 50 cm/)).toBeTruthy();
   });
 
-  it("describes the draw draft state", () => {
-    renderBar({ mode: "draw", draftCornerCount: 3 });
+  it("describes the draw graph state", () => {
+    renderBar({ mode: "draw", nodeCount: 3 });
 
-    expect(screen.getByText("Drawing — 3 corners placed")).toBeTruthy();
+    expect(screen.getByText("Editing walls — 3 corners")).toBeTruthy();
   });
 
   it("counts placed objects while the library is open and names a live placement", () => {

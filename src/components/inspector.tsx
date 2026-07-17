@@ -374,9 +374,8 @@ export interface InspectorProps {
   /** The selected item's owning room (derived floor-wide), or null. */
   selectedRoom: Room | null;
   selectedItem: FurnitureItem | null;
-  /** Draw-mode draft state, for the OUTLINE view. */
-  draftCornerCount?: number;
-  draftClosed?: boolean;
+  /** Number of graph nodes (corners), for the draw-mode OUTLINE view. */
+  nodeCount?: number;
   /** The selected opening is a portal — "Door connects Living ↔ Kitchen"
    * (derived from wall abutment); shown with the floor overview. */
   portalStatus?: string | null;
@@ -396,8 +395,7 @@ export function Inspector({
   mode,
   selectedRoom,
   selectedItem,
-  draftCornerCount = 0,
-  draftClosed = false,
+  nodeCount = 0,
   portalStatus = null,
   onResize,
   onRotateTo,
@@ -441,16 +439,17 @@ export function Inspector({
         {drawing ? (
           <div className="flex flex-col gap-2.5">
             <div className="font-semibold text-[15px] text-[var(--ink-900)]">
-              {draftClosed ? "Editing the outline" : "Drawing the outline"}
+              Editing walls
             </div>
             <div className="text-[12.5px] text-[var(--ink-500)] leading-relaxed">
-              {draftCornerCount} corner{draftCornerCount === 1 ? "" : "s"}
-              {draftClosed ? " · closed" : ""}
+              {nodeCount} corner{nodeCount === 1 ? "" : "s"} · {rooms.length}{" "}
+              room{rooms.length === 1 ? "" : "s"}
             </div>
             <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
-              {draftClosed
-                ? "Drag corners to reshape, edit a length label directly, or click a wall to start drawing a new room. Right-click a wall or corner to add or delete corners. ⏎ applies the outline, esc reverts it."
-                : "Click to place corners; click the start corner or press ⏎ to close the room. Esc cancels."}
+              Drag any corner and every room that shares it follows. Use the
+              wall tool to chain new walls (they weld onto what they touch), or
+              click a wall to split it. Edit a length label directly; delete
+              removes a corner or wall. Undo works live.
             </div>
           </div>
         ) : showSelection ? (

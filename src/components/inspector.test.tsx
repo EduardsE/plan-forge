@@ -188,9 +188,9 @@ describe("Inspector", () => {
   });
 
   it("shows the outline view in draw mode", () => {
-    renderInspector({ mode: "draw", draftCornerCount: 4, draftClosed: true });
+    renderInspector({ mode: "draw", nodeCount: 4 });
 
     expect(screen.getByText("OUTLINE")).toBeTruthy();
-    expect(screen.getByText(/4 corners · closed/)).toBeTruthy();
+    expect(screen.getByText(/4 corners/)).toBeTruthy();
   });
 });

@@ -1,11 +1,4 @@
-import {
-  type Point,
-  type Room,
-  type Wall,
-  wallFrames,
-  wallsOf,
-} from "#/lib/model";
-import { WALL_THICKNESS } from "#/lib/room-scene";
+import type { Floor, Point, Wall } from "#/lib/model";
 
 /**
  * Pure geometry for the draw-mode flow (mockup screen 1c): snapping the
@@ -34,16 +27,14 @@ export interface AlignmentSnap {
   axis: "x" | "y";
 }
 
-/** A target wall plus the side its solid extrudes to: the rendered slab
- * spans one `WALL_THICKNESS` along `outward` from the wall line. */
-export interface SnapWall extends Wall {
-  outward: Point;
-}
+/** A target wall — a graph edge's centerline segment. A drawn point landing on
+ * it snaps to the centerline (welding onto that wall), not offset by a slab. */
+export type SnapWall = Wall;
 
 /**
- * Corners and walls of the floor's *other* rooms, as snap targets while
- * drawing or reshaping — new corners land exactly on them so rooms sit
- * flush (M4's abutment detection needs exact shared coordinates).
+ * Corners and walls of the whole wall graph, as snap targets while drawing or
+ * dragging — new corners land exactly on existing nodes/edges so rooms weld
+ * onto them at shared coordinates.
  */
 export interface SnapTargets {
   corners: Point[];
@@ -52,22 +43,21 @@ export interface SnapTargets {
 
 export const NO_SNAP_TARGETS: SnapTargets = { corners: [], walls: [] };
 
-/** A closed outline's walls tagged with their outward normals. */
-export function snapWallsOf(outline: Point[]): SnapWall[] {
-  const walls = wallsOf(outline);
-  return wallFrames(outline).map((frame) => ({
-    ...walls[frame.index],
-    outward: frame.outward,
-  }));
-}
-
-export function snapTargetsOf(rooms: Room[]): SnapTargets {
-  const corners: Point[] = [];
+/**
+ * Snap targets from the graph floor: every node is a corner, every edge a wall
+ * centerline. Replaces the per-room `snapTargetsOf(rooms)` — the graph is one
+ * shared space, so there are no "other rooms" to exclude.
+ */
+export function snapTargetsOfGraph(floor: Floor): SnapTargets {
+  const nodeById = new Map(floor.nodes.map((n) => [n.id, n]));
+  const corners: Point[] = floor.nodes.map((n) => ({ x: n.x, y: n.y }));
   const walls: SnapWall[] = [];
-  for (const room of rooms) {
-    corners.push(...room.outline);
-    walls.push(...snapWallsOf(room.outline));
-  }
+  floor.edges.forEach((edge, index) => {
+    const a = nodeById.get(edge.a);
+    const b = nodeById.get(edge.b);
+    if (!a || !b) return;
+    walls.push({ index, start: { x: a.x, y: a.y }, end: { x: b.x, y: b.y } });
+  });
   return { corners, walls };
 }
 
@@ -80,18 +70,12 @@ export type FloorSnap =
 const AXIS_EPS = 1e-9;
 
 /**
- * Best snap for one free coordinate against the targets: wall *slabs* within
- * the wall's own span, then corner coordinates (alignment past a span). The
- * whole rendered thickness captures — a cursor anywhere on the slab (line to
- * `WALL_THICKNESS` outward, padded by `tolerance` on both sides) snaps to the
- * slab's **outer face**, so clicking any part of an existing wall means
- * "attach to this wall": the drawn outline lands back-to-back (gap 0.1 seam),
- * the existing wall doesn't move, and the two interiors stay one real wall
- * apart. (Flush gap-0 seams stay *supported* — snapping just doesn't produce
- * them: on partial-span seams their halved rendering re-centers the shared
- * stretch, jogging against the wall's unshared remainder.) Slab hits rank
- * above corner alignments; back-to-back twin walls (coincident slabs)
- * tie-break to the nearer face.
+ * Best snap for one free coordinate against the targets: a wall *centerline*
+ * within the wall's own span, then corner coordinates (alignment past a span).
+ * A cursor within `tolerance` of an existing edge's line snaps **onto** that
+ * line — the drawn point lands on the wall (welding onto it), the old
+ * outer-face push is gone (welding replaces attaching). Wall hits rank above
+ * corner alignments; the nearer line wins among candidates.
  */
 export function targetAxisCandidate(
   targets: SnapTargets,
@@ -101,8 +85,6 @@ export function targetAxisCandidate(
 ): { value: number; distance: number; snap: FloorSnap } | null {
   const cross: "x" | "y" = axis === "x" ? "y" : "x";
   let best: { value: number; distance: number; snap: FloorSnap } | null = null;
-  /** Among equal-distance (on-slab) hits, the nearer outer face wins. */
-  let bestFaceDistance = Number.POSITIVE_INFINITY;
   for (const wall of targets.walls) {
     // Only walls running along the cross axis pin this coordinate.
     if (Math.abs(wall.start[axis] - wall.end[axis]) > AXIS_EPS) continue;
@@ -110,22 +92,9 @@ export function targetAxisCandidate(
     const hi = Math.max(wall.start[cross], wall.end[cross]) + tolerance;
     if (cursor[cross] < lo || cursor[cross] > hi) continue;
     const line = wall.start[axis];
-    const side = wall.outward[axis] || 1;
-    // Signed offset along outward: [0, WALL_THICKNESS] is on the slab.
-    const along = (cursor[axis] - line) * side;
-    const distance =
-      along < 0 ? -along : along > WALL_THICKNESS ? along - WALL_THICKNESS : 0;
-    // Sub-millimeter re-round: line + 0.1 leaks float junk into labels.
-    const face = Math.round((line + WALL_THICKNESS * side) * 1e4) / 1e4;
-    const faceDistance = Math.abs(cursor[axis] - face);
-    if (
-      distance < tolerance &&
-      (!best ||
-        distance < best.distance ||
-        (distance === best.distance && faceDistance < bestFaceDistance))
-    ) {
-      best = { value: face, distance, snap: { kind: "wall", wall } };
-      bestFaceDistance = faceDistance;
+    const distance = Math.abs(cursor[axis] - line);
+    if (distance < tolerance && (!best || distance < best.distance)) {
+      best = { value: line, distance, snap: { kind: "wall", wall } };
     }
   }
   for (const corner of targets.corners) {
@@ -171,11 +140,10 @@ const quantize = quantizeToStep;
 /**
  * Snap the cursor while placing the next corner. Snaps compose in priority
  * order: the segment from the last corner locks to an axis (within
- * `tolerance` meters), then the still-free coordinates pin to another room's
- * wall slab (outer face) or corner coordinate — near a target's corner the
- * per-axis pins compose into the *outer* corner, one wall thickness out —
- * then align with an earlier draft corner, and whatever remains free
- * quantizes to `DRAW_GRID_STEP`.
+ * `tolerance` meters), then the still-free coordinates pin to an existing
+ * wall's centerline or a node's coordinate (landing on it to weld), then
+ * align with an earlier chain corner, and whatever remains free quantizes to
+ * `DRAW_GRID_STEP`.
  *
  * With `snap` off (the snap toggle), the raw cursor passes straight through —
  * no axis lock, no alignment, no quantize — for free-hand corner placement.

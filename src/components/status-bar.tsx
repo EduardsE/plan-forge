@@ -23,10 +23,8 @@ interface StatusBarProps {
   onToggleGrid: () => void;
   snapEnabled: boolean;
   onToggleSnap: () => void;
-  /** Corners placed so far in the draw draft; drives the draw status text. */
-  draftCornerCount?: number;
-  /** Draw mode is editing the existing outline, not drawing a fresh one. */
-  draftClosed?: boolean;
+  /** Number of graph nodes (corners) — drives the draw status text. */
+  nodeCount?: number;
   /** Catalog item mid-placement; takes over the objects status text. */
   placingName?: string | null;
   /** The selected opening is a portal — "Door connects Living ↔ Kitchen"
@@ -39,11 +37,10 @@ const noStore: Pick<CameraReadoutStore, "subscribe" | "getSnapshot"> = {
   getSnapshot: () => null,
 };
 
-function drawStatusText(cornerCount: number, editing: boolean): string {
-  if (editing) return `Editing room outline — ${cornerCount} corners`;
-  if (cornerCount === 0) return "Click to place the first corner";
-  const noun = cornerCount === 1 ? "corner" : "corners";
-  return `Drawing — ${cornerCount} ${noun} placed`;
+function drawStatusText(nodeCount: number): string {
+  if (nodeCount === 0) return "Draw walls to start a room";
+  const noun = nodeCount === 1 ? "corner" : "corners";
+  return `Editing walls — ${nodeCount} ${noun}`;
 }
 
 /** Snap label per mode, matching the 2b/2d status bars (a live placement
@@ -72,8 +69,7 @@ export function StatusBar({
   onToggleGrid,
   snapEnabled,
   onToggleSnap,
-  draftCornerCount = 0,
-  draftClosed = false,
+  nodeCount = 0,
   placingName = null,
   portalStatus = null,
 }: StatusBarProps) {
@@ -100,7 +96,7 @@ export function StatusBar({
     ? `${rooms.length} rooms${selectedRoomName ? ` · ${selectedRoomName}` : ""}`
     : (rooms[0]?.name ?? "Untitled room");
   if (mode === "draw") {
-    context = drawStatusText(draftCornerCount, draftClosed);
+    context = drawStatusText(nodeCount);
   } else if (placingName) {
     context = `Placing “${placingName}” — drop to confirm`;
   } else if (mode === "2d" && portalStatus) {

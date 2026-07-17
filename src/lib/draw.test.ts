@@ -1,31 +1,36 @@
 import { describe, expect, it } from "vitest";
-import type { Room } from "#/lib/model";
+import type { Floor } from "#/lib/model";
 import {
   rectangleOutline,
   setSegmentLength,
   snapDraftPoint,
   snapRectPoint,
-  snapTargetsOf,
-  snapWallsOf,
+  snapTargetsOfGraph,
   targetAxisCandidate,
 } from "./draw";
 
 const TOL = 0.1;
 
-/** An existing 6.4 × 5.2 room the draft snaps against (plan coords, y down). */
-const NEIGHBOR: Room = {
-  id: "living",
-  name: "Living room",
-  outline: [
-    { x: 0, y: 0 },
-    { x: 6.4, y: 0 },
-    { x: 6.4, y: 5.2 },
-    { x: 0, y: 5.2 },
+/** An existing 6.4 × 5.2 room as a wall graph the draft snaps against
+ * (plan coords, y down). */
+const NEIGHBOR: Floor = {
+  nodes: [
+    { id: "n0", x: 0, y: 0 },
+    { id: "n1", x: 6.4, y: 0 },
+    { id: "n2", x: 6.4, y: 5.2 },
+    { id: "n3", x: 0, y: 5.2 },
+  ],
+  edges: [
+    { id: "e0", a: "n0", b: "n1" },
+    { id: "e1", a: "n1", b: "n2" },
+    { id: "e2", a: "n2", b: "n3" },
+    { id: "e3", a: "n3", b: "n0" },
   ],
   openings: [],
   furniture: [],
+  rooms: [],
 };
-const TARGETS = snapTargetsOf([NEIGHBOR]);
+const TARGETS = snapTargetsOfGraph(NEIGHBOR);
 
 describe("snapDraftPoint", () => {
   it("quantizes a free cursor to the 5 cm draw grid", () => {
@@ -119,111 +124,73 @@ describe("snapDraftPoint", () => {
   });
 });
 
-describe("snapTargetsOf", () => {
-  it("collects every corner and wall of the given rooms", () => {
+describe("snapTargetsOfGraph", () => {
+  it("collects every node and edge of the graph", () => {
     expect(TARGETS.corners).toHaveLength(4);
     expect(TARGETS.walls).toHaveLength(4);
     expect(TARGETS.walls[1].start).toEqual({ x: 6.4, y: 0 });
     expect(TARGETS.walls[1].end).toEqual({ x: 6.4, y: 5.2 });
   });
-
-  it("tags each wall with its outward normal, whatever the winding", () => {
-    // The right wall's slab extrudes +x regardless of outline direction.
-    expect(TARGETS.walls[1].outward).toEqual({ x: 1, y: 0 });
-    const reversed = snapWallsOf([...NEIGHBOR.outline].reverse());
-    const right = reversed.find(
-      (wall) => wall.start.x === 6.4 && wall.end.x === 6.4,
-    );
-    expect(right?.outward).toEqual({ x: 1, y: 0 });
-  });
 });
 
-describe("targetAxisCandidate slab capture", () => {
-  // The right wall's line is x = 6.4, its slab spans x ∈ [6.4, 6.5], its
-  // outer face — where an attaching outline lands, back-to-back — is 6.5.
-  // A tolerance below the wall thickness proves the slab itself captures.
+describe("targetAxisCandidate centerline capture", () => {
+  // The right wall's centerline is x = 6.4; a cursor within tolerance of it
+  // snaps onto the line (welding onto the wall), no outer-face push.
   const tol = 0.03;
 
-  it("snaps a cursor anywhere on the slab to the outer face", () => {
+  it("snaps a cursor within tolerance of the line onto the centerline", () => {
     const candidate = targetAxisCandidate(
       TARGETS,
       "x",
-      { x: 6.47, y: 2.5 },
+      { x: 6.42, y: 2.5 },
       tol,
     );
-    expect(candidate?.value).toBe(6.5);
-    expect(candidate?.distance).toBe(0);
+    expect(candidate?.value).toBe(6.4);
     expect(candidate?.snap.kind).toBe("wall");
   });
 
-  it("pads the slab by the tolerance on both sides, no further", () => {
-    expect(
-      targetAxisCandidate(TARGETS, "x", { x: 6.52, y: 2.5 }, tol)?.value,
-    ).toBe(6.5);
-    expect(
-      targetAxisCandidate(TARGETS, "x", { x: 6.54, y: 2.5 }, tol),
-    ).toBeNull();
+  it("captures the tolerance band on both sides of the line, no further", () => {
     expect(
       targetAxisCandidate(TARGETS, "x", { x: 6.38, y: 2.5 }, tol)?.value,
-    ).toBe(6.5);
+    ).toBe(6.4);
+    expect(
+      targetAxisCandidate(TARGETS, "x", { x: 6.44, y: 2.5 }, tol),
+    ).toBeNull();
     expect(
       targetAxisCandidate(TARGETS, "x", { x: 6.36, y: 2.5 }, tol),
     ).toBeNull();
   });
 
-  it("ranks an on-slab hit above a nearer corner alignment", () => {
+  it("prefers the wall line over an equally-distant corner", () => {
     const targets = {
-      corners: [{ x: 6.46, y: 20 }],
-      walls: snapWallsOf(NEIGHBOR.outline),
+      corners: [{ x: 6.44, y: 20 }],
+      walls: TARGETS.walls,
     };
+    // Cursor 6.42 sits 0.02 from both the wall line (6.4) and the corner
+    // (6.44); the wall (set first) wins the tie.
     const candidate = targetAxisCandidate(
       targets,
       "x",
-      { x: 6.47, y: 2.5 },
+      { x: 6.42, y: 2.5 },
       tol,
     );
-    expect(candidate?.value).toBe(6.5);
+    expect(candidate?.value).toBe(6.4);
     expect(candidate?.snap.kind).toBe("wall");
-  });
-
-  it("tie-breaks coincident back-to-back slabs to the nearer face", () => {
-    // A second room one wall thickness to the right: its left wall's line is
-    // x = 6.5 with outward -x, so both slabs occupy x ∈ [6.4, 6.5] — and the
-    // pair's two attachment faces are its edges, 6.4 (twin) and 6.5
-    // (NEIGHBOR). The cursor resolves to whichever face is nearer.
-    const twin: Room = {
-      id: "twin",
-      outline: [
-        { x: 6.5, y: 0 },
-        { x: 9, y: 0 },
-        { x: 9, y: 5.2 },
-        { x: 6.5, y: 5.2 },
-      ],
-      openings: [],
-      furniture: [],
-    };
-    const targets = snapTargetsOf([NEIGHBOR, twin]);
-    expect(
-      targetAxisCandidate(targets, "x", { x: 6.42, y: 2.5 }, tol)?.value,
-    ).toBe(6.4);
-    expect(
-      targetAxisCandidate(targets, "x", { x: 6.48, y: 2.5 }, tol)?.value,
-    ).toBe(6.5);
   });
 });
 
-describe("snapDraftPoint against other rooms", () => {
-  it("composes the outer corner near a target room corner", () => {
-    // Both axes capture a wall slab around the bottom-right corner, so the
-    // point lands one wall thickness out on each — the room's outer corner.
+describe("snapDraftPoint against the graph", () => {
+  it("composes a corner from two wall centerlines", () => {
+    // Both axes capture a wall centerline around the bottom-right corner, so
+    // the point lands on the corner (6.4, 5.2) — welding onto it.
     const snap = snapDraftPoint([], { x: 6.45, y: 5.13 }, TOL, true, TARGETS);
-    expect(snap.point).toEqual({ x: 6.5, y: 5.3 });
+    expect(snap.point).toEqual({ x: 6.4, y: 5.2 });
     expect(snap.floorSnap?.kind).toBe("wall");
   });
 
-  it("keeps the axis lock and attaches the free coordinate", () => {
-    // The last corner axis-locks y to 5.15; x attaches to the right wall's
-    // outer face — the drawn edge stays on its own line, back-to-back.
+  it("keeps the axis lock and pins the free coordinate to the centerline", () => {
+    // The last corner axis-locks y to 5.15; x pins onto the right wall's
+    // centerline (welding onto it).
     const snap = snapDraftPoint(
       [{ x: 8, y: 5.15 }],
       { x: 6.45, y: 5.12 },
@@ -231,28 +198,20 @@ describe("snapDraftPoint against other rooms", () => {
       true,
       TARGETS,
     );
-    expect(snap.point).toEqual({ x: 6.5, y: 5.15 });
+    expect(snap.point).toEqual({ x: 6.4, y: 5.15 });
     expect(snap.axisSnapped).toBe(true);
     expect(snap.floorSnap?.kind).toBe("wall");
   });
 
-  it("pins a coordinate to a wall's outer face within its span", () => {
+  it("pins a coordinate to a wall's centerline within its span", () => {
     const snap = snapDraftPoint([], { x: 6.45, y: 2.52 }, TOL, true, TARGETS);
-    expect(snap.point).toEqual({ x: 6.5, y: 2.5 });
+    expect(snap.point).toEqual({ x: 6.4, y: 2.5 });
     expect(snap.floorSnap?.kind).toBe("wall");
   });
 
-  it("snaps a click in the middle of the wall's slab to the outer face", () => {
-    // Beyond a 0.03 tolerance of either face, but on the rendered thickness —
-    // clicking any part of an existing wall means "attach to this wall".
-    const snap = snapDraftPoint([], { x: 6.47, y: 2.52 }, 0.03, true, TARGETS);
-    expect(snap.point).toEqual({ x: 6.5, y: 2.5 });
-    expect(snap.floorSnap?.kind).toBe("wall");
-  });
-
-  it("aligns with a room corner's coordinate beyond the wall span", () => {
+  it("aligns with a node's coordinate beyond the wall span", () => {
     // y = 8 is far past the right wall's span, so the wall no longer pins x,
-    // but the corner coordinate still aligns (the flush-extension case).
+    // but the node coordinate still aligns (the flush-extension case).
     const snap = snapDraftPoint([], { x: 6.44, y: 8.03 }, TOL, true, TARGETS);
     expect(snap.point).toEqual({ x: 6.4, y: 8.05 });
     expect(snap.floorSnap).toEqual({
@@ -270,7 +229,7 @@ describe("snapDraftPoint against other rooms", () => {
       true,
       TARGETS,
     );
-    expect(snap.point).toEqual({ x: 6.5, y: 2.5 });
+    expect(snap.point).toEqual({ x: 6.4, y: 2.5 });
     expect(snap.axisSnapped).toBe(true);
     expect(snap.floorSnap?.kind).toBe("wall");
   });
@@ -294,21 +253,21 @@ describe("snapRectPoint", () => {
     });
   });
 
-  it("pins each coordinate to another room's wall face or corner", () => {
-    // x attaches to the right wall's outer face, y free → quantized.
+  it("pins each coordinate to an existing wall centerline or node", () => {
+    // x pins onto the right wall's centerline, y free → quantized.
     expect(snapRectPoint({ x: 6.43, y: 1.28 }, true, TARGETS, TOL)).toEqual({
-      x: 6.5,
+      x: 6.4,
       y: 1.3,
     });
-    // Both coordinates capture a slab near the bottom-right corner — the
-    // rectangle corner lands on the room's outer corner.
+    // Both coordinates capture a centerline near the bottom-right corner —
+    // the rectangle corner lands on the graph corner.
     expect(snapRectPoint({ x: 6.44, y: 5.16 }, true, TARGETS, TOL)).toEqual({
-      x: 6.5,
-      y: 5.3,
+      x: 6.4,
+      y: 5.2,
     });
-    // A click on the wall's slab pins to the face past the tolerance too.
-    expect(snapRectPoint({ x: 6.47, y: 1.28 }, true, TARGETS, 0.03)).toEqual({
-      x: 6.5,
+    // Within the tolerance band the centerline pins past the grid too.
+    expect(snapRectPoint({ x: 6.42, y: 1.28 }, true, TARGETS, 0.03)).toEqual({
+      x: 6.4,
       y: 1.3,
     });
   });
