@@ -344,7 +344,6 @@ export function MoveDragSession({
         ...wallObstacles,
       ];
       const snap = snapPlacement(
-        [],
         drag.size,
         target,
         obstacles,

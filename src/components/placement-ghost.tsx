@@ -147,7 +147,6 @@ export function PlacementGhost({
         ...wallObstacles,
       ];
       const placed = snapPlacement(
-        [],
         item.footprint,
         point,
         obstacles,
