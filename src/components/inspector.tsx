@@ -641,8 +641,8 @@ export function Inspector({
             <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
               Drag any corner and every room that shares it follows. Use the
               wall tool to chain new walls (they weld onto what they touch), or
-              click a wall to split it. Edit a length label directly; delete
-              removes a corner or wall. Undo works live.
+              drag a wall to split it. Edit a length label directly; click a
+              wall and delete removes it. Undo works live.
             </div>
           </div>
         ) : showSelection ? (

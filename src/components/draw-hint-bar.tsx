@@ -62,10 +62,10 @@ export function DrawHintBar({
         <>
           <Hint>Drag corners anywhere</Hint>
           {DIVIDER}
-          <Hint>Click a wall to split</Hint>
+          <Hint>Drag a wall to split it</Hint>
           {DIVIDER}
           <Hint>
-            <Key>del</Key> removes a corner or wall
+            Click a wall, <Key>del</Key> removes it
           </Hint>
         </>
       )}

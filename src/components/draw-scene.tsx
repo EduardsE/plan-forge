@@ -41,9 +41,11 @@ import {
  * click-to-edit length pill, and each derived face carries an area label.
  * Dragging a node moves every wall that shares it (rooms deform together);
  * the wall tool chains open walls click-by-click (welding onto existing
- * nodes/edges), the rect tool draws a rectangle in one step, and a click on a
- * wall in select mode splits it and drags the new node. Delete removes the
- * hovered node or edge. All edits go through `lib/graph-edit.ts` with normal
+ * nodes/edges), the rect tool draws a rectangle in one step, and in select
+ * mode dragging a wall splits it and drags the new node while a plain click
+ * selects the wall (highlighted; delete removes it, esc/click-away deselects).
+ * Delete also removes the hovered node or edge. All edits go through
+ * `lib/graph-edit.ts` with normal
  * undo — no draft/commit session. Geometry lives in `src/lib/draw.ts` +
  * `src/lib/graph-edit.ts`; every color/proportion is lifted from the mockup.
  */
@@ -573,6 +575,8 @@ export function DrawScene({
   // Select tool: the hovered node/edge, so delete knows what to remove.
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
+  // Select tool: the clicked wall — delete removes it, esc/click-away clears.
+  const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [drag, setDrag] = useState<NodeDrag | null>(null);
   const { begin, end } = useControlsPause(onNodeDragActiveChange);
 
@@ -587,7 +591,15 @@ export function DrawScene({
     setRectAnchor(null);
     setRectCursor(null);
     setSnap(null);
+    setSelectedEdge(null);
   }, [tool]);
+
+  // Drop a selection whose edge is gone (undo, weld, the delete itself).
+  useEffect(() => {
+    if (selectedEdge && !floor.edges.some((e) => e.id === selectedEdge)) {
+      setSelectedEdge(null);
+    }
+  }, [floor.edges, selectedEdge]);
 
   /** Snap tolerance in meters at the event camera's current zoom. */
   const toleranceOf = (event: ThreeEvent<PointerEvent | MouseEvent>) => {
@@ -618,8 +630,16 @@ export function DrawScene({
         setRectAnchor(null);
         return;
       }
+      if (selectMode && event.key === "Escape" && selectedEdge) {
+        setSelectedEdge(null);
+        return;
+      }
       if (selectMode && (event.key === "Delete" || event.key === "Backspace")) {
-        if (hoveredNode) {
+        if (selectedEdge) {
+          event.preventDefault();
+          onDeleteEdge(selectedEdge);
+          setSelectedEdge(null);
+        } else if (hoveredNode) {
           event.preventDefault();
           onDeleteNode(hoveredNode);
           setHoveredNode(null);
@@ -641,6 +661,7 @@ export function DrawScene({
     rectAnchor,
     hoveredNode,
     hoveredEdge,
+    selectedEdge,
     onEndChain,
     onDeleteNode,
     onDeleteEdge,
@@ -649,6 +670,7 @@ export function DrawScene({
   const beginDrag = useCallback(
     (nodeId: string, screen: { x: number; y: number }) => {
       setDrag({ nodeId, originScreen: screen });
+      setSelectedEdge(null);
       begin();
     },
     [begin],
@@ -657,6 +679,45 @@ export function DrawScene({
     setDrag(null);
     end();
   }, [end]);
+
+  // A wall-strip press: past the drag slop it splits the edge and hands the
+  // new node to the drag session; released in place it selects the edge
+  // instead. Listeners attach synchronously in the pointerdown handler — an
+  // effect would race a fast click, whose pointerup can land before React
+  // commits (leaving the press armed to fire on a later, unrelated move).
+  const pendingSplitCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => pendingSplitCleanup.current?.(), []);
+  const beginSplitPress = useCallback(
+    (edgeId: string, point: Point, originScreen: { x: number; y: number }) => {
+      pendingSplitCleanup.current?.();
+      begin();
+      const teardown = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
+        pendingSplitCleanup.current = null;
+      };
+      const handleMove = (event: PointerEvent) => {
+        const travel = Math.hypot(
+          event.clientX - originScreen.x,
+          event.clientY - originScreen.y,
+        );
+        if (travel <= DRAG_SLOP_PX) return;
+        teardown();
+        const newId = onBeginSplitDrag(edgeId, point);
+        if (newId) beginDrag(newId, originScreen);
+        else end();
+      };
+      const handleUp = () => {
+        teardown();
+        setSelectedEdge(edgeId);
+        end();
+      };
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleUp);
+      pendingSplitCleanup.current = teardown;
+    },
+    [begin, end, beginDrag, onBeginSplitDrag],
+  );
 
   const handleMove = (event: ThreeEvent<PointerEvent>) => {
     const cursor = { x: event.point.x, y: event.point.z };
@@ -683,6 +744,12 @@ export function DrawScene({
     // canvas clicks may place points.
     if (!(event.nativeEvent.target instanceof HTMLCanvasElement)) return;
     if (event.delta > CLICK_SLOP_PX) return;
+    if (selectMode) {
+      // Empty-canvas click: clear the wall selection (strips and handles stop
+      // their own clicks from reaching here).
+      setSelectedEdge(null);
+      return;
+    }
     const cursor = { x: event.point.x, y: event.point.z };
     if (rectMode) {
       const corner = snapRectPoint(
@@ -751,17 +818,22 @@ export function DrawScene({
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
 
-      {/* Every edge as a navy centerline stroke (dangling walls included). */}
+      {/* Every edge as a navy centerline stroke (dangling walls included);
+          the selected wall re-strokes in the accent blue. */}
       {floor.edges.map((edge) => {
         const a = nodeById.get(edge.a);
         const b = nodeById.get(edge.b);
         if (!a || !b) return null;
+        const selected = edge.id === selectedEdge;
         return (
           <Line
             key={edge.id}
-            points={[v3(a, WALL_Y), v3(b, WALL_Y)]}
-            color={WALL_COLOR}
-            lineWidth={7}
+            points={[
+              v3(a, selected ? PREVIEW_Y : WALL_Y),
+              v3(b, selected ? PREVIEW_Y : WALL_Y),
+            ]}
+            color={selected ? SNAP_COLOR : WALL_COLOR}
+            lineWidth={selected ? 8 : 7}
             alphaToCoverage={false}
           />
         );
@@ -817,8 +889,9 @@ export function DrawScene({
         );
       })}
 
-      {/* Select-tool edge pick strips: click to split-then-drag; hover to
-          delete. Inert while dragging or under the wall/rect tools. */}
+      {/* Select-tool edge pick strips: drag to split-then-drag, click to
+          select; hover to delete. Inert while dragging or under the wall/rect
+          tools. */}
       {selectMode &&
         !drag &&
         floor.edges.map((edge) => {
@@ -840,13 +913,11 @@ export function DrawScene({
               onPointerDown={(event) => {
                 if (event.button !== 0) return;
                 event.stopPropagation();
-                const newId = onBeginSplitDrag(edge.id, {
-                  x: event.point.x,
-                  y: event.point.z,
-                });
-                if (newId) {
-                  beginDrag(newId, { x: event.clientX, y: event.clientY });
-                }
+                beginSplitPress(
+                  edge.id,
+                  { x: event.point.x, y: event.point.z },
+                  { x: event.clientX, y: event.clientY },
+                );
               }}
               onClick={(event) => event.stopPropagation()}
             >

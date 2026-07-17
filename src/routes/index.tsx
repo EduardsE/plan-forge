@@ -604,9 +604,10 @@ function Planner() {
       ),
     [],
   );
-  // Select tool: click a wall to split it, then drag the new node. The split
-  // is one undo step; the drag that follows settles into a second. Returns the
-  // reconciled new node's id so the scene can pick up the drag immediately.
+  // Select tool: drag a wall to split it and drag the new node (a plain click
+  // selects the wall instead, in-scene). The split is one undo step; the drag
+  // that follows settles into a second. Returns the reconciled new node's id
+  // so the scene can pick up the drag immediately.
   const beginSplitDrag = useCallback(
     (edgeId: string, point: Point): string | null => {
       const current = floorRef.current;
