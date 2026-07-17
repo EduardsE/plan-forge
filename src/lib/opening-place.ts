@@ -183,6 +183,58 @@ export function openingAt(
 }
 
 /**
+ * A vertical distance readout for an opening being moved up/down its wall
+ * (the 3D lens): floor→sill and head→ceiling, in wall-local coordinates —
+ * `along` the edge, heights floor-relative. The renderer stands the dashed
+ * line on the wall plane.
+ */
+export interface OpeningVerticalGuide {
+  id: "floor" | "ceiling";
+  /** Distance along the edge where the guide stands (the hole's center). */
+  along: number;
+  fromY: number;
+  toY: number;
+  distance: number;
+}
+
+/**
+ * The floor/ceiling counterparts of `openingCornerGuides` for a window
+ * riding up/down its wall: one guide from the floor to the hole's bottom,
+ * one from its top to the ceiling. Flush edges produce no guide (a door's
+ * floor-pinned bottom never gets one).
+ */
+export function openingVerticalGuides(
+  offset: number,
+  width: number,
+  bottom: number,
+  top: number,
+  ceiling: number,
+): OpeningVerticalGuide[] {
+  const along = offset + width / 2;
+  const guides: OpeningVerticalGuide[] = [];
+  if (bottom > FLUSH_EPSILON) {
+    guides.push({
+      id: "floor",
+      along,
+      fromY: 0,
+      toY: bottom,
+      distance: bottom,
+    });
+  }
+  const headGap = ceiling - top;
+  if (headGap > FLUSH_EPSILON) {
+    guides.push({
+      id: "ceiling",
+      along,
+      fromY: top,
+      toY: ceiling,
+      distance: headGap,
+    });
+  }
+  return guides;
+}
+
+/**
  * The distance-to-corner readouts for an opening at `offset`: one guide from
  * each wall corner to the opening's near edge, drawn `inset` meters inside
  * the room. Flush edges produce no guide. The `axis` field only feeds the

@@ -12,8 +12,9 @@ import { formatLength, type Unit } from "#/lib/units";
  */
 
 const GUIDE_COLOR = "#3a5bf0";
-/** Readout pill colors, from the mockup's "3.00 m" chips. */
-const PILL_CLASS =
+/** Readout pill colors, from the mockup's "3.00 m" chips — shared with the
+ * 3D opening drag's vertical guides (`room-openings.tsx`). */
+export const GUIDE_PILL_CLASS =
   "whitespace-nowrap rounded-[7px] bg-[#3a5bf0] px-2.5 py-[3px] font-mono text-[12.5px] text-white";
 
 /** Stacked above the 3D floor top (0.001) and the rug (top ≈ 0.017). */
@@ -60,7 +61,7 @@ export function SnapGuides({ guides, unit }: SnapGuidesProps) {
             style={{ pointerEvents: "none" }}
             zIndexRange={[30, 0]}
           >
-            <span className={PILL_CLASS}>
+            <span className={GUIDE_PILL_CLASS}>
               {formatLength(guide.distance, unit)}
             </span>
           </Html>

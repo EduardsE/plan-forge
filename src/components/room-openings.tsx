@@ -1,25 +1,27 @@
-import { useCursor } from "@react-three/drei";
+import { Html, Line, useCursor } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CLICK_SLOP_PX,
   useControlsPause,
   wallProjector,
 } from "#/components/move-drag";
-import { SnapGuides } from "#/components/snap-guides";
+import { GUIDE_PILL_CLASS, SnapGuides } from "#/components/snap-guides";
 import {
   OPENING_GRID,
   offsetAlongWall,
   openingCornerGuides,
+  openingVerticalGuides,
   slideOpening,
 } from "#/lib/opening-place";
 import type { PlacementGuide } from "#/lib/place";
+import { dashedPolyline } from "#/lib/plan-scene";
 import {
   WALL_THICKNESS,
   type WallHole,
   type WallSolid,
 } from "#/lib/room-scene";
-import type { Unit } from "#/lib/units";
+import { formatLength, type Unit } from "#/lib/units";
 
 /**
  * Door/window editing in the 3D dollhouse: every opening gets an invisible
@@ -133,6 +135,82 @@ function OpeningVolume({
 }
 
 /**
+ * The floor→sill and head→ceiling readouts while a window rides its wall:
+ * dashed vertical lines standing on the wall plane (just off the face on the
+ * opening's side), each with the same blue distance pill the corner guides
+ * use. Computed from the *live* hole, so they track every preview.
+ */
+function WallVerticalGuides({
+  solid,
+  hole,
+  unit,
+}: {
+  solid: WallSolid;
+  hole: WallHole;
+  unit: Unit;
+}) {
+  const guides = useMemo(
+    () =>
+      openingVerticalGuides(
+        hole.start,
+        hole.width,
+        hole.bottom,
+        hole.top,
+        solid.height,
+      ),
+    [hole.start, hole.width, hole.bottom, hole.top, solid.height],
+  );
+  // Plan point where a guide stands: on the wall line at the hole's center,
+  // pushed just past the face toward the room the opening belongs to.
+  const off = (WALL_THICKNESS / 2 + 0.02) * hole.side;
+  return (
+    <>
+      {guides.map((guide) => {
+        const at = {
+          x: solid.start.x + solid.dir.x * guide.along - solid.dir.y * off,
+          y: solid.start.y + solid.dir.y * guide.along + solid.dir.x * off,
+        };
+        // dashedPolyline chops 2D polylines; run it over the vertical span
+        // (height encoded as x) and stand the dashes up at `at`.
+        const dashes = dashedPolyline(
+          [
+            { x: guide.fromY, y: 0 },
+            { x: guide.toY, y: 0 },
+          ],
+          0.14,
+          0.11,
+        );
+        return (
+          <group key={guide.id}>
+            <Line
+              segments
+              points={dashes.map(
+                (d) => [at.x, d.x, at.y] as [number, number, number],
+              )}
+              color={SELECTION_COLOR}
+              lineWidth={2.5}
+              transparent
+              opacity={0.85}
+              alphaToCoverage={false}
+            />
+            <Html
+              position={[at.x, (guide.fromY + guide.toY) / 2, at.y]}
+              center
+              style={{ pointerEvents: "none" }}
+              zIndexRange={[30, 0]}
+            >
+              <span className={GUIDE_PILL_CLASS}>
+                {formatLength(guide.distance, unit)}
+              </span>
+            </Html>
+          </group>
+        );
+      })}
+    </>
+  );
+}
+
+/**
  * The window-listener half of a 3D opening drag (the pointer is already down
  * when this mounts): pointermoves project onto the host wall's vertical
  * plane; the along component slides through `slideOpening`'s quantize /
@@ -160,6 +238,8 @@ function OpeningDragSession3D({
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
   const [guides, setGuides] = useState<PlacementGuide[]>([]);
+  // The pointer has cleared the click slop: the drag is real, guides show.
+  const [dragging, setDragging] = useState(false);
   // Latest solid/callbacks without resubscribing mid-drag — every preview
   // rebuilds the floor, churning the solid's identity while its wall
   // geometry stays constant.
@@ -185,6 +265,7 @@ function OpeningDragSession3D({
         );
         if (travel <= CLICK_SLOP_PX) return;
         moved = true;
+        setDragging(true);
       }
       const point = toWall(event);
       if (!point) return;
@@ -228,7 +309,17 @@ function OpeningDragSession3D({
     };
   }, [drag, camera, gl]);
 
-  return <SnapGuides guides={guides} unit={unit} />;
+  // The live hole tracks every preview — its bottom/top drive the vertical
+  // guides while a window rides the wall (doors stay floor-pinned).
+  const liveHole = solid.holes.find((hole) => hole.id === drag.id) ?? null;
+  return (
+    <group>
+      <SnapGuides guides={guides} unit={unit} />
+      {dragging && drag.kind === "window" && liveHole && (
+        <WallVerticalGuides solid={solid} hole={liveHole} unit={unit} />
+      )}
+    </group>
+  );
 }
 
 export interface RoomOpeningsProps {

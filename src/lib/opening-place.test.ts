@@ -4,6 +4,7 @@ import {
   offsetAlongWall,
   openingAt,
   openingCornerGuides,
+  openingVerticalGuides,
   slideOpening,
 } from "#/lib/opening-place";
 import { buildEdgeSolids } from "#/lib/room-scene";
@@ -116,6 +117,35 @@ describe("openingCornerGuides", () => {
     const far = openingCornerGuides(top, top.length - 2.1, 2.1, 0.18);
     expect(far).toHaveLength(1);
     expect(far[0].id).toBe("near");
+  });
+});
+
+describe("openingVerticalGuides", () => {
+  it("measures floor→sill and head→ceiling at the hole's center", () => {
+    const guides = openingVerticalGuides(3.55, 2.1, 0.36, 1.94, 2.5);
+    expect(guides).toHaveLength(2);
+    expect(guides[0]).toEqual({
+      id: "floor",
+      along: 3.55 + 1.05,
+      fromY: 0,
+      toY: 0.36,
+      distance: 0.36,
+    });
+    expect(guides[1].id).toBe("ceiling");
+    expect(guides[1].fromY).toBeCloseTo(1.94, 10);
+    expect(guides[1].toY).toBeCloseTo(2.5, 10);
+    expect(guides[1].distance).toBeCloseTo(0.56, 10);
+  });
+
+  it("drops flush edges: a door's floor-pinned bottom, a ceiling-high head", () => {
+    // Door: bottom 0 → only the ceiling guide.
+    const door = openingVerticalGuides(3.65, 0.95, 0, 2.05, 2.5);
+    expect(door).toHaveLength(1);
+    expect(door[0].id).toBe("ceiling");
+    // Window shifted to the ceiling: only the floor guide.
+    const high = openingVerticalGuides(3.55, 2.1, 0.92, 2.5, 2.5);
+    expect(high).toHaveLength(1);
+    expect(high[0].id).toBe("floor");
   });
 });
 
