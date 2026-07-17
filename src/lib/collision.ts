@@ -7,9 +7,9 @@ import {
   updateFurniture,
 } from "#/lib/model";
 import {
-  PLACEMENT_GRID,
+  type Obstacle,
   rotatedFootprintSize,
-  snapPlacement,
+  separateFromWalls,
 } from "#/lib/place";
 
 /**
@@ -17,10 +17,12 @@ import {
  * one soft and one hard:
  *
  * - **Containment (hard):** rotate and duplicate change an item's hull or
- *   position without the move drag that would otherwise clamp it inside the
- *   room, so a rotated desk near a wall pokes through. `containFurniture`
- *   slides the item back in — the containment half of `snapPlacement` with
- *   quantize and flush snapping off.
+ *   position without the move drag that would otherwise resolve it against the
+ *   walls, so a rotated desk pressed to a wall pokes through it.
+ *   `containFurniture` pushes the item back out of any wall slab it penetrates
+ *   (`separateFromWalls`). Furniture is floor-level now — it may sit anywhere
+ *   no wall solid is (a room, the dead band at a shared wall, the open canvas),
+ *   so the boundary is the wall slabs, not a room outline.
  * - **Overlap (soft):** two floor items sharing floor space isn't blocked, it's
  *   flagged. `overlappingFurnitureIds` returns the ids the renderers tint as a
  *   warning. Wall-mounted items (they hang above the floor) and rugs (furniture
@@ -39,55 +41,52 @@ const FLOOR_COVERING_MAX_HEIGHT = 0.05;
 const OVERLAP_PENETRATION = 0.01;
 
 /**
- * Slide a placed item's center back inside the outline for its *current*
- * rotation, contained but not snapped. Reuses `snapPlacement` with snap off
- * (no quantize, no flush pull) so only the bounds clamp and non-axis-wall
- * containment survive. Wall-mounted items are anchored to their wall by design
- * and pass through untouched; an already-contained item returns unchanged
- * (same reference), so nothing re-renders or re-saves needlessly.
+ * Push a placed item's center out of any wall slab it penetrates at its
+ * *current* rotation (`separateFromWalls` over the floor's `wallObstacles`).
+ * Wall-mounted items are anchored to their wall by design and pass through
+ * untouched, as do stacked riders (their host's own containment carries them);
+ * an item already clear of every wall returns unchanged (same reference), so
+ * nothing re-renders or re-saves needlessly.
  */
 export function containFurniture(
-  outline: Point[],
+  wallObstacles: Obstacle[],
   item: FurnitureItem,
 ): FurnitureItem {
-  // Wall mounts anchor to their wall, riders to their host — the host's own
-  // containment keeps a rider inside the room.
   if (item.mount || item.stack) return item;
   const size = rotatedFootprintSize(item.footprint, item.rotation);
-  const { center } = snapPlacement(
-    outline,
-    size,
-    item.position,
-    [],
-    0,
-    PLACEMENT_GRID,
-    false,
-  );
+  const center = separateFromWalls(wallObstacles, size, item.position);
   if (center.x === item.position.x && center.y === item.position.y) return item;
   return { ...item, position: center };
 }
 
-/** Re-contain one item of the room (by id) after a mutation moved or spun it. */
-export function containRoomFurniture(room: Room, id: string): Room {
+/** Re-contain one item of the floor (by id) against the wall slabs after a
+ * mutation moved or spun it, carrying any riders on it. */
+export function containRoomFurniture(
+  wallObstacles: Obstacle[],
+  room: Room,
+  id: string,
+): Room {
   const next = {
     ...room,
     furniture: room.furniture.map((item) =>
-      item.id === id ? containFurniture(room.outline, item) : item,
+      item.id === id ? containFurniture(wallObstacles, item) : item,
     ),
   };
-  // Containment that slid a host back inside carries its riders with it.
+  // Containment that pushed a host off a wall carries its riders with it.
   return syncStackedRiders(next, id);
 }
 
 /**
- * Shift a floor item by a keyboard nudge (plan-coord delta), then contain it
- * back inside the outline. Wall-mounted items pass through unchanged — their
- * position is derived from the wall, matching the inspector hiding POS for
- * them; a stacked rider re-anchors onto its host through the position update
- * (clamped to the host's top, like the POS X/Y fields). Unknown ids return
- * the room unchanged.
+ * Shift a floor item by a keyboard nudge (plan-coord delta), then resolve it
+ * against the wall slabs — a nudge toward a wall pushes up to the slab and
+ * stops, whether the item sits in a room or out on the open canvas, and a
+ * nudge aimed at a doorway gap passes (doors carry no slab at floor level).
+ * Wall-mounted items pass through unchanged (their position is derived from
+ * the wall); a stacked rider re-anchors onto its host through the position
+ * update. Unknown ids return the room unchanged.
  */
 export function nudgeFurniture(
+  wallObstacles: Obstacle[],
   room: Room,
   id: string,
   dx: number,
@@ -96,6 +95,7 @@ export function nudgeFurniture(
   const item = room.furniture.find((entry) => entry.id === id);
   if (!item || item.mount) return room;
   return containRoomFurniture(
+    wallObstacles,
     updateFurniture(room, id, {
       position: { x: item.position.x + dx, y: item.position.y + dy },
     }),

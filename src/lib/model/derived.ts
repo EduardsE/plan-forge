@@ -239,38 +239,6 @@ export function deriveFloor(floor: Floor): DerivedFloor {
 }
 
 /**
- * Project a wall-local opening span (near-edge `wallOffset`, `width`) back
- * onto the edge `ref` names, in edge coordinates. Mirrors when the derived
- * wall runs opposite a→b, so the returned span is `[offset, offset + width]`
- * from the edge's node `a`.
- */
-export function edgeOffsetOf(
-  floor: Floor,
-  ref: WallRef,
-  room: DerivedRoom,
-  wallIndex: number,
-  wallOffset: number,
-  width: number,
-): number {
-  const nodes = nodesMap(floor);
-  const edges = edgesMap(floor);
-  const edge = edgeLine(edges.get(ref.edgeId), nodes);
-  const wall = wallLine(room.outline, wallIndex);
-  if (!edge || !wall) return wallOffset;
-  const near = {
-    x: wall.start.x + wall.dir.x * wallOffset,
-    y: wall.start.y + wall.dir.y * wallOffset,
-  };
-  const far = {
-    x: wall.start.x + wall.dir.x * (wallOffset + width),
-    y: wall.start.y + wall.dir.y * (wallOffset + width),
-  };
-  const t0 = projectOnto(edge, near);
-  const t1 = projectOnto(edge, far);
-  return Math.max(0, Math.min(Math.min(t0, t1), edge.length - width));
-}
-
-/**
  * "Living room ↔ Kitchen" for the portal an opening forms, or null for a
  * plain (exterior or unshared) opening — reimplemented from the graph's edge
  * face-adjacency: an opening whose host edge borders two rooms is a portal.

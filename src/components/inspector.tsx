@@ -371,9 +371,15 @@ export interface InspectorProps {
   rooms: Room[];
   unit: Unit;
   mode: ViewMode;
-  /** The selected item's owning room (derived floor-wide), or null. */
-  selectedRoom: Room | null;
   selectedItem: FurnitureItem | null;
+  /** Membership readout for the selection: a room name, "—" when unassigned
+   * (in no room), or null to hide the line (single-room floor). */
+  selectedRoomName?: string | null;
+  /** Display name of the furniture the selection stands on, if stacked. */
+  selectedHostName?: string | null;
+  /** The selection's owning-room ceiling (the elevation clamp), or the
+   * default when it sits in no room. */
+  selectedWallHeight?: number;
   /** Number of graph nodes (corners), for the draw-mode OUTLINE view. */
   nodeCount?: number;
   /** The selected opening is a portal — "Door connects Living ↔ Kitchen"
@@ -393,8 +399,10 @@ export function Inspector({
   rooms,
   unit,
   mode,
-  selectedRoom,
   selectedItem,
+  selectedRoomName = null,
+  selectedHostName = null,
+  selectedWallHeight = 2.5,
   nodeCount = 0,
   portalStatus = null,
   onResize,
@@ -407,8 +415,7 @@ export function Inspector({
   onDelete,
 }: InspectorProps) {
   const drawing = mode === "draw";
-  const showSelection =
-    selectedItem !== null && selectedRoom !== null && !drawing;
+  const showSelection = selectedItem !== null && !drawing;
   const multiRoom = rooms.length > 1;
   const header = drawing
     ? "OUTLINE"
@@ -455,17 +462,9 @@ export function Inspector({
         ) : showSelection ? (
           <SelectionSection
             item={selectedItem}
-            wallHeight={wallHeightOf(selectedRoom)}
-            hostName={
-              selectedItem.stack
-                ? furnitureDisplayName(
-                    selectedRoom.furniture.find(
-                      (entry) => entry.id === selectedItem.stack?.hostId,
-                    )?.catalogId ?? "",
-                  )
-                : null
-            }
-            roomName={multiRoom ? (selectedRoom.name ?? "Untitled room") : null}
+            wallHeight={selectedWallHeight}
+            hostName={selectedHostName}
+            roomName={selectedRoomName}
             unit={unit}
             onResize={onResize}
             onRotateTo={onRotateTo}

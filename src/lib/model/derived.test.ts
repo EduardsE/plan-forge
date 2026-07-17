@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  deriveFloor,
-  edgeOffsetOf,
-  reconcileFloor,
-  updateDerivedRoom,
-} from "./derived";
+import { deriveFloor, reconcileFloor, updateDerivedRoom } from "./derived";
 import { updateFurniture } from "./furniture";
 import { setRoomName, setRoomWallHeight } from "./room";
 import { makeFloor } from "./test-fixtures";
@@ -109,26 +104,6 @@ describe("updateDerivedRoom", () => {
       setRoomWallHeight(room, 3.2),
     );
     expect(raised.rooms.find((r) => r.id === "living")?.wallHeight).toBe(3.2);
-  });
-});
-
-describe("edgeOffsetOf", () => {
-  it("projects a wall-local span back onto the edge", () => {
-    const floor = makeFloor();
-    const living = deriveFloor(floor).rooms.find((r) => r.id === "living");
-    if (!living) throw new Error("missing living");
-    const door = living.openings.find((o) => o.id === "door-BE");
-    if (!door) throw new Error("missing door");
-    const ref = living.wallRefs[door.wallIndex];
-    const edgeOffset = edgeOffsetOf(
-      floor,
-      ref,
-      living,
-      door.wallIndex,
-      2.0,
-      door.width,
-    );
-    expect(edgeOffset).toBeCloseTo(2.05, 2);
   });
 });
 

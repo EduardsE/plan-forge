@@ -28,6 +28,7 @@ import type {
   Room,
 } from "#/lib/model";
 import {
+  allFurnitureOf,
   catalogItemById,
   floorArea,
   floorBounds,
@@ -744,6 +745,73 @@ function WallLayer({
   );
 }
 
+/**
+ * A bucket of plan footprints (a room's, or the unassigned/open-canvas items),
+ * pickable and draggable in the 2D lens. Overlap warnings are scoped to the
+ * bucket — items in different buckets can't overlap, containment keeps them
+ * apart at the walls. Static (non-interactive) rendering is DrawScene's
+ * backdrop.
+ */
+function PlanFootprints({
+  furniture,
+  selectedId = null,
+  interactive = false,
+  onSelectItem,
+  onDragStart,
+}: {
+  furniture: FurnitureItem[];
+  selectedId?: string | null;
+  interactive?: boolean;
+  onSelectItem?: (id: string) => void;
+  onDragStart?: (
+    item: FurnitureItem,
+    floorPoint: Point,
+    screen: { x: number; y: number },
+  ) => void;
+}) {
+  const warnings = useMemo(
+    () => overlappingFurnitureIds(furniture),
+    [furniture],
+  );
+  return (
+    <>
+      {furniture.map((item) => {
+        const footprint = (active: boolean) =>
+          catalogItemById(item.catalogId)?.category === "plants" ? (
+            <PlantFootprint
+              item={item}
+              active={active}
+              selected={item.id === selectedId}
+              warning={warnings.has(item.id)}
+            />
+          ) : (
+            <FurnitureFootprint
+              item={item}
+              active={active}
+              selected={item.id === selectedId}
+              warning={warnings.has(item.id)}
+            />
+          );
+        return interactive && onSelectItem && onDragStart ? (
+          <PickableFootprint
+            key={item.id}
+            item={item}
+            selected={item.id === selectedId}
+            onSelect={onSelectItem}
+            onDragStart={onDragStart}
+          >
+            {footprint}
+          </PickableFootprint>
+        ) : (
+          <group key={item.id} position={[item.position.x, 0, item.position.y]}>
+            {footprint(false)}
+          </group>
+        );
+      })}
+    </>
+  );
+}
+
 export interface PlanRoomLayerProps {
   room: Room;
   /** Floor-wide furniture selection; only this room's items can match. */
@@ -777,13 +845,6 @@ export function PlanRoomLayer({
     () => (room.outline.length >= 3 ? shapeFromPoints(room.outline) : null),
     [room.outline],
   );
-  // Overlap warnings are a per-room concern: furniture belongs to exactly
-  // one room, and containment keeps footprints inside it — items in
-  // different rooms can't overlap.
-  const warnings = useMemo(
-    () => overlappingFurnitureIds(room.furniture),
-    [room.furniture],
-  );
 
   if (!bounds || !floorShape) return null;
   return (
@@ -793,39 +854,13 @@ export function PlanRoomLayer({
         <shapeGeometry args={[floorShape]} />
         <meshBasicMaterial map={floorTexture()} />
       </mesh>
-      {room.furniture.map((item) => {
-        const footprint = (active: boolean) =>
-          catalogItemById(item.catalogId)?.category === "plants" ? (
-            <PlantFootprint
-              item={item}
-              active={active}
-              selected={item.id === selectedId}
-              warning={warnings.has(item.id)}
-            />
-          ) : (
-            <FurnitureFootprint
-              item={item}
-              active={active}
-              selected={item.id === selectedId}
-              warning={warnings.has(item.id)}
-            />
-          );
-        return interactive && onSelectItem && onDragStart ? (
-          <PickableFootprint
-            key={item.id}
-            item={item}
-            selected={item.id === selectedId}
-            onSelect={onSelectItem}
-            onDragStart={onDragStart}
-          >
-            {footprint}
-          </PickableFootprint>
-        ) : (
-          <group key={item.id} position={[item.position.x, 0, item.position.y]}>
-            {footprint(false)}
-          </group>
-        );
-      })}
+      <PlanFootprints
+        furniture={room.furniture}
+        selectedId={selectedId}
+        interactive={interactive}
+        onSelectItem={onSelectItem}
+        onDragStart={onDragStart}
+      />
       <Html
         position={[
           (bounds.min.x + bounds.max.x) / 2,
@@ -851,6 +886,8 @@ export function PlanRoomLayer({
 export interface PlanSceneProps {
   /** Every derived room of the floor; walls are built from the graph edges. */
   rooms: DerivedRoom[];
+  /** Furniture that lands in no room (dangling / open-canvas). */
+  unassignedFurniture: FurnitureItem[];
   /** The graph floor — walls are one solid per edge; mounts re-anchor to it. */
   floor: Floor;
   selectedId: string | null;
@@ -861,13 +898,9 @@ export interface PlanSceneProps {
   snapEnabled: boolean;
   onSelectItem: (id: string) => void;
   /** Live update during a move drag (already snapped; wall items carry
-   * mount). `targetRoomId` set and different from the item's current room
-   * reparents it there — the drag crossed a seam. */
-  onMoveItem: (
-    id: string,
-    update: FurnitureUpdate,
-    targetRoomId?: string,
-  ) => void;
+   * mount). Furniture is floor-level — the write-back re-partitions the item
+   * into whichever room now contains it (or the unassigned bucket). */
+  onMoveItem: (id: string, update: FurnitureUpdate) => void;
   /** A move drag started/ended — the canvas locks pan/zoom while it runs. */
   onMoveActiveChange: (active: boolean) => void;
   onSelectOpening: (id: string) => void;
@@ -883,6 +916,7 @@ export interface PlanSceneProps {
 
 export function PlanScene({
   rooms,
+  unassignedFurniture,
   floor,
   selectedId,
   selectedOpeningId,
@@ -916,15 +950,20 @@ export function PlanScene({
   );
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
-  // The owning room is derived from the item id — selection and drags are
-  // floor-wide; a drag crossing a seam reparents the item (M5).
+  // Selection and drags are floor-wide; the item is found across every room
+  // plus the unassigned bucket. The owning room (for the rotate handle's
+  // containment) is derived from the item id, undefined when unassigned.
+  const allFurniture = useMemo(
+    () => allFurnitureOf(rooms, unassignedFurniture),
+    [rooms, unassignedFurniture],
+  );
+  const selectedItem =
+    allFurniture.find((item) => item.id === selectedId) ?? null;
   const selectedRoom = selectedId
     ? rooms.find((room) =>
         room.furniture.some((item) => item.id === selectedId),
       )
     : undefined;
-  const selectedItem =
-    selectedRoom?.furniture.find((item) => item.id === selectedId) ?? null;
 
   if (!bounds) return null;
   const dimensionOffset = WALL_THICKNESS + DIMENSION_GAP;
@@ -937,11 +976,18 @@ export function PlanScene({
           selectedId={selectedId}
           interactive
           onSelectItem={onSelectItem}
-          onDragStart={(item, floorPoint, screen) =>
-            beginDrag(item, room.id, floorPoint, screen)
-          }
+          onDragStart={beginDrag}
         />
       ))}
+      {unassignedFurniture.length > 0 && (
+        <PlanFootprints
+          furniture={unassignedFurniture}
+          selectedId={selectedId}
+          interactive
+          onSelectItem={onSelectItem}
+          onDragStart={beginDrag}
+        />
+      )}
       <WallLayer solids={solids} posts={posts} />
       <PlanOpenings
         solids={solids}
@@ -985,14 +1031,12 @@ export function PlanScene({
       )}
       {drag && (
         <MoveDragSession
-          rooms={rooms}
+          furniture={allFurniture}
           floor={floor}
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}
-          onMove={(update, targetRoomId) =>
-            onMoveItem(drag.id, update, targetRoomId)
-          }
+          onMove={(update) => onMoveItem(drag.id, update)}
           onEnd={endDrag}
         />
       )}

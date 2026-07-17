@@ -130,6 +130,23 @@ describe("floor-level opening setters", () => {
     expect(door(moved)?.offset).toBeCloseTo(5.3 - 0.95, 2);
   });
 
+  it("slides a move clear of another opening on the same edge", () => {
+    // Edge AB (~6.45 long) already carries window-AB at [3.55, 5.65]. Add a
+    // second 0.8 m window in the left gap, then try to drag it into the first.
+    const floor = addFloorOpening(makeFloor(), {
+      id: "w2",
+      kind: "window",
+      edgeId: "AB",
+      offset: 0.2,
+      width: 0.8,
+      side: 1,
+    });
+    const moved = moveFloorOpening(floor, "w2", 4.0);
+    const w2 = moved.openings.find((o) => o.id === "w2");
+    // The setter's own gap logic keeps it clear of window-AB (start 3.55).
+    expect((w2?.offset ?? 0) + 0.8).toBeLessThanOrEqual(3.55 + 1e-6);
+  });
+
   it("resizes about the center, clamped clear of edge ends", () => {
     const floor = makeFloor();
     const wide = resizeFloorOpening(floor, "door-BE", 12);

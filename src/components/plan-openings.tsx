@@ -523,7 +523,11 @@ export function PlanOpenings({
           solid={selected.solid}
           hole={selected.hole}
           connects={portalLabels?.get(selected.hole.id) ?? null}
-          showSideFlip={selected.solid.faces === 2}
+          // Only a door has a swing to flip — a window opens the same either
+          // way, so the button would be a no-op on a portal window.
+          showSideFlip={
+            selected.solid.faces === 2 && selected.hole.kind === "door"
+          }
           unit={unit}
           onFlipHinge={onFlipHinge}
           onFlipSide={onFlipSide}

@@ -8,17 +8,17 @@ import type {
   FurnitureItem,
   FurnitureUpdate,
   Point,
-  Room,
   Stack,
   WallMount,
 } from "#/lib/model";
-import { canHostStack, isStackRider, roomAtPoint } from "#/lib/model";
+import { canHostStack, isStackRider } from "#/lib/model";
 import { mountAt } from "#/lib/mount-place";
 import {
+  edgeWallObstacles,
   furnitureObstacle,
-  outlineWallObstacles,
   type PlacementGuide,
   rotatedFootprintSize,
+  separateFromWalls,
   snapPlacement,
 } from "#/lib/place";
 import { stackAt } from "#/lib/stack-place";
@@ -27,14 +27,15 @@ import type { Unit } from "#/lib/units";
 /**
  * Moving a placed item by pointer-drag, shared by both lenses: the 3D
  * dollhouse and the 2D plan arm a drag from a pointerdown on an
- * already-selected item, and the session reuses `snapPlacement`'s quantize /
- * outline clamp / wall-flush snap plus the wall-clearance guide pills.
+ * already-selected item, and the session reuses `snapPlacement`'s quantize and
+ * flush-snap plus the wall-clearance guide pills.
  *
- * Drags are floor-wide: each move resolves the room under the dragged
- * *center* and contains/snaps within it, so carrying an item across a seam
- * reparents it into the destination room (the update reports the target
- * room's id). Neighbor rooms' walls join the snap pipeline as obstacle
- * faces, and wall/host drags likewise consider every room's walls/hosts.
+ * Furniture is floor-level: a drag snaps flush against neighbours and the
+ * wall solids and is pushed out of any wall slab it penetrates
+ * (`separateFromWalls`), so a piece can be carried anywhere the walls allow —
+ * into another room across a doorway, into the dead band at a shared wall, or
+ * out onto the open canvas — with no room clamp and no reparenting. Wall-mount
+ * and rider drags re-anchor to the nearest edge/host across the whole floor.
  */
 
 /**
@@ -49,8 +50,6 @@ export const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 /** A live move drag: which item, where it was grabbed, where it started. */
 export interface MoveDrag {
   id: string;
-  /** Room owning the item at drag start, restored (with position) by esc. */
-  roomId: string;
   /** Grab offset from the item's center, plan coords — dragging keeps it. */
   grab: Point;
   /**
@@ -164,8 +163,6 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
   const beginDrag = useCallback(
     (
       item: FurnitureItem,
-      /** Id of the room whose furniture array holds the item right now. */
-      roomId: string,
       /** Where on the item the pointer grabbed it, plan coords. */
       grabPoint: Point,
       screen: { x: number; y: number },
@@ -174,7 +171,6 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
     ) => {
       setDrag({
         id: item.id,
-        roomId,
         grab: {
           x: grabPoint.x - item.position.x,
           y: grabPoint.y - item.position.y,
@@ -219,14 +215,13 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
 /**
  * The window-listener half of a move drag. Mounted per session (the pointer
  * is already down when it appears): raycasts pointermoves onto the floor
- * plane, resolves the target room under the dragged center, feeds
- * `snapPlacement` (same quantize / clamp / wall-flush as the placement
- * ghost) into `onMove` with that room's id, and renders the wall-clearance
- * guides. Pointerup commits wherever the item is; esc restores
- * `drag.original` in `drag.roomId`.
+ * plane, feeds `snapPlacement` (quantize + flush against neighbours and wall
+ * solids), pushes the result out of any wall slab it penetrates
+ * (`separateFromWalls`) into `onMove`, and renders the wall-clearance guides.
+ * Pointerup commits wherever the item is; esc restores `drag.original`.
  */
 export function MoveDragSession({
-  rooms,
+  furniture,
   floor,
   drag,
   unit,
@@ -234,18 +229,19 @@ export function MoveDragSession({
   onMove,
   onEnd,
 }: {
-  /** Every room of the floor — the drag resolves its target per move. */
-  rooms: Room[];
-  /** The graph floor — wall-mount drags re-anchor to its edges. */
+  /** Every derived furniture item of the floor (rooms' + unassigned) — the
+   * drag snaps against them as neighbours and lands riders on their hosts. */
+  furniture: FurnitureItem[];
+  /** The graph floor — wall slabs bound the drag; mount drags re-anchor. */
   floor: Floor;
   drag: MoveDrag;
   unit: Unit;
-  /** Snap toggle: off means free move (contained, but no flush/quantize). */
+  /** Snap toggle: off means free move (still wall-contained, no flush). */
   snapEnabled: boolean;
   /** Live update — a floor item patches its position; a wall item also its
-   * rotation and mount as it slides onto the nearest wall. `targetRoomId`
-   * differing from the item's current room reparents it there. */
-  onMove: (update: FurnitureUpdate, targetRoomId: string) => void;
+   * rotation and mount as it slides onto the nearest wall; a rider its stack
+   * anchor. Furniture is floor-level, so there is no target room to report. */
+  onMove: (update: FurnitureUpdate) => void;
   onEnd: () => void;
 }) {
   const camera = useThree((state) => state.camera);
@@ -253,21 +249,18 @@ export function MoveDragSession({
   const [guides, setGuides] = useState<PlacementGuide[]>([]);
   // The host the rider currently hovers, for the top-surface highlight.
   const [armedHost, setArmedHost] = useState<FurnitureItem | null>(null);
-  // Latest rooms/callbacks without resubscribing the listeners mid-drag
-  // (every move churns the floor, reparenting included).
+  // Latest furniture/callbacks without resubscribing the listeners mid-drag
+  // (every move churns the floor as the item's position updates).
   const moveRef = useRef(onMove);
   moveRef.current = onMove;
   const endRef = useRef(onEnd);
   endRef.current = onEnd;
-  const roomsRef = useRef(rooms);
-  roomsRef.current = rooms;
+  const furnitureRef = useRef(furniture);
+  furnitureRef.current = furniture;
   const floorRef = useRef(floor);
   floorRef.current = floor;
   const snapRef = useRef(snapEnabled);
   snapRef.current = snapEnabled;
-  // The room the drag last targeted — the fallback when the dragged center
-  // sits over no room (the gap between non-flush rooms, or past the floor).
-  const lastRoomIdRef = useRef(drag.roomId);
 
   useEffect(() => {
     // Track the pointer across the plane of the grab point, so an elevated
@@ -278,6 +271,9 @@ export function MoveDragSession({
       camera,
       new Plane(new Vector3(0, 1, 0), -drag.grabHeight),
     );
+    // Wall slabs come from the graph, which never changes during a furniture
+    // drag — compute the hard boundary once for the whole gesture.
+    const wallObstacles = edgeWallObstacles(floorRef.current);
     // Pointer-still-down presses shouldn't nudge the item onto the snap
     // grid: nothing moves until the pointer clears the click slop.
     let moved = false;
@@ -292,15 +288,13 @@ export function MoveDragSession({
       }
       const point = toFloor(event);
       if (!point) return;
-      const rooms = roomsRef.current;
+      const furniture = furnitureRef.current;
       const target = {
         x: point.x - drag.grab.x,
         y: point.y - drag.grab.y,
       };
       if (drag.mount) {
-        // Wall item: re-mount to the nearest graph edge that fits it. The
-        // owning room falls out of where the mounted position lands (the
-        // graph is one shared space — no cross-room mount variant needed).
+        // Wall item: re-mount to the nearest graph edge that fits it.
         const result = mountAt(
           floorRef.current,
           target,
@@ -309,29 +303,20 @@ export function MoveDragSession({
           snapRef.current,
         );
         if (!result) return;
-        const roomId =
-          roomAtPoint(rooms, result.position)?.id ?? lastRoomIdRef.current;
-        lastRoomIdRef.current = roomId;
-        moveRef.current(
-          {
-            position: result.position,
-            rotation: result.rotation,
-            mount: result.mount,
-          },
-          roomId,
-        );
+        moveRef.current({
+          position: result.position,
+          rotation: result.rotation,
+          mount: result.mount,
+        });
         setGuides(result.guides);
         return;
       }
       if (drag.rider) {
-        // Rider over a host — any room's host — anchors onto its top
+        // Rider over a host — any host on the floor — anchors onto its top
         // (hit-test the cursor, so grabbing a lamp by its edge still stacks
-        // where the hand points). Landing on another room's host reparents
-        // the rider into that room.
-        const hosts = rooms.flatMap((room) =>
-          room.furniture.filter(
-            (item) => item.id !== drag.id && canHostStack(item),
-          ),
+        // where the hand points).
+        const hosts = furniture.filter(
+          (item) => item.id !== drag.id && canHostStack(item),
         );
         const stacked = stackAt(
           hosts,
@@ -342,41 +327,24 @@ export function MoveDragSession({
           target,
         );
         if (stacked) {
-          const hostRoom = rooms.find((room) =>
-            room.furniture.some((item) => item.id === stacked.host.id),
-          );
-          const roomId = hostRoom?.id ?? lastRoomIdRef.current;
-          lastRoomIdRef.current = roomId;
-          moveRef.current(
-            { position: stacked.position, stack: stacked.stack },
-            roomId,
-          );
+          moveRef.current({ position: stacked.position, stack: stacked.stack });
           setGuides([]);
           setArmedHost(stacked.host);
           return;
         }
         setArmedHost(null);
       }
-      // Floor item: the room under the dragged center is the target —
-      // crossing a seam reparents. Its own furniture plus every other
-      // room's walls are the snap obstacles, so a piece can't slide over a
-      // party wall unnoticed.
-      const targetRoom =
-        roomAtPoint(rooms, target) ??
-        rooms.find((room) => room.id === lastRoomIdRef.current) ??
-        rooms[0];
-      if (!targetRoom) return;
-      lastRoomIdRef.current = targetRoom.id;
+      // Floor item: snap flush against neighbours and the wall solids, then
+      // push out of any wall slab so a piece can't tunnel through a wall — but
+      // it can go anywhere the walls allow (another room, the open canvas).
       const obstacles = [
-        ...targetRoom.furniture
+        ...furniture
           .filter((item) => item.id !== drag.id && !item.stack)
           .map(furnitureObstacle),
-        ...rooms
-          .filter((room) => room.id !== targetRoom.id)
-          .flatMap((room) => outlineWallObstacles(room.outline)),
+        ...wallObstacles,
       ];
       const snap = snapPlacement(
-        targetRoom.outline,
+        [],
         drag.size,
         target,
         obstacles,
@@ -384,14 +352,16 @@ export function MoveDragSession({
         undefined,
         snapRef.current,
       );
-      moveRef.current(
-        {
-          position: snap.center,
-          // A rider dropped anywhere but a host floor-places (clears anchor).
-          ...(drag.rider ? { stack: null } : {}),
-        },
-        targetRoom.id,
+      const contained = separateFromWalls(
+        wallObstacles,
+        drag.size,
+        snap.center,
       );
+      moveRef.current({
+        position: contained,
+        // A rider dropped anywhere but a host floor-places (clears anchor).
+        ...(drag.rider ? { stack: null } : {}),
+      });
       setGuides(snap.guides);
     };
     const handleUp = () => endRef.current();
@@ -408,8 +378,6 @@ export function MoveDragSession({
               position: drag.original,
               ...(drag.rider ? { stack: drag.rider.original } : {}),
             },
-        // Esc restores the original room along with the original spot.
-        drag.roomId,
       );
       endRef.current();
     };

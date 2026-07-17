@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { deriveFloor } from "./derived";
 import {
+  allFurnitureOf,
   floorBounds,
   roomAtPoint,
   roomById,
@@ -7,9 +9,12 @@ import {
   roomOfOpening,
   totalFloorArea,
   totalPerimeter,
+  updateFloorFurniture,
 } from "./floor";
+import { addFurniture } from "./furniture";
 import { createSampleRoom } from "./sample-room";
-import type { Room } from "./types";
+import { makeFloor } from "./test-fixtures";
+import type { FurnitureItem, Room } from "./types";
 
 /**
  * The floor helpers work on **derived** rooms (`Room[]`) — the write path
@@ -72,6 +77,47 @@ describe("roomAtPoint", () => {
     expect(roomAtPoint(rooms(), { x: -0.05, y: 2 }, 0.1)?.id).toBe(
       "living-room",
     );
+  });
+});
+
+describe("updateFloorFurniture", () => {
+  const item: FurnitureItem = {
+    id: "new-1",
+    catalogId: "stool",
+    // Out on the open canvas, inside no room.
+    position: { x: 20, y: 20 },
+    rotation: 0,
+    footprint: { width: 0.4, depth: 0.4, height: 0.45 },
+  };
+
+  it("drops a piece outside every room and it derives as unassigned", () => {
+    const floor = makeFloor();
+    const next = updateFloorFurniture(floor, (room) =>
+      addFurniture(room, item),
+    );
+    expect(next.furniture).toHaveLength(floor.furniture.length + 1);
+    const derived = deriveFloor(next);
+    // No room contains it → it lands in the unassigned bucket, still there.
+    expect(
+      derived.rooms.every((r) => !r.furniture.some((f) => f.id === "new-1")),
+    ).toBe(true);
+    expect(derived.unassignedFurniture.map((f) => f.id)).toContain("new-1");
+  });
+
+  it("keeps the same floor reference on a no-op", () => {
+    const floor = makeFloor();
+    expect(updateFloorFurniture(floor, (room) => room)).toBe(floor);
+  });
+});
+
+describe("allFurnitureOf", () => {
+  it("unions each room's furniture with the unassigned bucket", () => {
+    const derived = deriveFloor(makeFloor());
+    expect(
+      allFurnitureOf(derived.rooms, derived.unassignedFurniture)
+        .map((f) => f.id)
+        .sort(),
+    ).toEqual(["desk-1", "plant-1", "stool-1"]);
   });
 });
 

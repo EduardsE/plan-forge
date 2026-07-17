@@ -4,7 +4,7 @@ import {
   pointInOutline,
   wallLengths,
 } from "./geometry";
-import type { Bounds, Point, Room } from "./types";
+import type { Bounds, Floor, FurnitureItem, Point, Room } from "./types";
 
 /**
  * Pure floor-level helpers over **derived** rooms. The floor stores a wall
@@ -31,6 +31,54 @@ export function roomOfFurniture(
   return rooms.find((room) =>
     room.furniture.some((item) => item.id === itemId),
   );
+}
+
+/**
+ * A synthetic room whose furniture is the *whole floor's*. Furniture edits are
+ * floor-level now — a piece may sit in any room, in the dead band at a shared
+ * wall, or out on the open canvas, and "which room" is only a derived readout —
+ * so the per-room pure setters (`furniture.ts`, `collision.ts`) run against
+ * this and `withFloorFurniture` writes the result back onto `floor.furniture`.
+ * The synthetic outline is empty; the setters read only `furniture`.
+ */
+export function furnitureRoom(floor: Floor): Room {
+  return {
+    id: "__floor__",
+    outline: [],
+    openings: [],
+    furniture: floor.furniture,
+  };
+}
+
+/** Put an edited furniture array back on the floor, keeping the same floor
+ * reference when the array is unchanged (the no-op contract). Furniture is
+ * orthogonal to the wall graph, so no `reconcileFloor` is needed. */
+export function withFloorFurniture(
+  floor: Floor,
+  furniture: FurnitureItem[],
+): Floor {
+  return furniture === floor.furniture ? floor : { ...floor, furniture };
+}
+
+/**
+ * Run a furniture edit (any per-room setter, expressed over `furnitureRoom`)
+ * against the whole floor and write it back. Same floor reference on a no-op.
+ */
+export function updateFloorFurniture(
+  floor: Floor,
+  fn: (room: Room) => Room,
+): Floor {
+  return withFloorFurniture(floor, fn(furnitureRoom(floor)).furniture);
+}
+
+/** Every derived furniture item of the floor (assigned to a room *plus* the
+ * unassigned — dangling/open-canvas — items), for a floor-wide selection or
+ * host lookup. */
+export function allFurnitureOf(
+  rooms: Room[],
+  unassigned: FurnitureItem[],
+): FurnitureItem[] {
+  return [...rooms.flatMap((room) => room.furniture), ...unassigned];
 }
 
 /** The room owning this opening, or undefined for an unknown id. */

@@ -72,6 +72,23 @@ describe("slideOpening", () => {
     expect(slideOpening(0.6, 0.9, [], 0)).toBe(null);
     expect(slideOpening(4, 1.5, [{ start: 1, width: 2 }], 0.2)).toBe(null);
   });
+
+  it("jumps to the far gap when the cursor is nearest it", () => {
+    // A blocker fills the middle [1, 5]; the cursor at 4.5 is closest to the
+    // far gap [5, 6.4], so the opening lands there rather than the near gap.
+    expect(slideOpening(6.4, 0.9, [{ start: 1, width: 4 }], 4.5)).toBeCloseTo(
+      5.0,
+      6,
+    );
+  });
+
+  it("lands flush against a neighbor even off the grid", () => {
+    // The only gap is [0, 5.53]; a far cursor clamps flush to the blocker,
+    // and flush beats the grid (4.63 is not a 0.05 multiple).
+    expect(
+      slideOpening(6.4, 0.9, [{ start: 5.53, width: 0.87 }], 9),
+    ).toBeCloseTo(4.63, 6);
+  });
 });
 
 describe("openingCornerGuides", () => {
@@ -88,6 +105,17 @@ describe("openingCornerGuides", () => {
     const guides = openingCornerGuides(right, 3.6, 0.95, 0.18);
     expect(guides[0].from).toEqual({ x: 6.4 - 0.18, y: 0 });
     expect(guides[0].to).toEqual({ x: 6.4 - 0.18, y: 3.6 });
+  });
+
+  it("drops the guide for a corner the opening sits flush against", () => {
+    // Flush at the near corner (offset 0): only the far guide survives.
+    const near = openingCornerGuides(top, 0, 2.1, 0.18);
+    expect(near).toHaveLength(1);
+    expect(near[0].id).toBe("far");
+    // Flush at the far corner (offset + width === length): only the near one.
+    const far = openingCornerGuides(top, top.length - 2.1, 2.1, 0.18);
+    expect(far).toHaveLength(1);
+    expect(far[0].id).toBe("near");
   });
 });
 

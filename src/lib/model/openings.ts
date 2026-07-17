@@ -74,13 +74,83 @@ function withOpenings(floor: Floor, openings: Opening[]): Floor {
   return reconcileFloor({ ...floor, openings });
 }
 
-/** Insert an opening in edge coordinates. */
-export function addFloorOpening(floor: Floor, opening: Opening): Floor {
-  return withOpenings(floor, [...floor.openings, opening]);
+/** The occupied spans of every *other* opening on `edgeId`. */
+function otherSpansOnEdge(
+  floor: Floor,
+  edgeId: string,
+  excludeId: string,
+): Array<{ start: number; end: number }> {
+  return floor.openings
+    .filter((o) => o.edgeId === edgeId && o.id !== excludeId)
+    .map((o) => ({ start: o.offset, end: o.offset + o.width }));
 }
 
-/** Absolute re-offset along the host edge (already snapped), clamped to the
- * edge. Same reference when nothing moves. */
+/**
+ * Clamp a near-edge `rawOffset` into the free stretch of an edge of `length`,
+ * given the spans `occupied` by the other openings on it — the same gap logic
+ * `slideOpening` runs, minus the grid quantize (the callers pass an
+ * already-snapped offset). The nearest fitting gap wins; null when none fits.
+ * This lives here (rather than reusing `lib/opening-place.ts`) so the model
+ * stays free of a lib→model cycle.
+ */
+function slideIntoGap(
+  length: number,
+  width: number,
+  occupied: Array<{ start: number; end: number }>,
+  rawOffset: number,
+): number | null {
+  if (width > length + EPS) return null;
+  const blocked = occupied
+    .map((s) => ({
+      start: Math.max(0, s.start),
+      end: Math.min(length, s.end),
+    }))
+    .filter((s) => s.end - s.start > EPS)
+    .sort((a, b) => a.start - b.start);
+  const gaps: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+  for (const span of blocked) {
+    if (span.start - cursor > EPS)
+      gaps.push({ start: cursor, end: span.start });
+    cursor = Math.max(cursor, span.end);
+  }
+  if (length - cursor > EPS) gaps.push({ start: cursor, end: length });
+  let best: number | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const gap of gaps) {
+    if (gap.end - gap.start < width - EPS) continue;
+    const clamped = Math.min(Math.max(rawOffset, gap.start), gap.end - width);
+    const distance = Math.abs(clamped - rawOffset);
+    if (distance < bestDistance - EPS) {
+      best = clamped;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+/** Insert an opening in edge coordinates, slid clear of the edge's other
+ * openings (the setter owns the gap logic, not just the UI callers). */
+export function addFloorOpening(floor: Floor, opening: Opening): Floor {
+  const length = edgeLengthOf(floor, opening.edgeId);
+  let placed = opening;
+  if (length !== null) {
+    const slid = slideIntoGap(
+      length,
+      opening.width,
+      otherSpansOnEdge(floor, opening.edgeId, opening.id),
+      opening.offset,
+    );
+    if (slid !== null && slid !== opening.offset) {
+      placed = { ...opening, offset: slid };
+    }
+  }
+  return withOpenings(floor, [...floor.openings, placed]);
+}
+
+/** Absolute re-offset along the host edge (already snapped), slid into the
+ * nearest free stretch clear of the edge's other openings. Same reference when
+ * nothing moves. */
 export function moveFloorOpening(
   floor: Floor,
   id: string,
@@ -90,11 +160,16 @@ export function moveFloorOpening(
   if (!opening) return floor;
   const length = edgeLengthOf(floor, opening.edgeId);
   if (length === null) return floor;
-  const clamped = Math.max(0, Math.min(offset, length - opening.width));
-  if (clamped === opening.offset) return floor;
+  const slid = slideIntoGap(
+    length,
+    opening.width,
+    otherSpansOnEdge(floor, opening.edgeId, id),
+    offset,
+  );
+  if (slid === null || slid === opening.offset) return floor;
   return withOpenings(
     floor,
-    floor.openings.map((o) => (o.id === id ? { ...o, offset: clamped } : o)),
+    floor.openings.map((o) => (o.id === id ? { ...o, offset: slid } : o)),
   );
 }
 

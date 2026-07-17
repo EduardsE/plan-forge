@@ -174,6 +174,25 @@ describe("roundedRectPoints", () => {
       expect(Math.abs(p.y)).toBeLessThanOrEqual(0.5 + 1e-9);
     }
   });
+
+  it("rounds per-corner radii in CSS order (tl, tr, br, bl)", () => {
+    // Only the top-left corner rounded — the desk-chair footprint uses this
+    // per-corner form ([0.13, 0.13, 0.055, 0.055]).
+    const points = roundedRectPoints(2, 1, [0.2, 0, 0, 0]);
+    // The tl arc (cornerSegments + 1 = 7 pts) then three sharp corners.
+    expect(points).toHaveLength(7 + 3);
+    // The sharp corners are the exact rect corners, tr → br → bl.
+    expect(points.slice(7)).toEqual([
+      { x: 1, y: -0.5 },
+      { x: 1, y: 0.5 },
+      { x: -1, y: 0.5 },
+    ]);
+    // The rounded corner stays in the top-left quadrant of the rect.
+    for (const p of points.slice(0, 7)) {
+      expect(p.x).toBeLessThanOrEqual(-0.8 + 1e-9);
+      expect(p.y).toBeLessThanOrEqual(-0.3 + 1e-9);
+    }
+  });
 });
 
 describe("circlePoints", () => {
@@ -206,5 +225,25 @@ describe("dashedPolyline", () => {
     const pairs = dashedPolyline(circlePoints(1, 32), 0.09, 0.06);
     expect(pairs.length % 2).toBe(0);
     expect(pairs.length).toBeGreaterThan(0);
+  });
+
+  it("carries a dash across a vertex into the next segment", () => {
+    // The first leg (0.2) is shorter than the 0.3 dash, so the dash continues
+    // around the corner into the second leg instead of ending at the vertex.
+    const pairs = dashedPolyline(
+      [
+        { x: 0, y: 0 },
+        { x: 0.2, y: 0 },
+        { x: 0.2, y: 0.2 },
+      ],
+      0.3,
+      0.2,
+    );
+    expect(pairs).toEqual([
+      { x: 0, y: 0 },
+      { x: 0.2, y: 0 },
+      { x: 0.2, y: 0 },
+      { x: expect.closeTo(0.2, 10), y: expect.closeTo(0.1, 10) },
+    ]);
   });
 });

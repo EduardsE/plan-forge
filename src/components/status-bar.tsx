@@ -13,7 +13,11 @@ interface StatusBarProps {
   libraryOpen?: boolean;
   /** The floor's derived rooms (area total, room name/count). */
   rooms: Room[];
-  /** Name of the selected item's containing room (floor-wide selection). */
+  /** Total placed objects on the floor (`floor.furniture.length`) — includes
+   * the unassigned/open-canvas items, so it counts everything, not just what
+   * landed in a room. */
+  objectCount?: number;
+  /** Name of the selected item's containing room, or "—" when unassigned. */
   selectedRoomName?: string | null;
   /** Live camera state for the right-edge readout. */
   cameraReadout: CameraReadoutStore;
@@ -61,6 +65,7 @@ export function StatusBar({
   mode,
   libraryOpen = false,
   rooms,
+  objectCount = 0,
   selectedRoomName = null,
   cameraReadout,
   unit,
@@ -84,10 +89,6 @@ export function StatusBar({
     ? totalFloorArea(rooms)
     : null;
   const multiRoom = rooms.length > 1;
-  const objectCount = rooms.reduce(
-    (sum, room) => sum + room.furniture.length,
-    0,
-  );
 
   // Left side at rest: the room name (or the room count on a multi-room
   // floor, plus the selection's containing room); the current activity

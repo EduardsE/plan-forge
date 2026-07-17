@@ -37,9 +37,8 @@ import type {
   FurnitureItem,
   FurnitureUpdate,
   Point,
-  Room,
 } from "#/lib/model";
-import { floorBounds, stackSurfaceHeight } from "#/lib/model";
+import { allFurnitureOf, floorBounds, stackSurfaceHeight } from "#/lib/model";
 import {
   buildEdgeSolids,
   type NodePost,
@@ -746,15 +745,17 @@ function stackTopsOf(furniture: FurnitureItem[]): Map<string, number> {
   return tops;
 }
 
-/** One room of the floor: platform and furniture bodies (walls are floor-
- * level now — one solid per graph edge, drawn once by `RoomScene`). */
-function RoomLayer({
-  room,
+/** A bucket of furniture bodies (a room's, or the unassigned/open-canvas
+ * items) with its own overlap-warning + stack-lift computation. Furniture is
+ * floor-level now, so overlaps are scoped to the bucket (items in different
+ * buckets can't overlap — containment keeps them apart at the walls). */
+function FurnitureBucket({
+  furniture,
   selectedId,
   onSelectItem,
   onDragStart,
 }: {
-  room: Room;
+  furniture: FurnitureItem[];
   selectedId: string | null;
   onSelectItem: (id: string) => void;
   onDragStart: (
@@ -764,20 +765,14 @@ function RoomLayer({
     grabHeight: number,
   ) => void;
 }) {
-  // Overlap warnings and stack lifts are per-room concerns: furniture
-  // belongs to exactly one room, and containment keeps footprints inside it.
   const warnings = useMemo(
-    () => overlappingFurnitureIds(room.furniture),
-    [room.furniture],
+    () => overlappingFurnitureIds(furniture),
+    [furniture],
   );
-  const stackTops = useMemo(
-    () => stackTopsOf(room.furniture),
-    [room.furniture],
-  );
+  const stackTops = useMemo(() => stackTopsOf(furniture), [furniture]);
   return (
     <group>
-      <Platform outline={room.outline} />
-      {room.furniture.map((item) => (
+      {furniture.map((item) => (
         <FurnitureMesh
           key={item.id}
           item={item}
@@ -795,6 +790,9 @@ function RoomLayer({
 export interface RoomSceneProps {
   /** Every derived room of the floor; walls are built from the graph edges. */
   rooms: DerivedRoom[];
+  /** Furniture that lands in no room (dangling / open-canvas) — rendered and
+   * editable like any other, its membership just reads "—". */
+  unassignedFurniture: FurnitureItem[];
   /** The graph floor — walls are one solid per edge; mounts re-anchor to it. */
   floor: Floor;
   selectedId: string | null;
@@ -803,19 +801,16 @@ export interface RoomSceneProps {
   snapEnabled: boolean;
   onSelectItem: (id: string) => void;
   /** Live update during a move drag (already snapped; wall items carry
-   * mount). `targetRoomId` set and different from the item's current room
-   * reparents it there — the drag crossed a seam. */
-  onMoveItem: (
-    id: string,
-    update: FurnitureUpdate,
-    targetRoomId?: string,
-  ) => void;
+   * mount). Furniture is floor-level — the write-back re-partitions the item
+   * into whichever room now contains it (or the unassigned bucket). */
+  onMoveItem: (id: string, update: FurnitureUpdate) => void;
   /** A move drag started/ended — the canvas locks orbit while it runs. */
   onMoveActiveChange: (active: boolean) => void;
 }
 
 export function RoomScene({
   rooms,
+  unassignedFurniture,
   floor,
   selectedId,
   unit,
@@ -834,21 +829,17 @@ export function RoomScene({
   const center: [number, number, number] = bounds
     ? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
     : [0, 0, 0];
-  // Selection and drags are floor-wide; the owning room is derived from the
-  // item id, and a drag crossing a seam reparents the item (M5).
-  const selectedRoom = selectedId
-    ? rooms.find((room) =>
-        room.furniture.some((item) => item.id === selectedId),
-      )
-    : undefined;
+  // Selection and drags are floor-wide; the item is found across every room
+  // plus the unassigned bucket, with mount/stack positions already derived.
+  const allFurniture = useMemo(
+    () => allFurnitureOf(rooms, unassignedFurniture),
+    [rooms, unassignedFurniture],
+  );
   const selectedItem =
-    selectedRoom?.furniture.find((item) => item.id === selectedId) ?? null;
+    allFurniture.find((item) => item.id === selectedId) ?? null;
   const selectedStackTop = useMemo(
-    () =>
-      selectedRoom
-        ? stackTopsOf(selectedRoom.furniture)
-        : new Map<string, number>(),
-    [selectedRoom],
+    () => stackTopsOf(allFurniture),
+    [allFurniture],
   );
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
@@ -865,16 +856,24 @@ export function RoomScene({
       {bounds && <FloorContactShadow bounds={bounds} />}
       <Walls solids={solids} posts={posts} />
       {rooms.map((room) => (
-        <RoomLayer
-          key={room.id}
-          room={room}
+        <group key={room.id}>
+          <Platform outline={room.outline} />
+          <FurnitureBucket
+            furniture={room.furniture}
+            selectedId={selectedId}
+            onSelectItem={onSelectItem}
+            onDragStart={beginDrag}
+          />
+        </group>
+      ))}
+      {unassignedFurniture.length > 0 && (
+        <FurnitureBucket
+          furniture={unassignedFurniture}
           selectedId={selectedId}
           onSelectItem={onSelectItem}
-          onDragStart={(item, grabPoint, screen, grabHeight) =>
-            beginDrag(item, room.id, grabPoint, screen, grabHeight)
-          }
+          onDragStart={beginDrag}
         />
-      ))}
+      )}
       {selectedItem && (
         <SelectionChip
           item={selectedItem}
@@ -904,14 +903,12 @@ export function RoomScene({
       )}
       {drag && (
         <MoveDragSession
-          rooms={rooms}
+          furniture={allFurniture}
           floor={floor}
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}
-          onMove={(update, targetRoomId) =>
-            onMoveItem(drag.id, update, targetRoomId)
-          }
+          onMove={(update) => onMoveItem(drag.id, update)}
           onEnd={endDrag}
         />
       )}

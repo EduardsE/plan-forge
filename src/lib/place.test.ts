@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { FurnitureItem } from "./model";
+import type { Floor, FurnitureItem, Opening } from "./model";
 import {
+  edgeWallObstacles,
   furnitureObstacle,
   type Obstacle,
-  outlineWallObstacles,
   rotatedFootprintSize,
+  separateFromWalls,
   snapPlacement,
 } from "./place";
 
@@ -252,44 +253,117 @@ describe("furnitureObstacle", () => {
   });
 });
 
-describe("outlineWallObstacles", () => {
-  it("turns each axis-aligned wall into a degenerate obstacle", () => {
-    const obstacles = outlineWallObstacles(RECT);
+/** A rectangular graph floor (6.40 × 5.20 m) with optional openings. */
+function rectFloor(openings: Opening[] = []): Floor {
+  return {
+    nodes: [
+      { id: "n0", x: 0, y: 0 },
+      { id: "n1", x: 6.4, y: 0 },
+      { id: "n2", x: 6.4, y: 5.2 },
+      { id: "n3", x: 0, y: 5.2 },
+    ],
+    edges: [
+      { id: "e-top", a: "n0", b: "n1" },
+      { id: "e-right", a: "n1", b: "n2" },
+      { id: "e-bottom", a: "n2", b: "n3" },
+      { id: "e-left", a: "n3", b: "n0" },
+    ],
+    openings,
+    furniture: [],
+    rooms: [],
+  };
+}
+
+describe("edgeWallObstacles", () => {
+  it("turns each axis-aligned edge into a slab straddling the centerline", () => {
+    const obstacles = edgeWallObstacles(rectFloor());
     expect(obstacles).toHaveLength(4);
-    // The top wall: flat on y, spanning the room's width.
+    // The top wall (y=0): 0.1 m band straddling the line, spanning the width.
     expect(obstacles[0]).toEqual({
-      min: { x: 0, y: 0 },
-      max: { x: 6.4, y: 0 },
+      min: { x: 0, y: -0.05 },
+      max: { x: 6.4, y: 0.05 },
     });
-    // The left wall: flat on x.
-    expect(obstacles[3]).toEqual({
-      min: { x: 0, y: 0 },
-      max: { x: 0, y: 5.2 },
-    });
+    // The right wall (x=6.4): 0.1 m band straddling the line.
+    expect(obstacles[1].min.x).toBeCloseTo(6.35, 10);
+    expect(obstacles[1].max.x).toBeCloseTo(6.45, 10);
+    expect(obstacles[1].min.y).toBeCloseTo(0, 10);
+    expect(obstacles[1].max.y).toBeCloseTo(5.2, 10);
   });
 
-  it("skips non-axis walls, like every other snap path", () => {
-    const cut = [
-      { x: 0, y: 0 },
-      { x: 6.4, y: 0 },
-      { x: 6.4, y: 3.2 },
-      { x: 4.4, y: 5.2 }, // 45° cut
-      { x: 0, y: 5.2 },
-    ];
-    expect(outlineWallObstacles(cut)).toHaveLength(4);
+  it("splits a slab at a door gap but not a window", () => {
+    const doorGap = edgeWallObstacles(
+      rectFloor([
+        {
+          id: "d",
+          kind: "door",
+          edgeId: "e-right",
+          offset: 2.0,
+          width: 0.9,
+          side: 1,
+        },
+      ]),
+    );
+    // The right edge becomes two slabs (0..2 and 2.9..5.2); 3 others → 5.
+    const rightSlabs = doorGap.filter((o) => o.min.x > 6);
+    expect(rightSlabs).toHaveLength(2);
+    expect(rightSlabs[0].max.y).toBeCloseTo(2.0, 10);
+    expect(rightSlabs[1].min.y).toBeCloseTo(2.9, 10);
+
+    const windowWhole = edgeWallObstacles(
+      rectFloor([
+        {
+          id: "w",
+          kind: "window",
+          edgeId: "e-right",
+          offset: 2.0,
+          width: 0.9,
+          side: 1,
+        },
+      ]),
+    );
+    expect(windowWhole.filter((o) => o.min.x > 6)).toHaveLength(1);
   });
 
-  it("snaps a mover flush against a neighbor room's wall", () => {
-    // A neighbor room protruding into the mover's room bounds at x=4:
-    // dragging toward it sticks flush instead of sliding over the wall.
-    const neighbor = outlineWallObstacles([
-      { x: 4, y: 2 },
-      { x: 8, y: 2 },
-      { x: 8, y: 6 },
-      { x: 4, y: 6 },
-    ]);
-    const snap = snapPlacement(RECT, SOFA, { x: 3.1, y: 3 }, neighbor);
-    expect(snap.center.x).toBeCloseTo(4 - SOFA.width / 2, 10);
+  it("skips non-axis edges, like every other snap path", () => {
+    const diagonal: Floor = {
+      nodes: [
+        { id: "a", x: 0, y: 0 },
+        { id: "b", x: 6.4, y: 0 },
+        { id: "c", x: 4.4, y: 5.2 },
+      ],
+      edges: [
+        { id: "e0", a: "a", b: "b" },
+        { id: "e1", a: "b", b: "c" }, // 45°-ish diagonal
+        { id: "e2", a: "c", b: "a" },
+      ],
+      openings: [],
+      furniture: [],
+      rooms: [],
+    };
+    // Only the one axis-aligned edge (a→b) becomes a slab.
+    expect(edgeWallObstacles(diagonal)).toHaveLength(1);
+  });
+});
+
+describe("separateFromWalls", () => {
+  const WALLS = edgeWallObstacles(rectFloor());
+
+  it("returns the same reference when the footprint clears every wall", () => {
+    const center = { x: 3, y: 3 };
+    expect(separateFromWalls(WALLS, { width: 1, depth: 1 }, center)).toBe(
+      center,
+    );
+  });
+
+  it("pushes a footprint off the wall it penetrates, to flush", () => {
+    // A 1 m item at x=6.0 pokes into the right slab (inner face 6.35).
+    const out = separateFromWalls(
+      WALLS,
+      { width: 1, depth: 1 },
+      { x: 6, y: 3 },
+    );
+    expect(out.x).toBeCloseTo(5.85, 10);
+    expect(out.y).toBeCloseTo(3, 10);
   });
 });
 

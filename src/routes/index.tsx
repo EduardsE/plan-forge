@@ -39,13 +39,16 @@ import {
   undoHistory,
 } from "#/lib/history";
 import {
+  allFurnitureOf,
   type CatalogItem,
   createSampleFloor,
+  DEFAULT_WALL_HEIGHT,
   deriveFloor,
   duplicateFurniture,
   type Floor,
   type Footprint,
   floorBounds,
+  furnitureDisplayName,
   type Point,
   portalLabel,
   type Room,
@@ -60,14 +63,16 @@ import {
   setRoomName,
   setRoomWallHeight,
   updateDerivedRoom,
+  updateFloorFurniture,
   updateFurniture,
+  wallHeightOf,
 } from "#/lib/model";
 import {
   deserializeSavedState,
   STORAGE_KEY,
   serializeSavedState,
 } from "#/lib/persistence";
-import { PLACEMENT_GRID } from "#/lib/place";
+import { edgeWallObstacles, type Obstacle, PLACEMENT_GRID } from "#/lib/place";
 import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -169,21 +174,6 @@ function Planner() {
     (targetId: string, next: Room) => commitToRoom(targetId, () => next),
     [commitToRoom],
   );
-  const previewRoom = useCallback(
-    (targetId: string, next: Room) =>
-      setFloorHistory((history) =>
-        previewHistory(
-          history,
-          updateDerivedRoom(
-            history.current,
-            deriveFloor(history.current),
-            targetId,
-            () => next,
-          ),
-        ),
-      ),
-    [],
-  );
   const settleRoom = useCallback(() => setFloorHistory(settleHistory), []);
   const undoRoom = useCallback(() => setFloorHistory(undoHistory), []);
   const redoRoom = useCallback(() => setFloorHistory(redoHistory), []);
@@ -195,13 +185,39 @@ function Planner() {
   // The furniture selection is route state so the inspector (outside the
   // canvas) and the in-scene picking/label share one selection. The canvas
   // keeps opening selection internal and clears this one when it takes over.
-  // Selection is floor-wide: the owning room is derived from the item id.
+  // Selection is floor-wide: the item is found across every room plus the
+  // unassigned (open-canvas) bucket, and its room membership is a readout.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const allFurniture = useMemo(
+    () => allFurnitureOf(derived.rooms, derived.unassignedFurniture),
+    [derived],
+  );
+  const selectedItem = selectedId
+    ? (allFurniture.find((item) => item.id === selectedId) ?? null)
+    : null;
   const selectedRoom = selectedId
     ? (roomOfFurniture(derived.rooms, selectedId) ?? null)
     : null;
-  const selectedItem =
-    selectedRoom?.furniture.find((item) => item.id === selectedId) ?? null;
+  const multiRoom = derived.rooms.length > 1;
+  // Membership readout for the inspector/status bar: the room name on a
+  // multi-room floor, "—" when the item sits in no room, else hidden.
+  const selectedRoomName = selectedItem
+    ? selectedRoom
+      ? multiRoom
+        ? (selectedRoom.name ?? "Untitled room")
+        : null
+      : "—"
+    : null;
+  const selectedHostName =
+    selectedItem?.stack != null
+      ? furnitureDisplayName(
+          allFurniture.find((f) => f.id === selectedItem.stack?.hostId)
+            ?.catalogId ?? "",
+        )
+      : null;
+  const selectedWallHeight = selectedRoom
+    ? wallHeightOf(selectedRoom)
+    : DEFAULT_WALL_HEIGHT;
   // The opening selection (2D lens) lives here too, so the status bar and
   // inspector can label a portal — an opening on a wall two rooms share —
   // with the connection it makes. Derived from geometry, never stored.
@@ -216,24 +232,20 @@ function Planner() {
     if (!label) return null;
     return `${opening.kind === "door" ? "Door" : "Window"} connects ${label}`;
   }, [selectedOpeningId, viewMode, derived, floor]);
-  // One commit against the room owning `itemId`, resolved inside the
-  // functional update so bursts never work from a stale floor. One history
-  // step per commit; same-reference no-ops land nowhere.
-  const mutateRoomOf = useCallback(
-    (itemId: string, update: (owner: Room) => Room) => {
+  // One floor-level furniture commit: the pure setter runs over the whole
+  // floor's furniture (`updateFloorFurniture`), re-contained against the wall
+  // slabs — furniture is floor-level now, so an item may sit in any room, the
+  // dead band at a shared wall, or the open canvas, bounded only by the walls.
+  // One history step; a same-reference no-op lands nowhere.
+  const mutateFurniture = useCallback(
+    (fn: (room: Room, wallObstacles: Obstacle[]) => Room) => {
       setFloorHistory((history) => {
-        const current = deriveFloor(history.current);
-        const owner = roomOfFurniture(current.rooms, itemId);
-        if (!owner) return history;
-        const value = updateDerivedRoom(
-          history.current,
-          current,
-          owner.id,
-          update,
+        const floor = history.current;
+        const wallObstacles = edgeWallObstacles(floor);
+        const value = updateFloorFurniture(floor, (room) =>
+          fn(room, wallObstacles),
         );
-        return value === history.current
-          ? history
-          : commitHistory(history, value);
+        return value === floor ? history : commitHistory(history, value);
       });
     },
     [],
@@ -243,83 +255,84 @@ function Planner() {
   // undo steps. Rotations/resizes re-contain the item so it can't poke out.
   const rotateSelected90 = useCallback(() => {
     if (!selectedId) return;
-    mutateRoomOf(selectedId, (current) =>
+    mutateFurniture((room, walls) =>
       containRoomFurniture(
-        rotateFurniture(current, selectedId, 90),
+        walls,
+        rotateFurniture(room, selectedId, 90),
         selectedId,
       ),
     );
-  }, [selectedId, mutateRoomOf]);
+  }, [selectedId, mutateFurniture]);
   const cloneSelected = useCallback(() => {
     if (!selectedId) return;
     const newId = crypto.randomUUID();
-    mutateRoomOf(selectedId, (current) =>
+    mutateFurniture((room, walls) =>
       containRoomFurniture(
-        duplicateFurniture(current, selectedId, newId),
+        walls,
+        duplicateFurniture(room, selectedId, newId),
         newId,
       ),
     );
     // Selection follows the copy, like a drop.
     setSelectedId(newId);
-  }, [selectedId, mutateRoomOf]);
+  }, [selectedId, mutateFurniture]);
   const deleteSelected = useCallback(() => {
     if (!selectedId) return;
-    mutateRoomOf(selectedId, (current) => removeFurniture(current, selectedId));
+    mutateFurniture((room) => removeFurniture(room, selectedId));
     setSelectedId(null);
-  }, [selectedId, mutateRoomOf]);
+  }, [selectedId, mutateFurniture]);
   const resizeSelected = useCallback(
     (footprint: Footprint) => {
       if (!selectedId) return;
-      mutateRoomOf(selectedId, (current) => {
-        const next = setFurnitureFootprint(current, selectedId, footprint);
-        return next === current
-          ? current
-          : containRoomFurniture(next, selectedId);
+      mutateFurniture((room, walls) => {
+        const next = setFurnitureFootprint(room, selectedId, footprint);
+        return next === room
+          ? room
+          : containRoomFurniture(walls, next, selectedId);
       });
     },
-    [selectedId, mutateRoomOf],
+    [selectedId, mutateFurniture],
   );
   const rotateSelectedTo = useCallback(
     (deg: number) => {
       if (!selectedId) return;
-      mutateRoomOf(selectedId, (current) => {
-        const next = setFurnitureRotation(current, selectedId, deg);
-        return next === current
-          ? current
-          : containRoomFurniture(next, selectedId);
+      mutateFurniture((room, walls) => {
+        const next = setFurnitureRotation(room, selectedId, deg);
+        return next === room
+          ? room
+          : containRoomFurniture(walls, next, selectedId);
       });
     },
-    [selectedId, mutateRoomOf],
+    [selectedId, mutateFurniture],
   );
   const elevateSelected = useCallback(
     (elevation: number) => {
       if (!selectedId) return;
-      mutateRoomOf(selectedId, (current) =>
-        setMountElevation(current, selectedId, elevation),
-      );
+      mutateFurniture((room) => setMountElevation(room, selectedId, elevation));
     },
-    [selectedId, mutateRoomOf],
+    [selectedId, mutateFurniture],
   );
   const moveSelectedTo = useCallback(
     (position: Point) => {
       if (!selectedId) return;
-      mutateRoomOf(selectedId, (current) =>
+      mutateFurniture((room, walls) =>
         containRoomFurniture(
-          updateFurniture(current, selectedId, { position }),
+          walls,
+          updateFurniture(room, selectedId, { position }),
           selectedId,
         ),
       );
     },
-    [selectedId, mutateRoomOf],
+    [selectedId, mutateFurniture],
   );
   const recolorSelected = useCallback(
     (colorway: string | null) => {
       if (!selectedId) return;
-      mutateRoomOf(selectedId, (current) =>
-        setFurnitureColorway(current, selectedId, colorway),
+      mutateFurniture((room) =>
+        setFurnitureColorway(room, selectedId, colorway),
       );
     },
-    [selectedId, mutateRoomOf],
+    [selectedId, mutateFurniture],
   );
   // A live pointer drag in either lens (furniture move, rotate handle,
   // opening slide). Settling on end folds the drag's previews into one
@@ -335,24 +348,19 @@ function Planner() {
   );
   // An arrow-key nudge: a preview (like a drag's pointermoves), read through
   // the functional update so a key-repeat burst never works from a stale
-  // room. `nudgeFurniture` owns the semantics: containment inside the
-  // outline, mounts pass through, riders re-anchor on their host.
+  // floor. `nudgeFurniture` owns the semantics: push up to the wall slabs and
+  // stop (anywhere — room, dead band, open canvas), mounts pass through,
+  // riders re-anchor on their host.
   const nudgeSelected = useCallback(
     (dx: number, dy: number) => {
       if (!selectedId) return;
       setFloorHistory((history) => {
-        const current = deriveFloor(history.current);
-        const owner = roomOfFurniture(current.rooms, selectedId);
-        if (!owner) return history;
-        const next = updateDerivedRoom(
-          history.current,
-          current,
-          owner.id,
-          (r) => nudgeFurniture(r, selectedId, dx, dy),
+        const floor = history.current;
+        const wallObstacles = edgeWallObstacles(floor);
+        const next = updateFloorFurniture(floor, (room) =>
+          nudgeFurniture(wallObstacles, room, selectedId, dx, dy),
         );
-        return next === history.current
-          ? history
-          : previewHistory(history, next);
+        return next === floor ? history : previewHistory(history, next);
       });
     },
     [selectedId],
@@ -785,8 +793,8 @@ function Planner() {
             <PlannerCanvas
               floor={floor}
               rooms={derived.rooms}
+              unassignedFurniture={derived.unassignedFurniture}
               onRoomChange={commitRoom}
-              onRoomPreview={previewRoom}
               onFloorChange={setFloor}
               onFloorPreview={previewFloor}
               onRoomDragActiveChange={handleRoomDragActive}
@@ -844,7 +852,8 @@ function Planner() {
         mode={viewMode}
         libraryOpen={objectsOpen}
         rooms={derived.rooms}
-        selectedRoomName={selectedRoom?.name ?? null}
+        objectCount={floor.furniture.length}
+        selectedRoomName={selectedRoomName}
         portalStatus={portalStatus}
         cameraReadout={readoutStore}
         unit={unit}
@@ -878,8 +887,10 @@ function Planner() {
         rooms={derived.rooms}
         unit={unit}
         mode={viewMode}
-        selectedRoom={selectedRoom}
         selectedItem={selectedItem}
+        selectedRoomName={selectedRoomName}
+        selectedHostName={selectedHostName}
+        selectedWallHeight={selectedWallHeight}
         portalStatus={portalStatus}
         nodeCount={floor.nodes.length}
         onResize={resizeSelected}

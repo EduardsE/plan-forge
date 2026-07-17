@@ -330,9 +330,12 @@ describe("setMountElevation", () => {
   });
 
   it("returns the room unchanged for floor items and no-op values", () => {
+    // A floor item has no mount to elevate.
     const room = createSampleRoom();
     expect(setMountElevation(room, "desk-1", 1.2)).toBe(room);
-    expect(setMountElevation(room, "picture-frame-1", 1.5)).toBe(room);
+    // The mounted frame already sits at 1.5 — setting the same value no-ops.
+    const mounted = mountedRoom();
+    expect(setMountElevation(mounted, "frame-1", 1.5)).toBe(mounted);
   });
 });
 

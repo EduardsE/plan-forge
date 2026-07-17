@@ -45,6 +45,7 @@ import {
   type CatalogItem,
   type DerivedRoom,
   type Floor,
+  type FurnitureItem,
   type FurnitureUpdate,
   flipFloorOpeningHinge,
   flipFloorOpeningSide,
@@ -60,8 +61,8 @@ import {
   resizeFloorOpening,
   roomAtPoint,
   roomById,
-  roomOfFurniture,
   type Stack,
+  updateFloorFurniture,
   updateFurniture,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
@@ -566,10 +567,13 @@ export interface PlannerCanvasProps {
   /** The floor's derived rooms — scenes render these; "which room" for an
    * edit resolves from them. */
   rooms: DerivedRoom[];
-  /** A discrete mutation of one room — one undo step in the floor history. */
+  /** Furniture that lands in no room (dangling / open-canvas) — rendered and
+   * editable like any other; its membership readout is "—". */
+  unassignedFurniture: FurnitureItem[];
+  /** A discrete mutation of one room — one undo step in the floor history.
+   * (Furniture drops still target the room under the cursor; furniture edits
+   * are floor-level, through `onFloorChange`/`onFloorPreview`.) */
   onRoomChange: (roomId: string, room: Room) => void;
-  /** A mid-drag state: applied live but not a history step of its own. */
-  onRoomPreview: (roomId: string, room: Room) => void;
   /** A discrete whole-floor mutation (opening edits) — one undo step. */
   onFloorChange: (floor: Floor) => void;
   /** A mid-drag whole-floor state (opening slide) — not its own step. */
@@ -615,8 +619,8 @@ export interface PlannerCanvasProps {
 export function PlannerCanvas({
   floor,
   rooms,
+  unassignedFurniture,
   onRoomChange,
-  onRoomPreview,
   onFloorChange,
   onFloorPreview,
   onRoomDragActiveChange,
@@ -693,16 +697,18 @@ export function PlannerCanvas({
 
   const moveItem = useCallback(
     // Streams per pointermove — a preview, folded into one history step when
-    // the drag session releases the camera controls below. The owning room
-    // is derived from the item id (selection is floor-wide); furniture is
-    // floor-level, so a drag across a seam is just a position change — the
-    // write-back re-partitions the item into the room that now contains it.
-    (id: string, update: FurnitureUpdate, _targetRoomId?: string) => {
-      const owner = roomOfFurniture(rooms, id);
-      if (!owner) return;
-      onRoomPreview(owner.id, updateFurniture(owner, id, update));
+    // the drag session releases the camera controls below. Furniture is
+    // floor-level (membership is a derived readout), so a move is just a
+    // position patch on `floor.furniture`; deriveFloor re-partitions the item
+    // into whichever room now contains it — or the unassigned bucket.
+    (id: string, update: FurnitureUpdate) => {
+      onFloorPreview(
+        updateFloorFurniture(floor, (room) =>
+          updateFurniture(room, id, update),
+        ),
+      );
     },
-    [rooms, onRoomPreview],
+    [floor, onFloorPreview],
   );
 
   // A door/window card released on a wall (the ghost resolved the host edge,
@@ -914,6 +920,7 @@ export function PlannerCanvas({
           ) : (
             <PlanScene
               rooms={rooms}
+              unassignedFurniture={unassignedFurniture}
               floor={floor}
               selectedId={selectedId}
               selectedOpeningId={selectedOpeningId}
@@ -933,6 +940,7 @@ export function PlannerCanvas({
         ) : (
           <RoomScene
             rooms={rooms}
+            unassignedFurniture={unassignedFurniture}
             floor={floor}
             selectedId={selectedId}
             unit={unit}

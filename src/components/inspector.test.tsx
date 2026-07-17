@@ -36,7 +36,6 @@ function renderInspector(props: Partial<Parameters<typeof Inspector>[0]>) {
       rooms={rooms}
       unit="m"
       mode="3d"
-      selectedRoom={room}
       selectedItem={null}
       onResize={() => {}}
       onRotateTo={() => {}}
@@ -53,7 +52,7 @@ function renderInspector(props: Partial<Parameters<typeof Inspector>[0]>) {
 
 describe("Inspector", () => {
   it("shows the room overview when nothing is selected", () => {
-    renderInspector({ selectedRoom: null });
+    renderInspector({});
 
     expect(screen.getByText("ROOM")).toBeTruthy();
     expect(screen.getByTestId("inspector-room-name").textContent).toBe(
@@ -63,7 +62,7 @@ describe("Inspector", () => {
   });
 
   it("always shows the floor / perimeter / ceiling stats", () => {
-    renderInspector({ selectedRoom: null });
+    renderInspector({});
 
     expect(screen.getByText("33.28 m²")).toBeTruthy();
     expect(screen.getByText("23.2 m")).toBeTruthy();
@@ -73,14 +72,13 @@ describe("Inspector", () => {
   it("shows the room's own ceiling height when set", () => {
     renderInspector({
       rooms: [{ ...room, wallHeight: 3.1 }],
-      selectedRoom: null,
     });
 
     expect(screen.getByText("3.10 m")).toBeTruthy();
   });
 
   it("shows floor totals, the room list, and the room count on a multi-room floor", () => {
-    renderInspector({ rooms: twoRooms, selectedRoom: null });
+    renderInspector({ rooms: twoRooms });
 
     // "FLOOR" is both the section header and the footer's area label.
     expect(screen.getAllByText("FLOOR")).toHaveLength(2);
@@ -97,12 +95,19 @@ describe("Inspector", () => {
   it("names the containing room on a multi-room selection", () => {
     renderInspector({
       rooms: twoRooms,
-      selectedRoom: kitchen,
+      selectedRoomName: "Kitchen",
       selectedItem: kitchen.furniture[0],
     });
 
     expect(screen.getByText("SELECTION")).toBeTruthy();
     expect(screen.getByText(/· Kitchen/)).toBeTruthy();
+  });
+
+  it("reads membership as '—' when the selection sits in no room", () => {
+    renderInspector({ selectedItem: item, selectedRoomName: "—" });
+
+    expect(screen.getByText("SELECTION")).toBeTruthy();
+    expect(screen.getByText(/· —/)).toBeTruthy();
   });
 
   it("shows the selected item with editable transform fields", () => {
