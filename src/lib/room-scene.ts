@@ -289,3 +289,32 @@ export function nodePosts(floor: Floor, solids: WallSolid[]): NodePost[] {
   }
   return posts;
 }
+
+/**
+ * Sun azimuth for a floor with no glazing at all: opposite the initial orbit,
+ * so an unglazed model still shades from its far side on first load.
+ */
+const DEFAULT_SUN_AZIMUTH = (232 * Math.PI) / 180;
+
+/**
+ * World-fixed sun anchor azimuth (radians, `atan2(z, x)` in world space =
+ * `atan2(y, x)` in plan space): the outward normal of the wall carrying the
+ * largest total window area, so the sun sits outside the most-glazed wall and
+ * shines in through it. The room and its light stay put while the camera
+ * orbits; presets swing their rake around this anchor as the day's arc.
+ */
+export function sunAnchorAzimuth(solids: WallSolid[]): number {
+  let bestArea = 0;
+  let azimuth = DEFAULT_SUN_AZIMUTH;
+  for (const solid of solids) {
+    let area = 0;
+    for (const hole of solid.holes) {
+      if (hole.kind === "window") area += hole.width * (hole.top - hole.bottom);
+    }
+    if (area > bestArea) {
+      bestArea = area;
+      azimuth = Math.atan2(solid.outward.y, solid.outward.x);
+    }
+  }
+  return azimuth;
+}

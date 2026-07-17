@@ -25,7 +25,7 @@ describe("lighting presets", () => {
       expect(p.sun.elevationDeg).toBeGreaterThan(0);
       expect(p.sun.elevationDeg).toBeLessThan(90);
       expect(p.sun.intensity).toBeGreaterThan(0);
-      // Rake stays within a quarter-turn either way of opposite-camera.
+      // Rake stays within a quarter-turn either way of the glazing anchor.
       expect(Math.abs(p.sun.rakeDeg)).toBeLessThanOrEqual(90);
       expect(p.ambient.intensity).toBeGreaterThan(0);
       expect(p.pool).toHaveLength(3);

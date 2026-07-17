@@ -11,6 +11,7 @@ import {
   type Group,
   MathUtils,
   type Mesh,
+  MeshBasicMaterial,
   Object3D,
   Path,
   RepeatWrapping,
@@ -51,6 +52,7 @@ import {
   SLAB_THICKNESS,
   STUB_WALL_HEIGHT,
   stubSpans,
+  sunAnchorAzimuth,
   WALL_THICKNESS,
   type WallSolid,
 } from "#/lib/room-scene";
@@ -97,6 +99,18 @@ function warnColor(base: string): string {
 /** Raycast opt-out for scenery: only furniture is pickable, so any other
  * click reaches the canvas's pointer-missed handler and deselects. */
 const noRaycast = () => null;
+
+/**
+ * Invisible occluder for the world-fixed sun: draws nothing (and leaves the
+ * depth buffer alone) yet still casts into the shadow map, because the shadow
+ * pass only skips `visible: false` objects. Walls the dollhouse cutaway drops
+ * keep a proxy in this material, so the room's lighting never changes with
+ * the orbit — only what's drawn does.
+ */
+const shadowOnlyMaterial = new MeshBasicMaterial({
+  colorWrite: false,
+  depthWrite: false,
+});
 
 /**
  * Cutaway threshold on the wall-to-camera facing dot: slightly negative so
@@ -298,6 +312,36 @@ function FloorContactShadow({ bounds }: { bounds: Bounds }) {
   );
 }
 
+/** The frame/muntin bar layout of one window hole (wall-local): [key, x, y,
+ * width, height, depth]. Shared by the visible dressing and the shadow
+ * proxy, so the muntin cross in the sun patch matches the drawn frame. */
+function windowBars(
+  hole: WallSolid["holes"][number],
+): Array<[string, number, number, number, number, number]> {
+  const f = WINDOW_FRAME_SIZE;
+  const cx = hole.start + hole.width / 2;
+  const cy = (hole.bottom + hole.top) / 2;
+  const height = hole.top - hole.bottom;
+  const frameDepth = WALL_THICKNESS + 0.02;
+  // Frame bars sit inside the hole, border-box style; the muntin cross
+  // stays within the wall thickness.
+  return [
+    ["sill", cx, hole.bottom + f / 2, hole.width, f, frameDepth],
+    ["head", cx, hole.top - f / 2, hole.width, f, frameDepth],
+    ["jamb-l", hole.start + f / 2, cy, f, height - 2 * f, frameDepth],
+    [
+      "jamb-r",
+      hole.start + hole.width - f / 2,
+      cy,
+      f,
+      height - 2 * f,
+      frameDepth,
+    ],
+    ["muntin-v", cx, cy, 0.06, height - 2 * f, WALL_THICKNESS],
+    ["muntin-h", cx, cy, hole.width - 2 * f, 0.06, WALL_THICKNESS],
+  ];
+}
+
 /** Frame, muntin cross and glowing pane for one window hole (wall-local). */
 function WindowDressing({
   hole,
@@ -316,34 +360,17 @@ function WindowDressing({
   // Centered in the wall, slightly deeper than it, so the frame reads as a
   // lip on both faces without caring which side is the interior.
   const z = zCenter;
-  const frameDepth = WALL_THICKNESS + 0.02;
-  // Frame bars sit inside the hole, border-box style; the muntin cross
-  // stays within the wall thickness.
-  const bars: Array<[string, number, number, number, number, number]> = [
-    ["sill", cx, hole.bottom + f / 2, hole.width, f, frameDepth],
-    ["head", cx, hole.top - f / 2, hole.width, f, frameDepth],
-    ["jamb-l", hole.start + f / 2, cy, f, height - 2 * f, frameDepth],
-    [
-      "jamb-r",
-      hole.start + hole.width - f / 2,
-      cy,
-      f,
-      height - 2 * f,
-      frameDepth,
-    ],
-    ["muntin-v", cx, cy, 0.06, height - 2 * f, WALL_THICKNESS],
-    ["muntin-h", cx, cy, hole.width - 2 * f, 0.06, WALL_THICKNESS],
-  ];
   return (
     <group>
       <mesh position={[cx, cy, z]} raycast={noRaycast}>
         <planeGeometry args={[hole.width - f, height - f]} />
         <meshBasicMaterial map={pane} side={DoubleSide} />
       </mesh>
-      {bars.map(([id, x, y, w, h, d]) => (
-        // castShadow throws the frame + muntin cross into the sun patch on the
-        // floor — the detail that sells the light as coming through a window.
-        <mesh key={id} position={[x, y, z]} raycast={noRaycast} castShadow>
+      {/* Shadows come from the wall's always-on proxy bars, not from here —
+          this dressing vanishes with the cutaway, and the sun patch on the
+          floor must not. */}
+      {windowBars(hole).map(([id, x, y, w, h, d]) => (
+        <mesh key={id} position={[x, y, z]} raycast={noRaycast}>
           <boxGeometry args={[w, h, d]} />
           <meshLambertMaterial color={WINDOW_FRAME_COLOR} />
         </mesh>
@@ -428,14 +455,13 @@ function WallMesh({
   // straddles the edge line (± half thickness), independent of `outward`.
   const zOffset = -WALL_THICKNESS / 2;
   const wallMesh = (geom: ExtrudeGeometry) => (
-    // Cast so the solid spans block the sun (leaving window-shaped patches on
-    // the floor); receive so interior faces catch furniture and neighbour-wall
-    // shadows.
+    // Receive so interior faces catch furniture and neighbour-wall shadows.
+    // Sun *casting* lives on the shadow proxy below, never here — the display
+    // meshes come and go with the cutaway, and the light must not.
     <mesh
       geometry={geom}
       position-z={zOffset}
       raycast={noRaycast}
-      castShadow
       receiveShadow
     >
       <meshLambertMaterial attach="material-0" map={wall} />
@@ -451,6 +477,32 @@ function WallMesh({
 
   return (
     <group position={[solid.start.x, 0, solid.start.y]} rotation-y={rotationY}>
+      {/* Invisible occluder: the full wall (holes and all) plus its window
+          frames, always in the shadow pass whatever the cutaway shows. The
+          world-fixed sun's window patches stay glued to the floor while the
+          camera orbits. */}
+      <group>
+        <mesh
+          geometry={geometry.full}
+          material={shadowOnlyMaterial}
+          position-z={zOffset}
+          raycast={noRaycast}
+          castShadow
+        />
+        {windows.map((hole) =>
+          windowBars(hole).map(([id, x, y, w, h, d]) => (
+            <mesh
+              key={`${hole.id}-${id}`}
+              material={shadowOnlyMaterial}
+              position={[x, y, 0]}
+              raycast={noRaycast}
+              castShadow
+            >
+              <boxGeometry args={[w, h, d]} />
+            </mesh>
+          )),
+        )}
+      </group>
       <group
         ref={(group) => {
           display.full = group;
@@ -548,13 +600,22 @@ function Walls({ solids, posts }: { solids: WallSolid[]; posts: NodePost[] }) {
       ))}
       {posts.map((post, i) => (
         <group key={post.nodeId} position={[post.center.x, 0, post.center.y]}>
+          {/* Shadow proxy, like the walls' — a cut-down post must not open a
+              slit of sunlight at the corner. */}
+          <mesh
+            material={shadowOnlyMaterial}
+            position-y={post.height / 2}
+            raycast={noRaycast}
+            castShadow
+          >
+            <boxGeometry args={[WALL_THICKNESS, post.height, WALL_THICKNESS]} />
+          </mesh>
           <mesh
             ref={(mesh) => {
               postFullRefs.current[i] = mesh;
             }}
             position-y={post.height / 2}
             raycast={noRaycast}
-            castShadow
             receiveShadow
           >
             <boxGeometry args={[WALL_THICKNESS, post.height, WALL_THICKNESS]} />
@@ -567,7 +628,6 @@ function Walls({ solids, posts }: { solids: WallSolid[]; posts: NodePost[] }) {
             position-y={STUB_WALL_HEIGHT / 2}
             raycast={noRaycast}
             visible={false}
-            castShadow
             receiveShadow
           >
             <boxGeometry
@@ -759,13 +819,13 @@ function FurnitureMesh({
 }
 
 /**
- * The shadow-casting sun. Its azimuth is slaved to the camera each frame and
- * kept on the *far* side of the room (opposite the viewer, plus a rake), so
- * its beams enter through the standing far walls and land patches on the
- * visible near floor — never through a wall the dollhouse cutaway has just
- * dropped to a hole-less stub. Elevation, distance and the shadow frustum are
- * sized from the room's bounding radius so the whole model stays inside the
- * shadow map.
+ * The shadow-casting sun, fixed in world space: it sits outside the floor's
+ * most-glazed wall (`sunAnchorAzimuth`), swung by the preset's rake, and does
+ * not move with the camera — the room and its light hold still while the view
+ * orbits, and the walls' shadow proxies keep the window patches alive even
+ * when the cutaway drops the glazed wall itself. Elevation, distance and the
+ * shadow frustum are sized from the room's bounding radius so the whole model
+ * stays inside the shadow map.
  */
 function SunLight({
   center,
@@ -773,16 +833,17 @@ function SunLight({
   color,
   intensity,
   elevationDeg,
-  rakeDeg,
+  azimuth,
 }: {
   center: [number, number, number];
   /** Half the floor's bounding diagonal, plus margin. */
   radius: number;
-  /** Preset-driven sun colour, brightness and geometry (see #/lib/lighting). */
+  /** Preset-driven sun colour, brightness and elevation (see #/lib/lighting). */
   color: string;
   intensity: number;
   elevationDeg: number;
-  rakeDeg: number;
+  /** World azimuth in radians (`atan2(z, x)`): glazing anchor + preset rake. */
+  azimuth: number;
 }) {
   const lightRef = useRef<DirectionalLight | null>(null);
   const target = useMemo(() => new Object3D(), []);
@@ -792,29 +853,18 @@ function SunLight({
   }, [center, target]);
 
   const distance = Math.max(radius * 2.4, 9);
-  useFrame(({ camera }) => {
-    const light = lightRef.current;
-    if (!light) return;
-    const elevation = MathUtils.degToRad(elevationDeg);
-    // Center → camera azimuth in the XZ plane; the sun sits opposite it, so its
-    // beams enter through the standing far walls, plus the preset's rake swing.
-    const camAz = Math.atan2(
-      camera.position.z - center[2],
-      camera.position.x - center[0],
-    );
-    const sunAz = camAz + Math.PI + MathUtils.degToRad(rakeDeg);
-    const ground = Math.cos(elevation) * distance;
-    light.position.set(
-      center[0] + Math.cos(sunAz) * ground,
-      center[1] + Math.sin(elevation) * distance,
-      center[2] + Math.sin(sunAz) * ground,
-    );
-  });
+  const elevation = MathUtils.degToRad(elevationDeg);
+  const ground = Math.cos(elevation) * distance;
 
   return (
     <>
       <directionalLight
         ref={lightRef}
+        position={[
+          center[0] + Math.cos(azimuth) * ground,
+          center[1] + Math.sin(elevation) * distance,
+          center[2] + Math.sin(azimuth) * ground,
+        ]}
         color={color}
         intensity={intensity}
         castShadow
@@ -984,6 +1034,9 @@ export function RoomScene({
   const sunRadius = bounds
     ? Math.hypot(bounds.width, bounds.height) / 2 + 1
     : 6;
+  // World-fixed sun anchor: outside the most-glazed wall, so its patches sit
+  // still on the floor while the camera orbits.
+  const sunAnchor = useMemo(() => sunAnchorAzimuth(solids), [solids]);
   // Selection and drags are floor-wide; the item is found across every room
   // plus the unassigned bucket, with mount/stack positions already derived.
   const allFurniture = useMemo(
@@ -1022,7 +1075,7 @@ export function RoomScene({
         color={lighting.sun.color}
         intensity={lighting.sun.intensity}
         elevationDeg={lighting.sun.elevationDeg}
-        rakeDeg={lighting.sun.rakeDeg}
+        azimuth={sunAnchor + MathUtils.degToRad(lighting.sun.rakeDeg)}
       />
       {bounds && <FloorContactShadow bounds={bounds} />}
       <Walls solids={solids} posts={posts} />

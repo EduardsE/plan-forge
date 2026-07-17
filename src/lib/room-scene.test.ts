@@ -7,6 +7,7 @@ import {
   nodePosts,
   STUB_WALL_HEIGHT,
   stubSpans,
+  sunAnchorAzimuth,
   WALL_HEIGHT,
   type WallSolid,
   WINDOW_HEAD,
@@ -214,5 +215,42 @@ describe("nodePosts", () => {
     const posts = nodePosts(floor, solidsOf(floor));
     // Node B touches the shared wall (kitchen-tall) → tall post.
     expect(posts.find((p) => p.nodeId === "B")?.height).toBe(3.4);
+  });
+});
+
+describe("sunAnchorAzimuth", () => {
+  it("anchors outside the sample floor's only glazed wall", () => {
+    // The one window sits on AB, whose outward normal points up-plan (0, -1),
+    // so the sun anchors at atan2(-1, 0) = -π/2.
+    expect(sunAnchorAzimuth(solidsOf(makeFloor()))).toBeCloseTo(
+      -Math.PI / 2,
+      10,
+    );
+  });
+
+  it("prefers the wall with the largest total window area", () => {
+    const floor = makeFloor();
+    // A wider window on CD (outward (1, 0)) outweighs AB's 2.1 m one.
+    floor.openings = [
+      ...floor.openings,
+      {
+        id: "window-CD",
+        kind: "window",
+        edgeId: "CD",
+        offset: 1.0,
+        width: 3.0,
+        side: 1,
+      },
+    ];
+    expect(sunAnchorAzimuth(solidsOf(floor))).toBeCloseTo(0, 10);
+  });
+
+  it("ignores doors and falls back to a fixed default without glazing", () => {
+    const floor = makeFloor();
+    floor.openings = floor.openings.filter((o) => o.kind !== "window");
+    expect(sunAnchorAzimuth(solidsOf(floor))).toBeCloseTo(
+      (232 * Math.PI) / 180,
+      10,
+    );
   });
 });

@@ -6,9 +6,10 @@
  * warmth. No three/React imports here, so the table is unit-testable directly.
  *
  * Each preset expresses the hour through the sun's *height, colour and
- * brightness* (plus a rake swing), never a free azimuth — the sun's azimuth
- * stays slaved to the camera in the scene so daylight patches always fall on
- * the visible floor, whatever the hour.
+ * brightness*, plus a rake swing around the floor's glazing anchor
+ * (`sunAnchorAzimuth` — outside the most-glazed wall). The sun is fixed in
+ * world space: the rake traces its arc across that wall's sky over the day,
+ * and the room's light holds still while the camera orbits.
  */
 
 export type TimeOfDay = "dawn" | "day" | "golden" | "dusk";
@@ -24,9 +25,9 @@ export interface LightingPreset {
   label: string;
   /**
    * The shadow-casting sun. `elevationDeg` is its height over the horizon;
-   * `rakeDeg` swings its azimuth off dead-opposite-the-camera — the sign flips
-   * the side the beams rake from, so morning and evening read differently even
-   * though both keep patches on the visible floor.
+   * `rakeDeg` swings its world azimuth off the glazing anchor (square-on to
+   * the most-glazed wall) — negative rakes from one side, positive from the
+   * other, so the patches sweep across the floor as the day advances.
    */
   sun: {
     color: string;
