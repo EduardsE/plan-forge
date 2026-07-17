@@ -162,7 +162,7 @@ export function createSampleRoom(): Room {
         catalogId: "credenza",
         position: { x: 0.38, y: 1.85 },
         rotation: 90,
-        footprint: { width: 1.5, depth: 0.65, height: 0.78 },
+        footprint: { width: 1.8, depth: 0.558, height: 0.6 },
       },
       {
         id: "shelf-1",
@@ -218,7 +218,7 @@ export function createSampleKitchen(): Room {
         catalogId: "credenza",
         position: { x: 7.45, y: 0.33 },
         rotation: 0,
-        footprint: { width: 1.5, depth: 0.65, height: 0.78 },
+        footprint: { width: 1.8, depth: 0.558, height: 0.6 },
       },
       {
         id: "dining-table-1",

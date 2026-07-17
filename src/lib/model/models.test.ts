@@ -6,10 +6,11 @@ import { MODEL_MANIFEST, modelForCatalogId } from "./models";
 describe("model manifest", () => {
   const entries = Object.entries(MODEL_MANIFEST);
 
-  it("covers exactly the six pilot items", () => {
+  it("covers exactly the mapped items", () => {
     expect(Object.keys(MODEL_MANIFEST).sort()).toEqual([
       "armchair",
       "bed-double",
+      "credenza",
       "dining-table",
       "floor-lamp",
       "sofa-2",
@@ -23,13 +24,20 @@ describe("model manifest", () => {
 
   it.each(
     entries,
-  )("%s: committed asset, sane naturals, a body slot", (id, entry) => {
+  )("%s: committed asset, sane naturals, valid slots", (id, entry) => {
     expect(entry.file).toBe(`/models/${id}.glb`);
     expect(existsSync(`public${entry.file}`)).toBe(true);
     expect(entry.natural.width).toBeGreaterThan(0);
     expect(entry.natural.depth).toBeGreaterThan(0);
     expect(entry.natural.height).toBeGreaterThan(0);
-    expect(Object.values(entry.slots)).toContain("body");
+    // Every material maps to a known slot. A body slot (colorway tint) is
+    // typical but not required — a single-material veneer piece like the
+    // credenza is deliberately all-neutral so its grain reads as-authored.
+    const slotValues = Object.values(entry.slots);
+    expect(slotValues.length).toBeGreaterThan(0);
+    for (const slot of slotValues) {
+      expect(["body", "accent", "neutral"]).toContain(slot);
+    }
   });
 
   // Spec: a mapped item's default footprint equals the mesh's natural size,

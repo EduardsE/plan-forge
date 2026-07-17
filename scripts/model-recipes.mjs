@@ -76,6 +76,28 @@ export const RECIPES = [
     },
   },
   {
+    // A photogrammetry-scale credenza (295k tris, two 3072² textures ≈ 17 MB
+    // raw). Its one material is unnamed in the source, so the slot key is "".
+    // Simplify + texture downscale bring it in line with the kit pilots; the
+    // medium-brown veneer stays "neutral" so its grain texture reads as-is
+    // rather than taking the colorway tint.
+    catalogId: "credenza",
+    input: "assets/raw-models/credenza.glb",
+    source: "supplied asset (assets/raw-models/credenza.glb)",
+    realWidth: 1.8,
+    rotateYDeg: 0,
+    simplify: { ratio: 0.03, error: 0.01 },
+    maxTexture: 1024,
+    textureQuality: 85,
+    // Source PBR is baked fully metallic (metalness ≈ 0.93) — wrong for wood,
+    // renders near-black under the studio pool. Force matte non-metal; the
+    // roughness map is near-uniform, so drop it and keep a flat factor.
+    material: { metallic: 0, roughness: 1, dropMetallicRoughnessTexture: true },
+    slots: {
+      "": "neutral",
+    },
+  },
+  {
     catalogId: "floor-lamp",
     input: "assets/raw-models/furniture-kit/Models/GLTF format/lampRoundFloor.glb",
     source: "https://kenney.nl/assets/furniture-kit (CC0)",

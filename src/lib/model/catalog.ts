@@ -70,7 +70,7 @@ export const CATALOG: CatalogItem[] = [
   item("coffee-table", "Coffee Table", "tables", 0.9, 0.55, 0.42),
   item("side-table", "Side Table", "tables", 0.45, 0.45, 0.52),
   item("dining-table", "Dining Table", "tables", 1.6, 0.851, 0.621),
-  item("credenza", "Credenza", "storage", 1.5, 0.65, 0.78),
+  item("credenza", "Credenza", "storage", 1.8, 0.558, 0.6),
   item("shelf", "Shelf", "storage", 1.4, 0.44, 1.7),
   item("wardrobe", "Wardrobe", "storage", 1.0, 0.625, 2.125),
   item("bed-double", "Double Bed", "beds", 1.6, 1.883, 0.628),

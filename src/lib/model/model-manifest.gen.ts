@@ -32,6 +32,11 @@ export const MODEL_MANIFEST = {
     natural: { width: 1, depth: 0.625, height: 2.125 },
     slots: { wood: "body", metal: "accent" },
   },
+  credenza: {
+    file: "/models/credenza.glb",
+    natural: { width: 1.8, depth: 0.558, height: 0.6 },
+    slots: { "": "neutral" },
+  },
   "floor-lamp": {
     file: "/models/floor-lamp.glb",
     natural: { width: 0.38, depth: 0.439, height: 2.149 },
