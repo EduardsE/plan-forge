@@ -75,14 +75,14 @@ function LoadedModel({
   );
   hullMaterial.opacity = hullOpacity;
   const hull = useMemo(
-    () => hullModelClone(tinted, hullMaterial),
-    [tinted, hullMaterial],
+    () => (active ? hullModelClone(tinted, hullMaterial) : null),
+    [active, tinted, hullMaterial],
   );
   const scale = fitModelScale(entry.natural, footprint);
   return (
     <>
       <primitive object={tinted} scale={scale} />
-      {active && (
+      {hull && (
         <primitive
           object={hull}
           scale={scale * HULL_INFLATE}
