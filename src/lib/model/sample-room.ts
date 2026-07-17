@@ -136,7 +136,7 @@ export function createSampleFloor(): Floor {
         catalogId: "dining-table",
         position: { x: 8.35, y: 3.0 },
         rotation: 90,
-        footprint: { width: 1.6, depth: 0.9, height: 0.75 },
+        footprint: { width: 1.6, depth: 0.851, height: 0.621 },
       },
       {
         id: "stool-1",

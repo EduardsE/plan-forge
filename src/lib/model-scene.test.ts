@@ -45,6 +45,11 @@ describe("fitModelScale", () => {
     const natural = { width: 2, depth: 1, height: 1 };
     expect(fitModelScale(natural, { width: 3, depth: 1, height: 1 })).toBe(1);
   });
+
+  it("collapses to 0 for a degenerate footprint axis instead of NaN", () => {
+    const natural = { width: 2, depth: 1, height: 1 };
+    expect(fitModelScale(natural, { width: 0, depth: 1, height: 1 })).toBe(0);
+  });
 });
 
 describe("tintedModelClone", () => {
