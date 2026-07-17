@@ -40,6 +40,9 @@ export function tintedModelClone(
   const tint = new Color(color);
   clone.traverse((obj) => {
     if (!(obj instanceof Mesh)) return;
+    // Real bodies drop shadows into the sun patch and shade themselves.
+    obj.castShadow = true;
+    obj.receiveShadow = true;
     const swap = (material: Material): Material => {
       const copy = material.clone();
       if (slots[material.name] === "body" && "color" in copy) {

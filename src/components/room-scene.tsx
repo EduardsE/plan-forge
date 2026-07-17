@@ -84,6 +84,18 @@ const WINDOW_FRAME_COLOR = "#e6dbc6";
 const WINDOW_FRAME_SIZE = 0.09;
 const PANE_COLORS = ["#fff6de", "#ffe9c2"] as const;
 
+/**
+ * The sun — a warm directional light that casts real shadows, so the window
+ * holes throw daylight patches across the floor. Elevation is kept moderate so
+ * the patches rake out into the room rather than pooling under the sill; the
+ * rake offset swings the azimuth off dead-behind-the-camera so beams fall
+ * diagonally instead of straight at the viewer.
+ */
+const SUN_COLOR = "#fff1cf";
+const SUN_INTENSITY = 2.7;
+const SUN_ELEVATION = MathUtils.degToRad(38);
+const SUN_RAKE = MathUtils.degToRad(22);
+
 /** Mockup's selection stroke: rgba(58,91,240,.7) on the desk chair faces. */
 const SELECTION_COLOR = "#3a5bf0";
 /** Collision-warning tint mixed into a body that overlaps a neighbor. */
@@ -263,6 +275,7 @@ function Platform({ outline }: { outline: Point[] }) {
         rotation-x={-Math.PI / 2}
         position-y={FLOOR_TOP - SLAB_THICKNESS}
         raycast={noRaycast}
+        receiveShadow
       >
         <meshLambertMaterial attach="material-0" map={plank} />
         <meshLambertMaterial attach="material-1" color={SLAB_SIDE_COLOR} />
@@ -339,17 +352,21 @@ function WindowDressing({
         <meshBasicMaterial map={pane} side={DoubleSide} />
       </mesh>
       {bars.map(([id, x, y, w, h, d]) => (
-        <mesh key={id} position={[x, y, z]} raycast={noRaycast}>
+        // castShadow throws the frame + muntin cross into the sun patch on the
+        // floor — the detail that sells the light as coming through a window.
+        <mesh key={id} position={[x, y, z]} raycast={noRaycast} castShadow>
           <boxGeometry args={[w, h, d]} />
           <meshLambertMaterial color={WINDOW_FRAME_COLOR} />
         </mesh>
       ))}
-      {/* Daylight spilling in, standing in for the mockup's window glow. */}
+      {/* A tight warm glow on the frame/reveal — kept local (short distance) so
+          it dresses the window without flooding the floor and flattening the
+          sun patch that rakes in through the same hole. */}
       <pointLight
         position={[cx, cy, z]}
         color="#ffd9a0"
-        intensity={4}
-        distance={7}
+        intensity={2.4}
+        distance={4.5}
         decay={2}
       />
     </group>
@@ -422,7 +439,16 @@ function WallMesh({
   // straddles the edge line (± half thickness), independent of `outward`.
   const zOffset = -WALL_THICKNESS / 2;
   const wallMesh = (geom: ExtrudeGeometry) => (
-    <mesh geometry={geom} position-z={zOffset} raycast={noRaycast}>
+    // Cast so the solid spans block the sun (leaving window-shaped patches on
+    // the floor); receive so interior faces catch furniture and neighbour-wall
+    // shadows.
+    <mesh
+      geometry={geom}
+      position-z={zOffset}
+      raycast={noRaycast}
+      castShadow
+      receiveShadow
+    >
       <meshLambertMaterial attach="material-0" map={wall} />
       <meshLambertMaterial attach="material-1" color={WALL_EDGE_COLOR} />
     </mesh>
@@ -539,6 +565,8 @@ function Walls({ solids, posts }: { solids: WallSolid[]; posts: NodePost[] }) {
             }}
             position-y={post.height / 2}
             raycast={noRaycast}
+            castShadow
+            receiveShadow
           >
             <boxGeometry args={[WALL_THICKNESS, post.height, WALL_THICKNESS]} />
             <meshLambertMaterial color={WALL_EDGE_COLOR} />
@@ -550,6 +578,8 @@ function Walls({ solids, posts }: { solids: WallSolid[]; posts: NodePost[] }) {
             position-y={STUB_WALL_HEIGHT / 2}
             raycast={noRaycast}
             visible={false}
+            castShadow
+            receiveShadow
           >
             <boxGeometry
               args={[WALL_THICKNESS, STUB_WALL_HEIGHT, WALL_THICKNESS]}
@@ -652,6 +682,8 @@ function FurnitureMesh({
           position={part.position}
           rotation={part.rotation ?? [0, 0, 0]}
           scale={partScale(part.shape)}
+          castShadow
+          receiveShadow
         >
           <PartGeometry shape={part.shape} />
           <meshLambertMaterial
@@ -737,6 +769,72 @@ function FurnitureMesh({
   );
 }
 
+/**
+ * The shadow-casting sun. Its azimuth is slaved to the camera each frame and
+ * kept on the *far* side of the room (opposite the viewer, plus a rake), so
+ * its beams enter through the standing far walls and land patches on the
+ * visible near floor — never through a wall the dollhouse cutaway has just
+ * dropped to a hole-less stub. Elevation, distance and the shadow frustum are
+ * sized from the room's bounding radius so the whole model stays inside the
+ * shadow map.
+ */
+function SunLight({
+  center,
+  radius,
+}: {
+  center: [number, number, number];
+  /** Half the floor's bounding diagonal, plus margin. */
+  radius: number;
+}) {
+  const lightRef = useRef<DirectionalLight | null>(null);
+  const target = useMemo(() => new Object3D(), []);
+  useLayoutEffect(() => {
+    target.position.set(...center);
+    if (lightRef.current) lightRef.current.target = target;
+  }, [center, target]);
+
+  const distance = Math.max(radius * 2.4, 9);
+  useFrame(({ camera }) => {
+    const light = lightRef.current;
+    if (!light) return;
+    // Center → camera azimuth in the XZ plane; the sun sits opposite it.
+    const camAz = Math.atan2(
+      camera.position.z - center[2],
+      camera.position.x - center[0],
+    );
+    const sunAz = camAz + Math.PI + SUN_RAKE;
+    const ground = Math.cos(SUN_ELEVATION) * distance;
+    light.position.set(
+      center[0] + Math.cos(sunAz) * ground,
+      center[1] + Math.sin(SUN_ELEVATION) * distance,
+      center[2] + Math.sin(sunAz) * ground,
+    );
+  });
+
+  return (
+    <>
+      <directionalLight
+        ref={lightRef}
+        color={SUN_COLOR}
+        intensity={SUN_INTENSITY}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        // Negative bias + normalBias keep acne and light-leaks out of the thin
+        // wall apertures without peter-panning the patch edges.
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.04}
+        shadow-camera-near={0.5}
+        shadow-camera-far={distance + radius * 2}
+        shadow-camera-left={-radius}
+        shadow-camera-right={radius}
+        shadow-camera-top={radius}
+        shadow-camera-bottom={-radius}
+      />
+      <primitive object={target} />
+    </>
+  );
+}
+
 /** Warm key light from the window side, aimed at the room center. */
 function KeyLight({ center }: { center: [number, number, number] }) {
   const lightRef = useRef<DirectionalLight | null>(null);
@@ -751,7 +849,7 @@ function KeyLight({ center }: { center: [number, number, number] }) {
         ref={lightRef}
         position={[center[0] + 3.5, 7, center[2] - 6.5]}
         color="#ffe9c4"
-        intensity={1.25}
+        intensity={0.38}
       />
       <primitive object={target} />
     </>
@@ -872,6 +970,11 @@ export function RoomScene({
   const center: [number, number, number] = bounds
     ? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
     : [0, 0, 0];
+  // Half the floor's bounding diagonal (+1 m margin) — the square shadow
+  // frustum this sizes wraps the room at any sun azimuth.
+  const sunRadius = bounds
+    ? Math.hypot(bounds.width, bounds.height) / 2 + 1
+    : 6;
   // Selection and drags are floor-wide; the item is found across every room
   // plus the unassigned bucket, with mount/stack positions already derived.
   const allFurniture = useMemo(
@@ -888,14 +991,21 @@ export function RoomScene({
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
   return (
     <group>
-      <ambientLight color="#fff2de" intensity={1.15} />
+      {/* Ambient + key + fill dropped from their pre-sun levels so the shadowed
+          floor sits below white — that headroom is what lets the sun patch read
+          as genuinely brighter under the flat (untone-mapped) renderer. */}
+      {/* Ambient + key + fill dropped from their pre-sun levels so the shadowed
+          floor sits well below white — that headroom is what lets the sun patch
+          read as genuinely brighter under the flat (untone-mapped) renderer. */}
+      <ambientLight color="#fff2de" intensity={0.42} />
       <KeyLight center={center} />
       {/* Cool fill from the open side so hidden-wall views don't go flat. */}
       <directionalLight
         position={[center[0] - 6, 5, center[2] + 7]}
         color="#e8eef7"
-        intensity={0.45}
+        intensity={0.18}
       />
+      <SunLight center={center} radius={sunRadius} />
       {bounds && <FloorContactShadow bounds={bounds} />}
       <Walls solids={solids} posts={posts} />
       <RoomOpenings

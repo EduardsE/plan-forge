@@ -877,6 +877,10 @@ export function PlannerCanvas({
     >
       <Canvas
         flat
+        // Soft (PCF) shadow maps so the 3D lens's sun can throw real daylight
+        // patches through the window holes; the plan/draw lenses register no
+        // shadow casters, so their shadow pass is a no-op.
+        shadows
         dpr={[1, 2]}
         // react-use-measure wires its ResizeObserver to the *scroll*-debounced
         // handler (50 ms by default), so a container resize — the library
