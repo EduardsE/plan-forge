@@ -237,6 +237,18 @@ function CameraRig({
   );
   const fitRadius = bounds ? Math.hypot(bounds.width, bounds.height) / 2 : 5;
 
+  // Snapshot the center used for the cameras' *initial* declarative placement,
+  // captured once the floor bounds first exist. Live `center` tracks the room
+  // bounds centroid, which shifts on every wall/corner edit; feeding that into
+  // the `position` props below would have R3F re-apply it (teleporting the
+  // camera and discarding the current pan/orbit), recentering the canvas
+  // mid-edit. Explicit fit / zoom-to-fit still uses live `center`.
+  const initialCenterRef = useRef<Vector3 | null>(null);
+  if (initialCenterRef.current === null && bounds) {
+    initialCenterRef.current = new Vector3(centerX, 0, centerZ);
+  }
+  const initialCenter = initialCenterRef.current ?? center;
+
   // Persistent controls target: survives the controls remount on every lens
   // swap (the OrbitControls key), so panning isn't lost across transitions.
   const targetRef = useRef<Vector3 | null>(null);
@@ -511,8 +523,8 @@ function CameraRig({
             MathUtils.degToRad(INITIAL_AZIMUTH_DEG),
           ),
         )
-        .add(center),
-    [center],
+        .add(initialCenter),
+    [initialCenter],
   );
 
   return (
@@ -531,7 +543,7 @@ function CameraRig({
         near={0.1}
         far={100}
         up={[0, 0, -1]}
-        position={[center.x, PLAN_CAMERA_HEIGHT, center.z]}
+        position={[initialCenter.x, PLAN_CAMERA_HEIGHT, initialCenter.z]}
         zoom={80}
       />
       <OrbitControls
