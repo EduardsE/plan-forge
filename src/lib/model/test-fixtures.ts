@@ -81,3 +81,36 @@ export function makeFloor(): Floor {
     ],
   };
 }
+
+/**
+ * A single concave (L-shaped) room, for the wall-side derivation. The reflex
+ * vertex is `d(3,2)`; its adjacent edges `cd` and `de` are exactly where a
+ * label-point-vs-edge-line side test used to flip the sign. The loop is wound
+ * so `extractFaces` keeps it as-is (positive shoelace), and every edge is
+ * defined in the traversal direction, so the interior side of each is `+1`.
+ *
+ *   a(0,0) b(6,0) c(6,2) d(3,2) e(3,5) f(0,5)
+ */
+export function makeLRoom(): Floor {
+  return {
+    nodes: [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 6, y: 0 },
+      { id: "c", x: 6, y: 2 },
+      { id: "d", x: 3, y: 2 },
+      { id: "e", x: 3, y: 5 },
+      { id: "f", x: 0, y: 5 },
+    ],
+    edges: [
+      { id: "ab", a: "a", b: "b" },
+      { id: "bc", a: "b", b: "c" },
+      { id: "cd", a: "c", b: "d" },
+      { id: "de", a: "d", b: "e" },
+      { id: "ef", a: "e", b: "f" },
+      { id: "fa", a: "f", b: "a" },
+    ],
+    openings: [],
+    furniture: [],
+    rooms: [{ id: "ell", name: "L room", anchor: { x: 1, y: 1 } }],
+  };
+}

@@ -1,10 +1,5 @@
 import type { Face } from "./faces";
-import {
-  extractFaces,
-  faceLabelPoint,
-  insetPolygon,
-  sideOfPoint,
-} from "./faces";
+import { extractFaces, insetPolygon } from "./faces";
 import { pointInOutline, WALL_THICKNESS } from "./geometry";
 import type { WallEdge, WallNode } from "./graph";
 import { normalizeGraph } from "./graph";
@@ -182,14 +177,19 @@ export function deriveFloor(floor: Floor): DerivedFloor {
     const outline = insetPolygon(face.polygon, WALL_THICKNESS / 2);
     if (!outline) continue;
     const record = recordByFace.get(face);
-    const labelPoint = faceLabelPoint(face.polygon);
     const id = record ? record.id : `face:${face.nodeIds.join("|")}`;
 
-    const wallRefs: WallRef[] = face.edgeIds.map((edgeId) => {
+    // A kept face has positive shoelace winding, so its interior always lies
+    // on the `+1` (`sideOfPoint`-positive) side of the traversal direction.
+    // Boundary step `i` walks `nodeIds[i]`→`nodeIds[(i+1)%n]` along
+    // `edgeIds[i]`: `side` is `+1` when the edge runs a→b with the traversal,
+    // `-1` when against it. This reads the side straight off the orientation —
+    // no point-vs-line test, so it stays correct for concave faces (a reflex
+    // vertex can put the label point across an edge's line) and for a stub
+    // edge that appears twice in one face (each occurrence keyed by its step).
+    const wallRefs: WallRef[] = face.edgeIds.map((edgeId, i) => {
       const edge = edges.get(edgeId);
-      const a = edge ? nodes.get(edge.a) : undefined;
-      const b = edge ? nodes.get(edge.b) : undefined;
-      const side = a && b ? sideOfPoint(a, b, labelPoint) : 1;
+      const side: 1 | -1 = edge && edge.a === face.nodeIds[i] ? 1 : -1;
       return { edgeId, side };
     });
 

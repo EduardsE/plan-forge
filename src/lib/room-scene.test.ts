@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveFloor, type Floor } from "#/lib/model";
-import { makeFloor } from "#/lib/model/test-fixtures";
+import { makeFloor, makeLRoom } from "#/lib/model/test-fixtures";
 import {
   buildEdgeSolids,
   DOOR_HEIGHT,
@@ -63,6 +63,19 @@ describe("buildEdgeSolids", () => {
         side: 1,
       },
     ]);
+  });
+
+  it("orients outward to the exterior for a concave one-face edge", () => {
+    // L-room: edge `cd` (top of the lower arm, x∈[3,6]) has the room below it
+    // and open space above. Its single face side is +1, so outward is the
+    // right normal of dir=(-1,0) → (0,1), pointing down to the empty side. A
+    // label-point side test used to read this reflex-adjacent edge as -1,
+    // flipping outward up into the room.
+    const cd = byEdge(solidsOf(makeLRoom()), "cd");
+    expect(cd.faces).toBe(1);
+    expect(cd.faceSides).toEqual([1]);
+    expect(cd.outward.x).toBeCloseTo(0, 10);
+    expect(cd.outward.y).toBeCloseTo(1, 10);
   });
 
   it("renders a dangling edge (no adjacent room) as a plain full-height wall", () => {

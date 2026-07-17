@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { deriveFloor, reconcileFloor, updateDerivedRoom } from "./derived";
 import { updateFurniture } from "./furniture";
 import { setRoomName, setRoomWallHeight } from "./room";
-import { makeFloor } from "./test-fixtures";
+import { makeFloor, makeLRoom } from "./test-fixtures";
 import type { Floor, Point } from "./types";
 
 /** Points as a sorted "x,y" set so vertex order/rotation doesn't matter. */
@@ -57,6 +57,25 @@ describe("deriveFloor", () => {
     expect(windowWall.y).toBeCloseTo(0, 4);
     expect(window.offset).toBeCloseTo(3.5, 2);
     expect(living.wallRefs[window.wallIndex].edgeId).toBe("AB");
+  });
+
+  it("derives wall sides from traversal orientation, not a label-point test", () => {
+    // Concave L-room: the reflex vertex is `d`, and a label-point-vs-edge-line
+    // side test used to flip the sign of the reflex-adjacent edges `cd`/`de`
+    // (the label point can sit across their infinite lines). Traversal
+    // orientation reads the true interior side (+1 for every forward edge).
+    const room = deriveFloor(makeLRoom()).rooms.find((r) => r.id === "ell");
+    if (!room) throw new Error("missing L room");
+    const sideOf = (edgeId: string) =>
+      room.wallRefs.find((ref) => ref.edgeId === edgeId)?.side;
+
+    // Reflex-adjacent edges — the ones the old test flipped.
+    expect(sideOf("cd")).toBe(1);
+    expect(sideOf("de")).toBe(1);
+    // The whole loop is wound so the interior is on the +1 side of each edge.
+    for (const edgeId of ["ab", "bc", "cd", "de", "ef", "fa"]) {
+      expect(sideOf(edgeId)).toBe(1);
+    }
   });
 
   it("partitions furniture by center containment", () => {
