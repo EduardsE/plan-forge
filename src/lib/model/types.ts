@@ -33,8 +33,9 @@ export type OpeningKind = "door" | "window";
 
 /**
  * A door or window cut into a graph **edge**, located along that edge's a→b
- * direction. The stored, floor-level opening shape (`deriveFloor` maps it into
- * per-room `RoomOpening`s for rendering/editing).
+ * direction. The stored, floor-level opening shape — rendering and editing
+ * read it directly in edge coordinates (`buildEdgeSolids`, the floor-level
+ * setters in `model/openings.ts`); nothing converts it to a per-room shape.
  */
 export interface Opening {
   id: string;
