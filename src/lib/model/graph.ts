@@ -1,4 +1,4 @@
-import type { Point } from "./types";
+import type { Opening, Point } from "./types";
 
 /**
  * The planar wall graph: rooms are no longer stored as closed per-room
@@ -25,25 +25,10 @@ export interface WallEdge {
   b: string;
 }
 
-/** A door or window cut into an edge, located along that edge's a→b direction. */
-export interface GraphOpening {
-  id: string;
-  kind: "door" | "window";
-  edgeId: string;
-  /** Distance from node `a` to the opening's near edge, along a→b. */
-  offset: number;
-  width: number;
-  hinge?: "start" | "end";
-  /** Face the door swings toward / the mount faces: sign of the cross
-   * product (b-a) × (p-a) for a point p on that side (see `sideOfPoint`,
-   * faces.ts, Task G2). */
-  side: 1 | -1;
-}
-
 export interface GraphState {
   nodes: WallNode[];
   edges: WallEdge[];
-  openings: GraphOpening[];
+  openings: Opening[];
 }
 
 /** Below DRAW_GRID_STEP (0.05) so grid-snapped neighbors never weld. */
@@ -123,8 +108,8 @@ function dropDegenerateEdges(
 function dedupeEdges(
   edges: WallEdge[],
   nodes: WallNode[],
-  openings: GraphOpening[],
-): { edges: WallEdge[]; openings: GraphOpening[]; changed: boolean } {
+  openings: Opening[],
+): { edges: WallEdge[]; openings: Opening[]; changed: boolean } {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const seen = new Map<string, WallEdge>();
   const kept: WallEdge[] = [];
@@ -147,7 +132,7 @@ function dedupeEdges(
     const a = byId.get(r.keeper.a);
     const b = byId.get(r.keeper.b);
     const length = a && b ? distance(a, b) : 0;
-    const next: GraphOpening = {
+    const next: Opening = {
       ...o,
       edgeId: r.keeper.id,
       offset: length - o.offset - o.width,
@@ -166,19 +151,19 @@ function dedupeEdges(
  */
 function splitEdgeAt(
   edges: WallEdge[],
-  openings: GraphOpening[],
+  openings: Opening[],
   edge: WallEdge,
   length: number,
   t: number,
   splitNodeId: string,
   newId: () => string,
-): { edges: WallEdge[]; openings: GraphOpening[] } {
+): { edges: WallEdge[]; openings: Opening[] } {
   const pieceA: WallEdge = { id: newId(), a: edge.a, b: splitNodeId };
   const pieceB: WallEdge = { id: newId(), a: splitNodeId, b: edge.b };
   const nextEdges = edges.flatMap((e) =>
     e.id === edge.id ? [pieceA, pieceB] : [e],
   );
-  const nextOpenings: GraphOpening[] = [];
+  const nextOpenings: Opening[] = [];
   for (const o of openings) {
     if (o.edgeId !== edge.id) {
       nextOpenings.push(o);
@@ -215,12 +200,12 @@ function splitEdgeAt(
 function splitAtNodes(
   nodes: WallNode[],
   edges: WallEdge[],
-  openings: GraphOpening[],
+  openings: Opening[],
   newId: () => string,
 ): {
   nodes: WallNode[];
   edges: WallEdge[];
-  openings: GraphOpening[];
+  openings: Opening[];
   changed: boolean;
 } {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -274,12 +259,12 @@ function segmentIntersection(
 function splitCrossings(
   nodes: WallNode[],
   edges: WallEdge[],
-  openings: GraphOpening[],
+  openings: Opening[],
   newId: () => string,
 ): {
   nodes: WallNode[];
   edges: WallEdge[];
-  openings: GraphOpening[];
+  openings: Opening[];
   changed: boolean;
 } {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -362,13 +347,13 @@ function dropOrphanNodes(
  * them; clamp the rest onto their (possibly shorter) edge.
  */
 function fitOpenings(
-  openings: GraphOpening[],
+  openings: Opening[],
   edges: WallEdge[],
   nodes: WallNode[],
-): { openings: GraphOpening[]; changed: boolean } {
+): { openings: Opening[]; changed: boolean } {
   const edgesById = new Map(edges.map((e) => [e.id, e]));
   const nodesById = new Map(nodes.map((n) => [n.id, n]));
-  const next: GraphOpening[] = [];
+  const next: Opening[] = [];
   let changed = false;
   for (const o of openings) {
     const edge = edgesById.get(o.edgeId);

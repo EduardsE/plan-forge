@@ -1,6 +1,15 @@
 import type { Bounds, Point, Wall } from "./types";
 
 /**
+ * Wall thickness (meters): walls extrude this far, and a room's interior
+ * outline is the graph face inset by half of it. Defined here in the pure
+ * model layer (rather than `room-scene.ts`) so model code — `deriveFloor`,
+ * mounts — can read it without importing the render layer (which imports the
+ * model, closing a load-time cycle). `room-scene.ts` re-exports it.
+ */
+export const WALL_THICKNESS = 0.1;
+
+/**
  * Derive the wall segments of a closed outline. Each corner starts one wall;
  * the last wall closes the loop back to the first corner. Outlines with
  * fewer than 2 corners have no walls.

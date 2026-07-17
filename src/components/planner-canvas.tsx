@@ -50,12 +50,12 @@ import {
   isOpeningItem,
   isWallItem,
   moveOpening,
-  type Opening,
   type OpeningKind,
   type Point,
   type Room,
+  type RoomOpening,
   removeOpening,
-  reparentFurniture,
+  roomAtPoint,
   roomById,
   roomOfFurniture,
   roomOfOpening,
@@ -562,13 +562,13 @@ const CLICK_SLOP_PX = 4;
 
 export interface PlannerCanvasProps {
   floor: Floor;
+  /** The floor's derived rooms — scenes render these; "which room" for an
+   * edit resolves from them. */
+  rooms: Room[];
   /** A discrete mutation of one room — one undo step in the floor history. */
   onRoomChange: (roomId: string, room: Room) => void;
   /** A mid-drag state: applied live but not a history step of its own. */
   onRoomPreview: (roomId: string, room: Room) => void;
-  /** A mid-drag state that touches more than one room — a drag reparenting
-   * its item across a seam. Streams like `onRoomPreview`. */
-  onFloorPreview: (floor: Floor) => void;
   /** A room drag began/ended (however) — the route settles the previews
    * into one step on end, and stands its keyboard editing down meanwhile. */
   onRoomDragActiveChange: (active: boolean) => void;
@@ -614,9 +614,9 @@ export interface PlannerCanvasProps {
 
 export function PlannerCanvas({
   floor,
+  rooms,
   onRoomChange,
   onRoomPreview,
-  onFloorPreview,
   onRoomDragActiveChange,
   viewMode,
   selectedId,
@@ -673,7 +673,7 @@ export function PlannerCanvas({
     [onRoomDragActiveChange],
   );
   // Whole-floor camera framing: every room's outline together.
-  const bounds = useMemo(() => floorBounds(floor), [floor]);
+  const bounds = useMemo(() => floorBounds(rooms), [rooms]);
 
   const selectItem = useCallback(
     (id: string) => {
@@ -691,30 +691,26 @@ export function PlannerCanvas({
   );
 
   const moveItem = useCallback(
-    // Streams per pointermove — a preview, folded into one history step
-    // when the drag session releases the camera controls below. The owning
-    // room is derived from the item id (selection is floor-wide); a target
-    // room differing from it means the drag crossed a seam, and the item
-    // reparents into the destination room's furniture array.
-    (id: string, update: FurnitureUpdate, targetRoomId?: string) => {
-      const owner = roomOfFurniture(floor, id);
+    // Streams per pointermove — a preview, folded into one history step when
+    // the drag session releases the camera controls below. The owning room
+    // is derived from the item id (selection is floor-wide); furniture is
+    // floor-level, so a drag across a seam is just a position change — the
+    // write-back re-partitions the item into the room that now contains it.
+    (id: string, update: FurnitureUpdate, _targetRoomId?: string) => {
+      const owner = roomOfFurniture(rooms, id);
       if (!owner) return;
-      if (targetRoomId === undefined || targetRoomId === owner.id) {
-        onRoomPreview(owner.id, updateFurniture(owner, id, update));
-        return;
-      }
-      onFloorPreview(reparentFurniture(floor, id, targetRoomId, update));
+      onRoomPreview(owner.id, updateFurniture(owner, id, update));
     },
-    [floor, onRoomPreview, onFloorPreview],
+    [rooms, onRoomPreview],
   );
 
   // A door/window card released on a wall (the ghost resolved which room's
   // wall and the clamped offset).
   const placeOpeningItem = useCallback(
     (kind: OpeningKind, placement: OpeningPlacement) => {
-      const owner = roomById(floor, placement.roomId);
+      const owner = roomById(rooms, placement.roomId);
       if (!owner) return;
-      const opening: Opening = {
+      const opening: RoomOpening = {
         id: crypto.randomUUID(),
         kind,
         wallIndex: placement.wallIndex,
@@ -727,22 +723,22 @@ export function PlannerCanvas({
       selectOpening(opening.id);
       onPlacingEnd();
     },
-    [floor, onRoomChange, selectOpening, onPlacingEnd],
+    [rooms, onRoomChange, selectOpening, onPlacingEnd],
   );
   const moveOpeningTo = useCallback(
     // Streams per pointermove during an opening slide, like moveItem.
     (id: string, offset: number) => {
-      const owner = roomOfOpening(floor, id);
+      const owner = roomOfOpening(rooms, id);
       if (owner) onRoomPreview(owner.id, moveOpening(owner, id, offset));
     },
-    [floor, onRoomPreview],
+    [rooms, onRoomPreview],
   );
   const flipHinge = useCallback(
     (id: string) => {
-      const owner = roomOfOpening(floor, id);
+      const owner = roomOfOpening(rooms, id);
       if (owner) onRoomChange(owner.id, flipDoorHinge(owner, id));
     },
-    [floor, onRoomChange],
+    [rooms, onRoomChange],
   );
   const resizeOpeningTo = useCallback(
     // A committed width from the opening chip's field; `resizeOpening` owns
@@ -750,11 +746,11 @@ export function PlannerCanvas({
     // On a shared wall, the neighbor room's portal holes there block growth
     // exactly like this room's own openings.
     (id: string, width: number) => {
-      const owner = roomOfOpening(floor, id);
+      const owner = roomOfOpening(rooms, id);
       if (!owner) return;
       const opening = owner.openings.find((entry) => entry.id === id);
       if (!opening) return;
-      const blocked = floorPortals(floor.rooms)
+      const blocked = floorPortals(rooms)
         .filter(
           (portal) =>
             portal.otherRoomId === owner.id &&
@@ -767,15 +763,15 @@ export function PlannerCanvas({
       const next = resizeOpening(owner, id, width, blocked);
       if (next !== owner) onRoomChange(owner.id, next);
     },
-    [floor, onRoomChange],
+    [rooms, onRoomChange],
   );
   const deleteOpening = useCallback(
     (id: string) => {
-      const owner = roomOfOpening(floor, id);
+      const owner = roomOfOpening(rooms, id);
       if (owner) onRoomChange(owner.id, removeOpening(owner, id));
       setSelectedOpeningId(null);
     },
-    [floor, onRoomChange, setSelectedOpeningId],
+    [rooms, onRoomChange, setSelectedOpeningId],
   );
 
   // A placement drag takes over the scene; a leftover selection chip would
@@ -791,7 +787,7 @@ export function PlannerCanvas({
     // outline contains the snapped center).
     (roomId: string, center: Point, stack?: Stack) => {
       if (!placingItem) return;
-      const owner = roomById(floor, roomId);
+      const owner = roomById(rooms, roomId);
       if (!owner) return;
       const id = crypto.randomUUID();
       onRoomChange(
@@ -812,17 +808,18 @@ export function PlannerCanvas({
     },
     [
       placingItem,
-      floor,
+      rooms,
       onRoomChange,
       onPlacingEnd, // Selection follows the drop, same as duplicate.
       setSelectedId,
     ],
   );
   const placeMountedItem = useCallback(
-    // The landing room is the mount's own (`mountAcrossRooms` resolved it).
+    // The landing room is wherever the mounted position falls (the graph is
+    // one shared space); the mount stores only the edge.
     (result: WallMountResult) => {
       if (!placingItem) return;
-      const owner = roomById(floor, result.mount.roomId);
+      const owner = roomAtPoint(rooms, result.position, 0.05);
       if (!owner) return;
       const id = crypto.randomUUID();
       onRoomChange(
@@ -839,7 +836,7 @@ export function PlannerCanvas({
       setSelectedId(id);
       onPlacingEnd();
     },
-    [placingItem, floor, onRoomChange, onPlacingEnd, setSelectedId],
+    [placingItem, rooms, onRoomChange, onPlacingEnd, setSelectedId],
   );
 
   return (
@@ -925,9 +922,7 @@ export function PlannerCanvas({
               // Every room the draft is *not* editing: a plan backdrop, a
               // snap target, and (in select mode) a click re-targets the
               // session onto it.
-              contextRooms={floor.rooms.filter(
-                (entry) => entry.id !== draftRoomId,
-              )}
+              contextRooms={rooms.filter((entry) => entry.id !== draftRoomId)}
               unit={unit}
               snapEnabled={snapEnabled}
               placing={drawTool === "wall" && !draftClosed}
@@ -945,7 +940,8 @@ export function PlannerCanvas({
             />
           ) : (
             <PlanScene
-              rooms={floor.rooms}
+              rooms={rooms}
+              floor={floor}
               selectedId={selectedId}
               selectedOpeningId={selectedOpeningId}
               unit={unit}
@@ -962,7 +958,8 @@ export function PlannerCanvas({
           )
         ) : (
           <RoomScene
-            rooms={floor.rooms}
+            rooms={rooms}
+            floor={floor}
             selectedId={selectedId}
             unit={unit}
             snapEnabled={snapEnabled}
@@ -978,7 +975,7 @@ export function PlannerCanvas({
           placingItem &&
           (isOpeningItem(placingItem.id) ? (
             <OpeningGhost
-              rooms={floor.rooms}
+              rooms={rooms}
               item={placingItem}
               unit={unit}
               snapEnabled={snapEnabled}
@@ -987,7 +984,7 @@ export function PlannerCanvas({
             />
           ) : isWallItem(placingItem.id) ? (
             <WallMountGhost
-              rooms={floor.rooms}
+              floor={floor}
               item={placingItem}
               unit={unit}
               snapEnabled={snapEnabled}
@@ -996,7 +993,7 @@ export function PlannerCanvas({
             />
           ) : (
             <PlacementGhost
-              rooms={floor.rooms}
+              rooms={rooms}
               item={placingItem}
               unit={unit}
               snapEnabled={snapEnabled}

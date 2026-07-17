@@ -13,7 +13,6 @@ import type {
   Stack,
   WallMount,
 } from "./types";
-import { deriveMountTransform, wallFrames } from "./wall-mount";
 
 /**
  * Pure furniture mutations for the selection toolbar. Every function returns
@@ -72,32 +71,19 @@ export function duplicateFurniture(
 ): Room {
   const source = room.furniture.find((item) => item.id === id);
   if (!source) return room;
-  // A wall-mounted copy shifts along its host wall (staying on the wall)
-  // instead of floating out into the room like a floor copy.
+  // A wall-mounted copy shifts along its edge (staying on the wall) instead
+  // of floating out into the room like a floor copy. `deriveFloor` re-derives
+  // the flush position/rotation from the shifted mount, clamping to the edge.
   if (source.mount) {
-    const frame = wallFrames(room.outline).find(
-      (f) => f.index === source.mount?.wallIndex,
-    );
-    if (frame) {
-      const maxOffset = Math.max(0, frame.length - source.footprint.width);
-      const offset = Math.min(
-        source.mount.offset + DUPLICATE_OFFSET,
-        maxOffset,
-      );
-      const { position, rotation } = deriveMountTransform(
-        frame,
-        offset,
-        source.footprint,
-      );
-      const mounted: FurnitureItem = {
-        ...source,
-        id: newId,
-        position,
-        rotation,
-        mount: { ...source.mount, offset },
-      };
-      return { ...room, furniture: [...room.furniture, mounted] };
-    }
+    const mounted: FurnitureItem = {
+      ...source,
+      id: newId,
+      mount: {
+        ...source.mount,
+        offset: source.mount.offset + DUPLICATE_OFFSET,
+      },
+    };
+    return { ...room, furniture: [...room.furniture, mounted] };
   }
   // A stacked copy shifts along the host's top (staying stacked) instead of
   // floating out into the room like a floor copy.
@@ -218,32 +204,14 @@ export function setFurnitureFootprint(
     },
   };
   if (item.mount) {
-    const frame = wallFrames(room.outline).find(
-      (f) => f.index === item.mount?.wallIndex,
-    );
-    if (frame) {
-      const resized = {
-        ...next.footprint,
-        width: Math.min(next.footprint.width, frame.length),
-      };
-      const offset = Math.min(
-        Math.max(item.mount.offset, 0),
-        frame.length - resized.width,
-      );
-      const elevation = Math.max(item.mount.elevation, resized.height / 2);
-      const { position, rotation } = deriveMountTransform(
-        frame,
-        offset,
-        resized,
-      );
-      next = {
-        ...next,
-        footprint: resized,
-        position,
-        rotation,
-        mount: { ...item.mount, wallIndex: frame.index, offset, elevation },
-      };
-    }
+    // Keep the mount on its edge; `deriveFloor` re-derives position/rotation
+    // (clamping width/offset onto the edge) and the elevation lifts so the
+    // taller body can't dip below the floor.
+    const elevation = Math.max(item.mount.elevation, next.footprint.height / 2);
+    next = {
+      ...next,
+      mount: { ...item.mount, elevation },
+    };
   }
   // A resized rider re-fits onto its host's top.
   next = restackRider(room, next);

@@ -2,7 +2,7 @@ import { Grid2x2, Magnet } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import type { CameraReadoutStore } from "#/lib/camera";
 import { scaleDenominator } from "#/lib/camera";
-import { type Floor, totalFloorArea } from "#/lib/model";
+import { type Room, totalFloorArea } from "#/lib/model";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -11,7 +11,8 @@ interface StatusBarProps {
   mode: ViewMode;
   /** The objects library is docked — the left context counts placed objects. */
   libraryOpen?: boolean;
-  floor: Floor;
+  /** The floor's derived rooms (area total, room name/count). */
+  rooms: Room[];
   /** Name of the selected item's containing room (floor-wide selection). */
   selectedRoomName?: string | null;
   /** Live camera state for the right-edge readout. */
@@ -62,7 +63,7 @@ const SNAP_LABEL: Record<ViewMode, string> = {
 export function StatusBar({
   mode,
   libraryOpen = false,
-  floor,
+  rooms,
   selectedRoomName = null,
   cameraReadout,
   unit,
@@ -83,11 +84,11 @@ export function StatusBar({
   );
 
   // Floor totals: every room's area summed (null until an outline exists).
-  const area = floor.rooms.some((room) => room.outline.length >= 3)
-    ? totalFloorArea(floor)
+  const area = rooms.some((room) => room.outline.length >= 3)
+    ? totalFloorArea(rooms)
     : null;
-  const multiRoom = floor.rooms.length > 1;
-  const objectCount = floor.rooms.reduce(
+  const multiRoom = rooms.length > 1;
+  const objectCount = rooms.reduce(
     (sum, room) => sum + room.furniture.length,
     0,
   );
@@ -96,8 +97,8 @@ export function StatusBar({
   // floor, plus the selection's containing room); the current activity
   // takes over.
   let context: string = multiRoom
-    ? `${floor.rooms.length} rooms${selectedRoomName ? ` · ${selectedRoomName}` : ""}`
-    : (floor.rooms[0]?.name ?? "Untitled room");
+    ? `${rooms.length} rooms${selectedRoomName ? ` · ${selectedRoomName}` : ""}`
+    : (rooms[0]?.name ?? "Untitled room");
   if (mode === "draw") {
     context = drawStatusText(draftCornerCount, draftClosed);
   } else if (placingName) {

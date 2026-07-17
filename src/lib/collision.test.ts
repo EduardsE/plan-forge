@@ -58,7 +58,7 @@ describe("containFurniture", () => {
       position: { x: 0.03, y: 1.6 },
       rotation: 90,
       footprint: { width: 0.9, depth: 0.06, height: 0.7 },
-      mount: { roomId: "room", wallIndex: 3, offset: 3.15, elevation: 1.5 },
+      mount: { edgeId: "e", offset: 3.15, side: 1, elevation: 1.5 },
     });
     expect(containFurniture(RECT, frame)).toBe(frame);
   });
@@ -121,7 +121,7 @@ describe("overlappingFurnitureIds", () => {
       catalogId: "picture-frame",
       position: { x: 3, y: 3 },
       footprint: { width: 0.9, depth: 0.06, height: 0.7 },
-      mount: { roomId: "room", wallIndex: 0, offset: 2, elevation: 1.5 },
+      mount: { edgeId: "e", offset: 2, side: 1, elevation: 1.5 },
     });
     const desk = item({ id: "desk", position: { x: 3, y: 3 } });
     expect([...overlappingFurnitureIds([frame, desk])]).toEqual([]);
@@ -168,7 +168,7 @@ describe("nudgeFurniture", () => {
       position: { x: 0.03, y: 1.6 },
       rotation: 90,
       footprint: { width: 0.9, depth: 0.06, height: 0.7 },
-      mount: { roomId: "room", wallIndex: 3, offset: 3.15, elevation: 1.5 },
+      mount: { edgeId: "e", offset: 3.15, side: 1, elevation: 1.5 },
     });
     const room = roomWith(frame);
     expect(nudgeFurniture(room, "x", 0.05, 0)).toBe(room);

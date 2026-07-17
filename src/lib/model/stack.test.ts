@@ -65,7 +65,7 @@ describe("host/rider predicates", () => {
     expect(
       canHostStack(
         host({
-          mount: { roomId: "room", wallIndex: 0, offset: 1, elevation: 1 },
+          mount: { edgeId: "e", offset: 1, side: 1, elevation: 1 },
         }),
       ),
     ).toBe(false);

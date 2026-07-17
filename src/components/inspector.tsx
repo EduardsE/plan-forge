@@ -5,7 +5,6 @@ import { colorwaysForCatalog, furnitureBaseColor } from "#/lib/furniture-parts";
 import {
   CATALOG_CATEGORY_LABELS,
   catalogItemById,
-  type Floor,
   type Footprint,
   type FurnitureItem,
   floorArea,
@@ -368,7 +367,8 @@ function SelectionSection({
 }
 
 export interface InspectorProps {
-  floor: Floor;
+  /** The floor's derived rooms (footer totals + the room overview). */
+  rooms: Room[];
   unit: Unit;
   mode: ViewMode;
   /** The selected item's owning room (derived floor-wide), or null. */
@@ -391,7 +391,7 @@ export interface InspectorProps {
 }
 
 export function Inspector({
-  floor,
+  rooms,
   unit,
   mode,
   selectedRoom,
@@ -411,7 +411,7 @@ export function Inspector({
   const drawing = mode === "draw";
   const showSelection =
     selectedItem !== null && selectedRoom !== null && !drawing;
-  const multiRoom = floor.rooms.length > 1;
+  const multiRoom = rooms.length > 1;
   const header = drawing
     ? "OUTLINE"
     : showSelection
@@ -422,10 +422,10 @@ export function Inspector({
 
   // Footer facts are floor totals (equal to the room's own on a one-room
   // floor, so nothing changes until a second room exists).
-  const hasOutline = floor.rooms.some((room) => room.outline.length >= 3);
-  const area = hasOutline ? totalFloorArea(floor) : null;
-  const perimeter = hasOutline ? totalPerimeter(floor) : null;
-  const firstRoom = floor.rooms[0];
+  const hasOutline = rooms.some((room) => room.outline.length >= 3);
+  const area = hasOutline ? totalFloorArea(rooms) : null;
+  const perimeter = hasOutline ? totalPerimeter(rooms) : null;
+  const firstRoom = rooms[0];
 
   return (
     <aside
@@ -483,10 +483,10 @@ export function Inspector({
               className="font-semibold text-[15px] text-[var(--ink-900)]"
               data-testid="inspector-room-name"
             >
-              {floor.name ?? `${floor.rooms.length} rooms`}
+              {`${rooms.length} rooms`}
             </div>
             <div className="flex flex-col gap-1.5">
-              {floor.rooms.map((room) => (
+              {rooms.map((room) => (
                 <div
                   key={room.id}
                   className="flex items-baseline justify-between text-[12.5px]"
@@ -519,13 +519,13 @@ export function Inspector({
               className="font-semibold text-[15px] text-[var(--ink-900)]"
               data-testid="inspector-room-name"
             >
-              {firstRoom.name ?? "Untitled room"}
+              {firstRoom?.name ?? "Untitled room"}
             </div>
             <div className="text-[12.5px] text-[var(--ink-500)]">
-              {firstRoom.furniture.length} object
-              {firstRoom.furniture.length === 1 ? "" : "s"} ·{" "}
-              {firstRoom.openings.length} opening
-              {firstRoom.openings.length === 1 ? "" : "s"}
+              {firstRoom?.furniture.length ?? 0} object
+              {(firstRoom?.furniture.length ?? 0) === 1 ? "" : "s"} ·{" "}
+              {firstRoom?.openings.length ?? 0} opening
+              {(firstRoom?.openings.length ?? 0) === 1 ? "" : "s"}
             </div>
             <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
               Select an item in either lens to edit its size, rotation and
@@ -542,8 +542,11 @@ export function Inspector({
           // On a one-room floor the ceiling is unambiguous; with several
           // rooms (each its own height) the slot shows the room count.
           multiRoom
-            ? ["ROOMS", `${floor.rooms.length}`]
-            : ["CEILING", `${wallHeightOf(firstRoom).toFixed(2)} m`],
+            ? ["ROOMS", `${rooms.length}`]
+            : [
+                "CEILING",
+                firstRoom ? `${wallHeightOf(firstRoom).toFixed(2)} m` : "—",
+              ],
         ].map(([label, value]) => (
           <div key={label} className="flex flex-col gap-[3px]">
             <span

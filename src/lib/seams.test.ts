@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { Opening, Room } from "#/lib/model";
+import type { Room, RoomOpening } from "#/lib/model";
 import { floorPortals, floorSeamData, floorSeams, portalLabel } from "./seams";
 
 /** Two rooms flush on x = 6.4: the kitchen's west wall abuts the middle
  * stretch of the living room's east wall (living wall 1 runs y 0 → 5.2,
  * kitchen wall 3 runs y 4 → 1, so the walls are antiparallel). */
-function livingRoom(openings: Opening[] = []): Room {
+function livingRoom(openings: RoomOpening[] = []): Room {
   return {
     id: "living",
     name: "Living room",
@@ -20,7 +20,7 @@ function livingRoom(openings: Opening[] = []): Room {
   };
 }
 
-function kitchen(openings: Opening[] = []): Room {
+function kitchen(openings: RoomOpening[] = []): Room {
   return {
     id: "kitchen",
     name: "Kitchen",
@@ -137,7 +137,7 @@ describe("floorSeams", () => {
 });
 
 describe("floorPortals", () => {
-  const door: Opening = {
+  const door: RoomOpening = {
     id: "door-1",
     kind: "door",
     wallIndex: 1,
@@ -163,7 +163,7 @@ describe("floorPortals", () => {
   });
 
   it("clips a partially shared opening to the seam", () => {
-    const straddling: Opening = { ...door, offset: 3.7 };
+    const straddling: RoomOpening = { ...door, offset: 3.7 };
     const portals = floorPortals([livingRoom([straddling]), kitchen()]);
     expect(portals).toHaveLength(1);
     expect(portals[0].otherOffset).toBeCloseTo(0);
@@ -182,8 +182,8 @@ describe("floorPortals", () => {
   });
 
   it("leaves openings off the seam unclassified", () => {
-    const exterior: Opening = { ...door, wallIndex: 0 };
-    const pastSeam: Opening = { ...door, offset: 4.2 };
+    const exterior: RoomOpening = { ...door, wallIndex: 0 };
+    const pastSeam: RoomOpening = { ...door, offset: 4.2 };
     expect(floorPortals([livingRoom([exterior, pastSeam]), kitchen()])).toEqual(
       [],
     );
@@ -191,7 +191,7 @@ describe("floorPortals", () => {
 });
 
 describe("floorSeamData", () => {
-  const door: Opening = {
+  const door: RoomOpening = {
     id: "door-1",
     kind: "door",
     wallIndex: 1,
@@ -226,7 +226,7 @@ describe("floorSeamData", () => {
 });
 
 describe("portalLabel", () => {
-  const door: Opening = {
+  const door: RoomOpening = {
     id: "door-1",
     kind: "door",
     wallIndex: 1,
@@ -241,7 +241,7 @@ describe("portalLabel", () => {
   });
 
   it("returns null for a non-portal opening", () => {
-    const exterior: Opening = { ...door, wallIndex: 0 };
+    const exterior: RoomOpening = { ...door, wallIndex: 0 };
     const rooms = [livingRoom([exterior]), kitchen()];
     expect(portalLabel(rooms, floorPortals(rooms), "door-1")).toBeNull();
   });

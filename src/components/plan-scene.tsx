@@ -19,7 +19,13 @@ import { PlanOpenings } from "#/components/plan-openings";
 import { RotateHandle } from "#/components/rotate-handle";
 import { SelectionChip } from "#/components/selection-chip";
 import { overlappingFurnitureIds } from "#/lib/collision";
-import type { FurnitureItem, FurnitureUpdate, Point, Room } from "#/lib/model";
+import type {
+  Floor,
+  FurnitureItem,
+  FurnitureUpdate,
+  Point,
+  Room,
+} from "#/lib/model";
 import {
   catalogItemById,
   floorArea,
@@ -907,6 +913,8 @@ export function PlanRoomLayer({
 export interface PlanSceneProps {
   /** Every room of the floor, all drawn; "which room" is derived per item. */
   rooms: Room[];
+  /** The graph floor — wall-mount drags re-anchor to its edges. */
+  floor: Floor;
   selectedId: string | null;
   /** Selected opening id — never set together with `selectedId`. */
   selectedOpeningId: string | null;
@@ -935,6 +943,7 @@ export interface PlanSceneProps {
 
 export function PlanScene({
   rooms,
+  floor,
   selectedId,
   selectedOpeningId,
   unit,
@@ -948,7 +957,7 @@ export function PlanScene({
   onDeleteOpening,
   onResizeOpening,
 }: PlanSceneProps) {
-  const bounds = useMemo(() => floorBounds({ rooms }), [rooms]);
+  const bounds = useMemo(() => floorBounds(rooms), [rooms]);
   // Shared walls + portals, derived from the outlines every render pass
   // (never stored): each room fills its half of a party wall, cuts gaps for
   // the neighbor's openings on it, and the chip labels the connection.
@@ -1033,6 +1042,7 @@ export function PlanScene({
       {drag && (
         <MoveDragSession
           rooms={rooms}
+          floor={floor}
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}

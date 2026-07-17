@@ -1,12 +1,17 @@
 /**
- * Plain-data room model. Rendering-agnostic: no three.js, no React, no DOM.
+ * Plain-data floor model. Rendering-agnostic: no three.js, no React, no DOM.
  *
  * Conventions:
  * - All lengths are in meters (the cm/m units toggle is a display concern).
  * - Points are 2D plan coordinates; heights are separate scalars.
- * - The room outline is a closed polygon given as an ordered corner list —
- *   the wall from the last corner back to the first is implied, never stored.
+ * - The floor is a planar **wall graph** — nodes (corners/T-junctions) joined
+ *   by edges (wall runs) — plus edge-anchored openings and floor-level
+ *   furniture. Rooms are *derived* as the graph's faces (`deriveFloor` in
+ *   `model/derived.ts`); their names/ceiling heights live in anchor-matched
+ *   `RoomRecord`s.
  */
+
+import type { WallEdge, WallNode } from "./graph";
 
 export interface Point {
   x: number;
@@ -14,9 +19,9 @@ export interface Point {
 }
 
 /**
- * A wall segment derived from the outline: from `corners[index]` to
- * `corners[(index + 1) % corners.length]`. Walls are never stored on the
- * room; derive them with `wallsOf`.
+ * A wall segment derived from a room outline: from `corners[index]` to
+ * `corners[(index + 1) % corners.length]`. Walls of a *derived* room outline;
+ * derive them with `wallsOf`.
  */
 export interface Wall {
   index: number;
@@ -26,8 +31,36 @@ export interface Wall {
 
 export type OpeningKind = "door" | "window";
 
-/** A door or window cut into a wall, located along that wall's direction. */
+/**
+ * A door or window cut into a graph **edge**, located along that edge's a→b
+ * direction. The stored, floor-level opening shape (`deriveFloor` maps it into
+ * per-room `RoomOpening`s for rendering/editing).
+ */
 export interface Opening {
+  id: string;
+  kind: OpeningKind;
+  /** Id of the host `WallEdge`. */
+  edgeId: string;
+  /** Distance from the edge's node `a` to the opening's near edge, along a→b. */
+  offset: number;
+  width: number;
+  /** Doors only: which edge carries the hinge (near edge = `"start"`). */
+  hinge?: "start" | "end";
+  /**
+   * Face the door swings toward / the opening belongs to: the sign of the
+   * cross product `(b-a) × (p-a)` for a point `p` on that side (see
+   * `sideOfPoint`, faces.ts).
+   */
+  side: 1 | -1;
+}
+
+/**
+ * A door or window on a *derived* room's outline wall — the shape the door/
+ * window tools and scenes work with. Never stored: `deriveFloor` produces it
+ * from a graph `Opening`, and `updateDerivedRoom` maps edits back onto the
+ * edge.
+ */
+export interface RoomOpening {
   id: string;
   kind: OpeningKind;
   /** Index of the host wall (see `Wall.index`). */
@@ -51,25 +84,21 @@ export interface Footprint {
 }
 
 /**
- * A wall-mounted item's anchor (picture frames, clocks). Located on a wall
- * like an `Opening` — host wall index plus a near-edge offset along it — with
- * a vertical `elevation` for the mount's center. When present on a
- * `FurnitureItem`, the item's `position` and `rotation` are *derived* from the
- * mount (kept in sync by `deriveMountTransform`) so the footprint sits flush
- * against the wall's interior face; renderers hang the body at `elevation`.
+ * A wall-mounted item's anchor (picture frames, clocks), anchored to a graph
+ * **edge**: a near-edge `offset` along the edge's a→b direction, the `side`
+ * of the edge it hangs on, and a vertical `elevation` for the mount's center.
+ * When present on a `FurnitureItem`, the item's `position` and `rotation` are
+ * *derived* from the edge (kept in sync by `deriveFloor`), so the footprint
+ * sits flush against the wall's interior face; renderers hang the body at
+ * `elevation`.
  */
 export interface WallMount {
-  /**
-   * Id of the room whose wall hosts the mount. Always the room whose
-   * furniture array holds the item — a mounted item belongs to the room it
-   * hangs in — so reshapes re-anchor against the correct outline even when
-   * another room's wall sits nearer (a party wall's far side).
-   */
-  roomId: string;
-  /** Index of the host wall (see `Wall.index`). */
-  wallIndex: number;
-  /** Distance from the host wall's start corner to the mount's near edge. */
+  /** Id of the host `WallEdge`. */
+  edgeId: string;
+  /** Distance from the edge's node `a` to the mount's near edge, along a→b. */
   offset: number;
+  /** Which side of the edge the mount hangs on (`sideOfPoint` sign). */
+  side: 1 | -1;
   /** Height of the item's center above the floor, meters. */
   elevation: number;
 }
@@ -103,7 +132,7 @@ export interface FurnitureItem {
   footprint: Footprint;
   /**
    * Wall anchor for wall-mounted items; absent for floor-standing furniture.
-   * When set, `position`/`rotation` are derived from it and the wall.
+   * When set, `position`/`rotation` are derived from it and the edge.
    */
   mount?: WallMount;
   /**
@@ -120,11 +149,35 @@ export interface FurnitureItem {
   colorway?: string;
 }
 
+/**
+ * Persistent room identity, independent of the graph's current faces: a room's
+ * name and ceiling height survive edits that don't change its shape, and a
+ * record whose face momentarily disappears (mid-edit) goes dormant rather than
+ * vanishing. `matchRooms` reconciles the registry against the current faces by
+ * anchor containment.
+ */
+export interface RoomRecord {
+  id: string;
+  name?: string;
+  wallHeight?: number;
+  /** Point last known to lie inside this room's face; re-centered on every
+   * successful match and used to find the room again next time. */
+  anchor: Point;
+}
+
+/**
+ * A **derived** view of one graph face — never stored; produced by
+ * `deriveFloor`. Carries the interior outline (the face inset by half a wall
+ * thickness, sitting exactly where per-room outlines used to), the openings
+ * on its walls, and the furniture whose center it contains. The per-room pure
+ * setters (`furniture.ts`, `openings.ts`, `room.ts`) operate on this shape;
+ * `updateDerivedRoom` diffs their result back onto the graph.
+ */
 export interface Room {
   /**
-   * Stable identity within the floor. Outlines reshape and rooms reorder;
-   * the id never changes, so selections, mounts, and helpers can address a
-   * room across mutations (see `model/floor.ts`).
+   * Stable identity within the floor — the matched `RoomRecord.id` (or a
+   * fallback `"face:…"` id for an unclaimed face). Selections and helpers
+   * address a room by this id across mutations.
    */
   id: string;
   /** Display name, e.g. "Living room". */
@@ -135,23 +188,28 @@ export interface Room {
    * [MIN_WALL_HEIGHT, MAX_WALL_HEIGHT] by `setRoomWallHeight`.
    */
   wallHeight?: number;
-  /** Ordered corners of the closed room outline. */
+  /** Ordered corners of the closed (derived) room outline. */
   outline: Point[];
-  openings: Opening[];
+  openings: RoomOpening[];
   furniture: FurnitureItem[];
 }
 
 /**
- * A floor plan: one or more rooms sharing a single plan coordinate space —
- * every room's outline, openings, and furniture live directly in floor
- * coordinates (no per-room origin offset). The floor is the unit of app
- * state: history and persistence hold a `Floor`; room-scoped mutations
- * address a room by `Room.id` through `model/floor.ts`.
+ * A floor plan as a planar wall graph in one plan coordinate space. `nodes`
+ * and `edges` are the wall runs; `openings` are edge-anchored; `furniture`
+ * lives floor-level (partitioned into rooms by center containment on derive);
+ * `rooms` is the identity registry (names/heights) matched to the graph's
+ * faces. The floor is the unit of app state: history and persistence hold a
+ * `Floor`; `deriveFloor` turns it into renderable rooms.
  */
 export interface Floor {
   /** Display name, e.g. "Loft apartment". */
   name?: string;
-  rooms: Room[];
+  nodes: WallNode[];
+  edges: WallEdge[];
+  openings: Opening[];
+  furniture: FurnitureItem[];
+  rooms: RoomRecord[];
 }
 
 /** Axis-aligned bounding box of an outline. */

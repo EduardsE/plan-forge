@@ -1,15 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  createSampleRoom,
-  type Floor,
-  type FurnitureItem,
-  type Room,
-} from "#/lib/model";
+import { createSampleRoom, type FurnitureItem, type Room } from "#/lib/model";
 import { Inspector } from "./inspector";
 
 const room = createSampleRoom();
-const floor: Floor = { rooms: [room] };
+const rooms: Room[] = [room];
 const item = room.furniture.find((entry) => !entry.mount) as FurnitureItem;
 const mounted = room.furniture.find((entry) => entry.mount) ?? null;
 
@@ -33,12 +28,12 @@ const kitchen: Room = {
     },
   ],
 };
-const twoRoomFloor: Floor = { rooms: [room, kitchen] };
+const twoRooms: Room[] = [room, kitchen];
 
 function renderInspector(props: Partial<Parameters<typeof Inspector>[0]>) {
   return render(
     <Inspector
-      floor={floor}
+      rooms={rooms}
       unit="m"
       mode="3d"
       selectedRoom={room}
@@ -77,7 +72,7 @@ describe("Inspector", () => {
 
   it("shows the room's own ceiling height when set", () => {
     renderInspector({
-      floor: { rooms: [{ ...room, wallHeight: 3.1 }] },
+      rooms: [{ ...room, wallHeight: 3.1 }],
       selectedRoom: null,
     });
 
@@ -85,7 +80,7 @@ describe("Inspector", () => {
   });
 
   it("shows floor totals, the room list, and the room count on a multi-room floor", () => {
-    renderInspector({ floor: twoRoomFloor, selectedRoom: null });
+    renderInspector({ rooms: twoRooms, selectedRoom: null });
 
     // "FLOOR" is both the section header and the footer's area label.
     expect(screen.getAllByText("FLOOR")).toHaveLength(2);
@@ -101,7 +96,7 @@ describe("Inspector", () => {
 
   it("names the containing room on a multi-room selection", () => {
     renderInspector({
-      floor: twoRoomFloor,
+      rooms: twoRooms,
       selectedRoom: kitchen,
       selectedItem: kitchen.furniture[0],
     });

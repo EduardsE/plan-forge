@@ -17,7 +17,35 @@ import {
 } from "./furniture";
 import { createSampleRoom } from "./sample-room";
 import type { FurnitureItem, Room } from "./types";
-import { deriveMountTransform, wallFrames } from "./wall-mount";
+
+/**
+ * A derived-shape room with one wall-mounted item, for the mount branches.
+ * Mounts are edge-based now (`{ edgeId, offset, side, elevation }`); their
+ * plan transform is re-derived from the graph by `deriveFloor`, so these
+ * pure setters only adjust the mount's own fields.
+ */
+function mountedRoom(): Room {
+  return {
+    id: "living-room",
+    outline: [
+      { x: 0, y: 0 },
+      { x: 6.4, y: 0 },
+      { x: 6.4, y: 5.2 },
+      { x: 0, y: 5.2 },
+    ],
+    openings: [],
+    furniture: [
+      {
+        id: "frame-1",
+        catalogId: "picture-frame",
+        position: { x: 0.03, y: 1.6 },
+        rotation: 90,
+        footprint: { width: 0.9, depth: 0.06, height: 0.7 },
+        mount: { edgeId: "e-FA", offset: 3.15, side: 1, elevation: 1.5 },
+      },
+    ],
+  };
+}
 
 describe("rotateFurniture", () => {
   it("adds the delta to the target item only", () => {
@@ -107,31 +135,20 @@ describe("duplicateFurniture", () => {
     expect(duplicateFurniture(room, "nope", "nope-2")).toBe(room);
   });
 
-  it("shifts a wall-mounted copy along its host wall, staying flush", () => {
-    const room = createSampleRoom();
+  it("shifts a wall-mounted copy along its edge, keeping edge/side/elevation", () => {
+    const room = mountedRoom();
     const source = room.furniture.find((item) => item.mount);
-    expect(source?.mount).toBeDefined();
-    if (!source?.mount) return;
+    if (!source?.mount) throw new Error("no mounted fixture");
     const next = duplicateFurniture(room, source.id, "frame-copy");
     const copy = next.furniture.find((item) => item.id === "frame-copy");
-    expect(copy?.mount).toMatchObject({
-      wallIndex: source.mount.wallIndex,
+    // The mount's edge offset shifts; edgeId/side/elevation ride along.
+    // (`deriveFloor` re-derives position/rotation from the shifted mount.)
+    expect(copy?.mount).toEqual({
+      edgeId: source.mount.edgeId,
       offset: source.mount.offset + DUPLICATE_OFFSET,
+      side: source.mount.side,
       elevation: source.mount.elevation,
     });
-    // Position/rotation re-derive from the shifted mount, not a plain nudge.
-    const frame = wallFrames(room.outline).find(
-      (f) => f.index === source.mount?.wallIndex,
-    );
-    if (!frame) throw new Error("host wall missing");
-    const expected = deriveMountTransform(
-      frame,
-      source.mount.offset + DUPLICATE_OFFSET,
-      source.footprint,
-    );
-    expect(copy?.position.x).toBeCloseTo(expected.position.x);
-    expect(copy?.position.y).toBeCloseTo(expected.position.y);
-    expect(copy?.rotation).toBeCloseTo(expected.rotation);
   });
 });
 
@@ -155,9 +172,9 @@ describe("updateFurniture", () => {
   it("applies rotation and mount when the update carries them", () => {
     const room = createSampleRoom();
     const mount = {
-      roomId: "living-room",
-      wallIndex: 2,
+      edgeId: "e-EF",
       offset: 1.1,
+      side: 1 as const,
       elevation: 1.4,
     };
     const next = updateFurniture(room, "desk-chair-1", {
@@ -171,7 +188,7 @@ describe("updateFurniture", () => {
   });
 
   it("leaves an item's rotation and mount untouched when the update omits them", () => {
-    const room = createSampleRoom();
+    const room = mountedRoom();
     const source = room.furniture.find((item) => item.mount);
     if (!source) throw new Error("no mounted fixture");
     const next = updateFurniture(room, source.id, {
@@ -229,45 +246,23 @@ describe("setFurnitureFootprint", () => {
     expect(rug?.footprint).toEqual({ width: 3.2, depth: 2, height: 0.01 });
   });
 
-  it("re-derives a mounted item's transform and keeps it on its wall", () => {
-    const room = createSampleRoom();
+  it("updates a mounted item's footprint, leaving its edge/offset alone", () => {
+    const room = mountedRoom();
     const source = room.furniture.find((item) => item.mount);
     if (!source?.mount) throw new Error("no mounted fixture");
     const footprint = { width: 1.4, depth: 0.06, height: 0.7 };
     const next = setFurnitureFootprint(room, source.id, footprint);
-    const frame = wallFrames(room.outline).find(
-      (f) => f.index === source.mount?.wallIndex,
-    );
-    if (!frame) throw new Error("host wall missing");
     const item = next.furniture.find((entry) => entry.id === source.id);
+    // The footprint changes; the mount's edge/offset/side stay put —
+    // `deriveFloor` re-derives the flush position/rotation from the edge.
     expect(item?.footprint).toEqual(footprint);
+    expect(item?.mount?.edgeId).toBe(source.mount.edgeId);
     expect(item?.mount?.offset).toBe(source.mount.offset);
-    const expected = deriveMountTransform(
-      frame,
-      source.mount.offset,
-      footprint,
-    );
-    expect(item?.position.x).toBeCloseTo(expected.position.x);
-    expect(item?.position.y).toBeCloseTo(expected.position.y);
-    expect(item?.rotation).toBeCloseTo(expected.rotation);
-  });
-
-  it("re-clamps a mounted item's width and offset to its host wall", () => {
-    const room = createSampleRoom();
-    const source = room.furniture.find((item) => item.mount);
-    if (!source?.mount) throw new Error("no mounted fixture");
-    // The left wall is 5.2 m; a 6 m frame clamps to it, offset slides to 0.
-    const next = setFurnitureFootprint(room, source.id, {
-      ...source.footprint,
-      width: 6,
-    });
-    const item = next.furniture.find((entry) => entry.id === source.id);
-    expect(item?.footprint.width).toBe(5.2);
-    expect(item?.mount?.offset).toBe(0);
+    expect(item?.mount?.side).toBe(source.mount.side);
   });
 
   it("lifts a mounted item's elevation clear of the floor on a tall resize", () => {
-    const room = createSampleRoom();
+    const room = mountedRoom();
     const source = room.furniture.find((item) => item.mount);
     if (!source?.mount) throw new Error("no mounted fixture");
     const next = setFurnitureFootprint(room, source.id, {
@@ -318,21 +313,19 @@ describe("setFurnitureRotation", () => {
 
 describe("setMountElevation", () => {
   it("sets the mount's center elevation", () => {
-    const room = createSampleRoom();
-    const next = setMountElevation(room, "picture-frame-1", 1.8);
+    const room = mountedRoom();
+    const next = setMountElevation(room, "frame-1", 1.8);
     expect(
-      next.furniture.find((item) => item.id === "picture-frame-1")?.mount
-        ?.elevation,
+      next.furniture.find((item) => item.id === "frame-1")?.mount?.elevation,
     ).toBe(1.8);
   });
 
   it("clamps so the body stays above the floor", () => {
-    const room = createSampleRoom();
+    const room = mountedRoom();
     // The frame is 0.7 m tall, so its center can't go below 0.35.
-    const next = setMountElevation(room, "picture-frame-1", 0.1);
+    const next = setMountElevation(room, "frame-1", 0.1);
     expect(
-      next.furniture.find((item) => item.id === "picture-frame-1")?.mount
-        ?.elevation,
+      next.furniture.find((item) => item.id === "frame-1")?.mount?.elevation,
     ).toBe(0.35);
   });
 

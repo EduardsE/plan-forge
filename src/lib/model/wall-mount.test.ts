@@ -42,29 +42,51 @@ describe("wallFrames", () => {
 });
 
 describe("deriveMountTransform", () => {
-  it("centers the item along the wall and pushes its back flush to the face", () => {
-    const frames = wallFrames(OUTLINE);
+  // A one-edge graph: the top wall from A(0,0) to B(6.4,0), running +x.
+  const graph = {
+    nodes: [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 6.4, y: 0 },
+      { id: "f", x: 0, y: 5.2 },
+    ],
+    edges: [
+      { id: "ab", a: "a", b: "b" },
+      { id: "fa", a: "f", b: "a" },
+    ],
+  };
+
+  it("centers the item along the edge and pushes it off the centerline by t/2 + depth/2", () => {
     const footprint = { width: 0.9, depth: 0.06 };
-    // Top wall, near-edge offset 2.0 → center at along 2.45, pushed into the
-    // room (down, +y) by depth/2 = 0.03.
-    const { position, rotation } = deriveMountTransform(
-      frames[0],
-      2.0,
+    // Edge AB, offset 2.0 → center at along 2.45; side 1's left normal is
+    // (0, 1), pushing into the room by 0.05 + 0.03 = 0.08.
+    const t = deriveMountTransform(
+      { edgeId: "ab", offset: 2.0, side: 1, elevation: 1.5 },
+      graph,
       footprint,
     );
-    expect(position.x).toBeCloseTo(2.45);
-    expect(position.y).toBeCloseTo(0.03);
-    expect(rotation).toBeCloseTo(0);
+    expect(t?.position.x).toBeCloseTo(2.45);
+    expect(t?.position.y).toBeCloseTo(0.08);
+    expect(t?.rotation).toBeCloseTo(0);
   });
 
-  it("turns the width axis to align with the wall direction", () => {
-    const frames = wallFrames(OUTLINE);
-    // Left wall points -y; its yaw is 90° so the item's width runs vertically.
-    const { rotation } = deriveMountTransform(frames[3], 1.0, {
-      width: 0.9,
-      depth: 0.06,
-    });
-    expect(rotation).toBeCloseTo(90);
+  it("turns the width axis to align with the edge direction", () => {
+    // Edge FA points -y; its yaw is 90° so the item's width runs vertically.
+    const t = deriveMountTransform(
+      { edgeId: "fa", offset: 1.0, side: 1, elevation: 1.5 },
+      graph,
+      { width: 0.9, depth: 0.06 },
+    );
+    expect(t?.rotation).toBeCloseTo(90);
+  });
+
+  it("returns null when the edge is gone", () => {
+    expect(
+      deriveMountTransform(
+        { edgeId: "missing", offset: 1, side: 1, elevation: 1 },
+        graph,
+        { width: 0.9, depth: 0.06 },
+      ),
+    ).toBeNull();
   });
 });
 

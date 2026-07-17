@@ -1,5 +1,12 @@
-import type { Floor, FurnitureItem, Opening, Point, Room } from "#/lib/model";
-import { MAX_WALL_HEIGHT, MIN_WALL_HEIGHT } from "#/lib/model";
+import type {
+  Floor,
+  FurnitureItem,
+  Opening,
+  Point,
+  WallEdge,
+  WallNode,
+} from "#/lib/model";
+import { MAX_WALL_HEIGHT, MIN_WALL_HEIGHT, reconcileFloor } from "#/lib/model";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -12,18 +19,15 @@ import type { Unit } from "#/lib/units";
 export const STORAGE_KEY = "planforge.room";
 
 /** Bumped whenever the payload shape changes; older saves are discarded. */
-const STORAGE_VERSION = 5;
+const STORAGE_VERSION = 6;
 
 /**
- * Versions this build can still read. v1–v3 stored a single `room` (v1
- * predates the optional `FurnitureItem.colorway`, v2 the optional
- * `Room.wallHeight` — both purely additive); v4 stores a `floor` whose rooms
- * carry ids; v5 adds the required `WallMount.roomId`. Legacy saves migrate
- * on read — a pre-v4 room wraps into a one-room floor with a generated id,
- * and pre-v5 mounts take their owning room's id — rather than being thrown
- * away.
+ * Versions this build can read. v6 is the wall-graph payload; every earlier
+ * version stored per-room outlines, which the graph model can't reconstruct,
+ * so they're discarded (no migration — the owner's explicit call: no users
+ * yet).
  */
-const READABLE_VERSIONS = new Set([1, 2, 3, 4, STORAGE_VERSION]);
+const READABLE_VERSIONS = new Set([STORAGE_VERSION]);
 
 export interface SavedState {
   floor: Floor;
@@ -47,39 +51,81 @@ function isPoint(value: unknown): value is Point {
   return isFiniteNumber(point.x) && isFiniteNumber(point.y);
 }
 
-function isOpening(value: unknown, wallCount: number): value is Opening {
-  if (typeof value !== "object" || value === null) return false;
-  const opening = value as Record<string, unknown>;
-  return (
-    typeof opening.id === "string" &&
-    (opening.kind === "door" || opening.kind === "window") &&
-    Number.isInteger(opening.wallIndex) &&
-    (opening.wallIndex as number) >= 0 &&
-    (opening.wallIndex as number) < wallCount &&
-    isFiniteNumber(opening.offset) &&
-    isFiniteNumber(opening.width) &&
-    opening.width > 0 &&
-    (opening.hinge === undefined ||
-      opening.hinge === "start" ||
-      opening.hinge === "end")
-  );
+function areNodes(value: unknown): value is WallNode[] {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) return false;
+    const node = raw as Record<string, unknown>;
+    if (typeof node.id !== "string" || node.id.length === 0) return false;
+    if (!isFiniteNumber(node.x) || !isFiniteNumber(node.y)) return false;
+    ids.add(node.id);
+  }
+  return ids.size === value.length;
 }
 
-/** `mountRoomId` null accepts a legacy (pre-v5) mount without a `roomId` —
- * migration fills it with the owning room's id; otherwise the stored id must
- * be exactly the owning room's (the `WallMount.roomId` invariant). */
-function isWallMount(
+function areEdges(value: unknown, nodeIds: Set<string>): value is WallEdge[] {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) return false;
+    const edge = raw as Record<string, unknown>;
+    if (typeof edge.id !== "string" || edge.id.length === 0) return false;
+    if (typeof edge.a !== "string" || typeof edge.b !== "string") return false;
+    if (edge.a === edge.b) return false;
+    if (!nodeIds.has(edge.a) || !nodeIds.has(edge.b)) return false;
+    ids.add(edge.id);
+  }
+  return ids.size === value.length;
+}
+
+function edgeLengths(
+  nodes: WallNode[],
+  edges: WallEdge[],
+): Map<string, number> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const lengths = new Map<string, number>();
+  for (const edge of edges) {
+    const a = byId.get(edge.a);
+    const b = byId.get(edge.b);
+    lengths.set(edge.id, a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0);
+  }
+  return lengths;
+}
+
+function areOpenings(
   value: unknown,
-  wallCount: number,
-  mountRoomId: string | null,
-): boolean {
+  edgeLength: Map<string, number>,
+): value is Opening[] {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) return false;
+    const o = raw as Record<string, unknown>;
+    if (typeof o.id !== "string" || o.id.length === 0) return false;
+    if (o.kind !== "door" && o.kind !== "window") return false;
+    if (typeof o.edgeId !== "string" || !edgeLength.has(o.edgeId)) return false;
+    if (o.side !== 1 && o.side !== -1) return false;
+    if (!isFiniteNumber(o.offset) || o.offset < 0) return false;
+    if (!isFiniteNumber(o.width) || o.width <= 0) return false;
+    const length = edgeLength.get(o.edgeId) ?? 0;
+    if (o.offset + o.width > length + 1e-6) return false;
+    if (o.hinge !== undefined && o.hinge !== "start" && o.hinge !== "end") {
+      return false;
+    }
+    ids.add(o.id);
+  }
+  return ids.size === value.length;
+}
+
+/** A mount anchors to an existing edge, on a definite side. */
+function isWallMount(value: unknown, edgeIds: Set<string>): boolean {
   if (typeof value !== "object" || value === null) return false;
   const mount = value as Record<string, unknown>;
   return (
-    (mountRoomId === null || mount.roomId === mountRoomId) &&
-    Number.isInteger(mount.wallIndex) &&
-    (mount.wallIndex as number) >= 0 &&
-    (mount.wallIndex as number) < wallCount &&
+    typeof mount.edgeId === "string" &&
+    edgeIds.has(mount.edgeId) &&
+    (mount.side === 1 || mount.side === -1) &&
     isFiniteNumber(mount.offset) &&
     isFiniteNumber(mount.elevation)
   );
@@ -97,8 +143,7 @@ function isStack(value: unknown): boolean {
 
 function isFurnitureItem(
   value: unknown,
-  wallCount: number,
-  mountRoomId: string | null,
+  edgeIds: Set<string>,
 ): value is FurnitureItem {
   if (typeof value !== "object" || value === null) return false;
   const item = value as Record<string, unknown>;
@@ -116,16 +161,13 @@ function isFurnitureItem(
     footprint.depth > 0 &&
     isFiniteNumber(footprint.height) &&
     footprint.height > 0 &&
-    (item.mount === undefined ||
-      isWallMount(item.mount, wallCount, mountRoomId)) &&
+    (item.mount === undefined || isWallMount(item.mount, edgeIds)) &&
     (item.stack === undefined || (isStack(item.stack) && !item.mount)) &&
     (item.colorway === undefined || typeof item.colorway === "string")
   );
 }
 
-/** Every stack anchor must point at a real, floor-standing host — a missing
- * host would render at a stale position forever, and a stacked/mounted one
- * would make the derivation recursive. */
+/** Every stack anchor must point at a real, floor-standing host. */
 function stacksResolve(furniture: FurnitureItem[]): boolean {
   const byId = new Map(furniture.map((item) => [item.id, item]));
   return furniture.every((item) => {
@@ -137,81 +179,51 @@ function stacksResolve(furniture: FurnitureItem[]): boolean {
   });
 }
 
-/** The pre-v4 room shape: everything but the id (legacy saves predate it).
- * `mountRoomId` null skips the mount-roomId check (pre-v5 mounts). */
-function isLegacyRoom(
-  value: unknown,
-  mountRoomId: string | null = null,
-): value is Omit<Room, "id"> {
-  if (typeof value !== "object" || value === null) return false;
-  const room = value as Record<string, unknown>;
-  if (room.name !== undefined && typeof room.name !== "string") return false;
-  // The setter keeps wallHeight inside the clamp range; a hand-edited value
-  // outside it fails the whole save, like any other broken invariant.
-  if (
-    room.wallHeight !== undefined &&
-    (!isFiniteNumber(room.wallHeight) ||
-      room.wallHeight < MIN_WALL_HEIGHT ||
-      room.wallHeight > MAX_WALL_HEIGHT)
-  ) {
-    return false;
+function areRooms(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) return false;
+    const room = raw as Record<string, unknown>;
+    if (typeof room.id !== "string" || room.id.length === 0) return false;
+    if (room.name !== undefined && typeof room.name !== "string") return false;
+    if (!isPoint(room.anchor)) return false;
+    if (
+      room.wallHeight !== undefined &&
+      (!isFiniteNumber(room.wallHeight) ||
+        room.wallHeight < MIN_WALL_HEIGHT ||
+        room.wallHeight > MAX_WALL_HEIGHT)
+    ) {
+      return false;
+    }
+    ids.add(room.id);
   }
-  if (!Array.isArray(room.outline) || !room.outline.every(isPoint)) {
-    return false;
-  }
-  // An empty outline is a legal room (a "new room" awaiting its first draw),
-  // and it derives zero walls — so every stored wallIndex must be rejected.
-  const wallCount = room.outline.length >= 2 ? room.outline.length : 0;
-  return (
-    Array.isArray(room.openings) &&
-    room.openings.every((opening) => isOpening(opening, wallCount)) &&
-    Array.isArray(room.furniture) &&
-    room.furniture.every((item) =>
-      isFurnitureItem(item, wallCount, mountRoomId),
-    ) &&
-    stacksResolve(room.furniture as FurnitureItem[])
-  );
+  return ids.size === value.length;
 }
 
-/** `legacyMounts` accepts v4 rooms, whose mounts predate `roomId`. */
-function isRoom(value: unknown, legacyMounts: boolean): value is Room {
-  if (typeof value !== "object" || value === null) return false;
-  const id = (value as Record<string, unknown>).id;
-  if (typeof id !== "string" || id.length === 0) return false;
-  return isLegacyRoom(value, legacyMounts ? null : id);
-}
-
-function isFloor(value: unknown, legacyMounts: boolean): value is Floor {
+function isFloor(value: unknown): value is Floor {
   if (typeof value !== "object" || value === null) return false;
   const floor = value as Record<string, unknown>;
   if (floor.name !== undefined && typeof floor.name !== "string") return false;
-  // A floor always holds at least one room (the app's "New room" invariant),
-  // and room ids must be unique — every helper addresses rooms by id.
-  if (!Array.isArray(floor.rooms) || floor.rooms.length === 0) return false;
-  if (!floor.rooms.every((room) => isRoom(room, legacyMounts))) return false;
-  const ids = new Set(floor.rooms.map((room: Room) => room.id));
-  return ids.size === floor.rooms.length;
-}
-
-/** Migrate a pre-v5 room's mounts: every mount takes the owning room's id
- * (the only wall a stored `wallIndex` can mean). */
-function withMountRoomIds(room: Room): Room {
-  if (!room.furniture.some((item) => item.mount)) return room;
-  return {
-    ...room,
-    furniture: room.furniture.map((item) =>
-      item.mount
-        ? { ...item, mount: { ...item.mount, roomId: room.id } }
-        : item,
-    ),
-  };
+  if (!areNodes(floor.nodes)) return false;
+  const nodeIds = new Set(floor.nodes.map((n) => n.id));
+  if (!areEdges(floor.edges, nodeIds)) return false;
+  const edgeIds = new Set(floor.edges.map((e) => e.id));
+  const lengths = edgeLengths(floor.nodes, floor.edges);
+  if (!areOpenings(floor.openings, lengths)) return false;
+  if (!Array.isArray(floor.furniture)) return false;
+  if (!floor.furniture.every((item) => isFurnitureItem(item, edgeIds))) {
+    return false;
+  }
+  if (!stacksResolve(floor.furniture as FurnitureItem[])) return false;
+  return areRooms(floor.rooms);
 }
 
 /**
  * Parse a raw localStorage payload back into saved state. Returns null —
  * meaning "start fresh" — for missing, unparsable, wrong-version, or
- * structurally invalid saves. Pre-v4 payloads (a single id-less `room`)
- * migrate into a one-room floor with a freshly generated room id.
+ * structurally invalid saves. A valid v6 floor is normalized + re-matched on
+ * read (`reconcileFloor`) so hydrated state is always well-formed.
  */
 export function deserializeSavedState(json: string | null): SavedState | null {
   if (json === null) return null;
@@ -226,25 +238,17 @@ export function deserializeSavedState(json: string | null): SavedState | null {
   if (
     typeof state.version !== "number" ||
     !READABLE_VERSIONS.has(state.version)
-  )
+  ) {
     return null;
+  }
   if (state.unit !== "cm" && state.unit !== "m") return null;
   if (!isFiniteNumber(state.savedAt)) return null;
-  if (state.version <= 3) {
-    if (!isLegacyRoom(state.room)) return null;
-    const room: Room = { ...state.room, id: crypto.randomUUID() };
-    return {
-      floor: { rooms: [withMountRoomIds(room)] },
-      unit: state.unit,
-      savedAt: state.savedAt,
-    };
-  }
-  const legacyMounts = state.version < STORAGE_VERSION;
-  if (!isFloor(state.floor, legacyMounts)) return null;
-  const floor = legacyMounts
-    ? { ...state.floor, rooms: state.floor.rooms.map(withMountRoomIds) }
-    : state.floor;
-  return { floor, unit: state.unit, savedAt: state.savedAt };
+  if (!isFloor(state.floor)) return null;
+  return {
+    floor: reconcileFloor(state.floor),
+    unit: state.unit,
+    savedAt: state.savedAt,
+  };
 }
 
 /** "saved just now" → "saved 5 min ago" → "saved 3 h ago" → "saved 2 d ago". */

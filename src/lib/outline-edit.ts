@@ -9,15 +9,14 @@ import {
 import {
   type FurnitureItem,
   footprintCorners,
-  type Opening,
   type Point,
   pointInOutline,
   type Room,
+  type RoomOpening,
   wallFrames,
   wallLength,
   wallsOf,
 } from "#/lib/model";
-import { reanchorMount } from "#/lib/mount-place";
 import { slideOpening, type WallSpan } from "#/lib/opening-place";
 import { WALL_THICKNESS } from "#/lib/room-scene";
 
@@ -44,7 +43,7 @@ export interface OutlineDraft {
   roomId: string | null;
   corners: Point[];
   closed: boolean;
-  openings: Opening[];
+  openings: RoomOpening[];
 }
 
 export function emptyOutlineDraft(roomId: string | null = null): OutlineDraft {
@@ -226,10 +225,10 @@ const EPS = 1e-6;
  */
 export function splitOutlineWall(
   outline: Point[],
-  openings: Opening[],
+  openings: RoomOpening[],
   wallIndex: number,
   point: Point,
-): { outline: Point[]; openings: Opening[] } {
+): { outline: Point[]; openings: RoomOpening[] } {
   const wall = wallsOf(outline)[wallIndex];
   if (!wall) return { outline, openings };
   const length = wallLength(wall);
@@ -239,7 +238,7 @@ export function splitOutlineWall(
     point,
     ...outline.slice(wallIndex + 1),
   ];
-  const nextOpenings: Opening[] = [];
+  const nextOpenings: RoomOpening[] = [];
   for (const opening of openings) {
     if (opening.wallIndex !== wallIndex) {
       nextOpenings.push(
@@ -284,9 +283,9 @@ export function splitOutlineWall(
  */
 export function removeOutlineCorner(
   outline: Point[],
-  openings: Opening[],
+  openings: RoomOpening[],
   cornerIndex: number,
-): { outline: Point[]; openings: Opening[] } {
+): { outline: Point[]; openings: RoomOpening[] } {
   const n = outline.length;
   if (n <= 3 || cornerIndex < 0 || cornerIndex >= n) {
     return { outline, openings };
@@ -308,7 +307,7 @@ export function removeOutlineCorner(
         };
   const walls = wallsOf(outline);
   const nextOutline = outline.filter((_, i) => i !== cornerIndex);
-  const nextOpenings: Opening[] = [];
+  const nextOpenings: RoomOpening[] = [];
   const mergedSpans: WallSpan[] = [];
   for (const opening of openings) {
     if (opening.wallIndex !== prevWall && opening.wallIndex !== cornerIndex) {
@@ -419,11 +418,11 @@ const FIT_TOLERANCE = 1e-3;
 export function applyOutlineDraft(
   room: Room,
   corners: Point[],
-  openings: Opening[],
+  openings: RoomOpening[],
 ): Room {
   const walls = wallsOf(corners);
   const occupied = new Map<number, WallSpan[]>();
-  const keptOpenings: Opening[] = [];
+  const keptOpenings: RoomOpening[] = [];
   for (const opening of openings) {
     const wall = walls[opening.wallIndex];
     if (!wall) continue;
@@ -441,26 +440,12 @@ export function applyOutlineDraft(
       offset === opening.offset ? opening : { ...opening, offset },
     );
   }
-  const frames = wallFrames(corners);
   const furniture: FurnitureItem[] = [];
   for (const item of room.furniture) {
     if (item.mount) {
-      // Re-anchor against this room's own reshaped walls — the mount's
-      // roomId is always the owning room (`WallMount.roomId` invariant).
-      const result = reanchorMount(
-        room.id,
-        frames,
-        item.position,
-        item.footprint,
-        item.mount.elevation,
-      );
-      if (!result) continue;
-      furniture.push({
-        ...item,
-        position: result.position,
-        rotation: result.rotation,
-        mount: result.mount,
-      });
+      // Mounts anchor to graph edges now; `deriveFloor` re-derives their
+      // transform. (Draw editing is disabled until G5 rebuilds this path.)
+      furniture.push(item);
       continue;
     }
     if (

@@ -6,12 +6,12 @@ import {
   removeOpening,
 } from "./openings";
 import { createSampleRoom } from "./sample-room";
-import type { Opening } from "./types";
+import type { RoomOpening } from "./types";
 
 describe("addOpening", () => {
   it("appends the opening without mutating the input", () => {
     const room = createSampleRoom();
-    const opening: Opening = {
+    const opening: RoomOpening = {
       id: "door-2",
       kind: "door",
       wallIndex: 2,

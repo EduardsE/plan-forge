@@ -1,18 +1,20 @@
 import { catalogItemById } from "./catalog";
-import { wallsOf } from "./geometry";
-import type { Point } from "./types";
+import { WALL_THICKNESS, wallsOf } from "./geometry";
+import type { WallEdge, WallNode } from "./graph";
+import type { Point, WallMount } from "./types";
 
 /**
- * Pure geometry for wall-mounted furniture (picture frames, clocks): the wall
- * frames a mount can anchor to, and the plan transform a mount resolves into.
+ * Pure geometry for wall-mounted furniture (picture frames, clocks): the plan
+ * transform a mount resolves into, plus the wall frames a *derived* room's
+ * outline exposes (still handy for outline-space rendering/hit-testing).
  * Rendering-agnostic like the rest of the model — placement snapping (nearest
- * wall, offset clamping, guide pills) lives in `src/lib/mount-place.ts`.
+ * edge, offset clamping, guide pills) lives in `src/lib/mount-place.ts`.
  *
- * A mount stores a host wall index, a near-edge offset along it (like
- * `Opening`), and a vertical `elevation`. `deriveMountTransform` turns that
- * into the item's plan `position` (pushed into the room by half its depth, so
- * its back sits flush on the interior wall face) and `rotation` (its width
- * axis aligned to the wall direction).
+ * A mount is anchored to a graph **edge**: a near-edge `offset` along a→b, the
+ * `side` it hangs on, and a vertical `elevation`. `deriveMountTransform` turns
+ * that into the item's plan `position` (centered on the wall, pushed off the
+ * edge centerline by half the wall plus half its depth, so its back sits flush
+ * on the interior face) and `rotation` (its width axis aligned to the edge).
  */
 
 const EPS = 1e-9;
@@ -28,7 +30,7 @@ export interface WallFrame {
   length: number;
 }
 
-/** A `WallFrame` tagged with its outline wall index (the mount's `wallIndex`). */
+/** A `WallFrame` tagged with its outline wall index. */
 export interface MountFrame extends WallFrame {
   index: number;
 }
@@ -47,8 +49,7 @@ function signedDoubleArea(outline: Point[]): number {
 /**
  * The wall frames of a closed outline, indexed by wall index. Mirrors the
  * outward-normal derivation in `buildWallSolids` (interior on the wall's left
- * for the sample's winding) so a mount and the 3D wall agree on which way is
- * "into the room". Degenerate outlines (< 3 corners) yield no frames.
+ * for the sample's winding). Degenerate outlines (< 3 corners) yield no frames.
  */
 export function wallFrames(outline: Point[]): MountFrame[] {
   if (outline.length < 3) return [];
@@ -84,25 +85,50 @@ export function isWallItem(catalogId: string): boolean {
   return catalogItemById(catalogId)?.category === "wall-items";
 }
 
+/** The graph geometry `deriveMountTransform` reads. */
+export interface EdgeGraph {
+  nodes: WallNode[];
+  edges: WallEdge[];
+}
+
 /**
- * The plan `position` and `rotation` a mount resolves to on `frame`: the item
- * centered `offset + width/2` along the wall, pushed `depth/2` into the room
- * so its back sits on the interior face, with its width axis turned to the
- * wall direction. `rotation` matches the renderers' `rotation-y` convention
- * (positive degrees take +x toward -y in plan coords).
+ * The plan `position` and `rotation` a mount resolves to against the graph:
+ * the item centered `offset + width/2` along its edge (a→b), pushed
+ * `WALL_THICKNESS / 2 + depth / 2` toward `side` so its back sits on the
+ * interior face, with its width axis turned to the edge direction. Null when
+ * the edge (or its nodes) is gone, or degenerate.
  */
 export function deriveMountTransform(
-  frame: WallFrame,
-  offset: number,
+  mount: WallMount,
+  graph: EdgeGraph,
   footprint: { width: number; depth: number },
-): { position: Point; rotation: number } {
+): { position: Point; rotation: number } | null {
+  const edge = graph.edges.find((e) => e.id === mount.edgeId);
+  if (!edge) return null;
+  const a = graph.nodes.find((n) => n.id === edge.a);
+  const b = graph.nodes.find((n) => n.id === edge.b);
+  if (!a || !b) return null;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (length < EPS) return null;
+  const dir = { x: dx / length, y: dy / length };
+  // Left normal (−dir.y, dir.x) points to `side === 1` (positive cross
+  // product); `side` picks which face the mount hangs on.
+  const normal = { x: -dir.y * mount.side, y: dir.x * mount.side };
+  // Keep the item on the edge even if an edit (duplicate, reshape) nudged its
+  // offset past the end — the transform is the flush truth, re-derived here.
+  const offset = Math.min(
+    Math.max(mount.offset, 0),
+    Math.max(0, length - footprint.width),
+  );
   const centerAlong = offset + footprint.width / 2;
-  const inward = footprint.depth / 2;
+  const push = WALL_THICKNESS / 2 + footprint.depth / 2;
   const position = {
-    x: frame.start.x + frame.dir.x * centerAlong - frame.outward.x * inward,
-    y: frame.start.y + frame.dir.y * centerAlong - frame.outward.y * inward,
+    x: a.x + dir.x * centerAlong + normal.x * push,
+    y: a.y + dir.y * centerAlong + normal.y * push,
   };
-  const deg = (Math.atan2(-frame.dir.y, frame.dir.x) * 180) / Math.PI;
+  const deg = (Math.atan2(-dir.y, dir.x) * 180) / Math.PI;
   const rotation = ((deg % 360) + 360) % 360;
   return { position, rotation };
 }

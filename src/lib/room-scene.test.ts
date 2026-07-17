@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Opening, Room } from "#/lib/model";
+import type { Room, RoomOpening } from "#/lib/model";
 import { createSampleRoom } from "#/lib/model/sample-room";
 import { floorSeamData } from "#/lib/seams";
 import {
@@ -168,7 +168,7 @@ describe("postCoveredByWalls", () => {
     y0: number,
     x1: number,
     y1: number,
-    openings: Opening[] = [],
+    openings: RoomOpening[] = [],
   ): Room => ({
     id,
     outline: [
@@ -182,7 +182,7 @@ describe("postCoveredByWalls", () => {
   });
 
   /** Living room + flush kitchen sharing the wall line x = 6.4. */
-  const flat = (kitchenOpenings: Opening[] = []) => {
+  const flat = (kitchenOpenings: RoomOpening[] = []) => {
     const living = rect("living", 0, 0, 6.4, 5.2);
     const kitchen = rect("kitchen", 6.4, 0, 9.4, 5.2, kitchenOpenings);
     const seamData = floorSeamData([living, kitchen]);

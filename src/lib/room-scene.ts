@@ -1,5 +1,10 @@
 import type { OpeningKind, Point, Room } from "#/lib/model";
-import { DEFAULT_WALL_HEIGHT, wallHeightOf, wallsOf } from "#/lib/model";
+import {
+  DEFAULT_WALL_HEIGHT,
+  WALL_THICKNESS,
+  wallHeightOf,
+  wallsOf,
+} from "#/lib/model";
 import type { RoomSeamData, SeamSpan, Span } from "#/lib/seams";
 
 /**
@@ -15,7 +20,7 @@ import type { RoomSeamData, SeamSpan, Span } from "#/lib/seams";
 
 /** Default wall height; rooms can override it (`Room.wallHeight`). */
 export const WALL_HEIGHT = DEFAULT_WALL_HEIGHT;
-export const WALL_THICKNESS = 0.1;
+export { WALL_THICKNESS };
 /** Thickness of the dollhouse floor platform (mockup slab edge: 18 px). */
 export const SLAB_THICKNESS = 0.18;
 export const DOOR_HEIGHT = 2.05;

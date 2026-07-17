@@ -123,7 +123,7 @@ export function PlacementGhost({
     /** The room the drop would land in: the one under the cursor, else the
      * last hovered, else the floor's first room. */
     const targetRoom = (point: Point): Room | undefined => {
-      const contained = roomAtPoint({ rooms }, point, 0.05);
+      const contained = roomAtPoint(rooms, point, 0.05);
       const room =
         contained ??
         rooms.find((entry) => entry.id === lastRoomIdRef.current) ??

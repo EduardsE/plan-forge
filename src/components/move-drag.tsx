@@ -4,6 +4,7 @@ import { type Camera, Plane, Raycaster, Vector2, Vector3 } from "three";
 import { HostHighlight } from "#/components/host-highlight";
 import { SnapGuides } from "#/components/snap-guides";
 import type {
+  Floor,
   FurnitureItem,
   FurnitureUpdate,
   Point,
@@ -12,7 +13,7 @@ import type {
   WallMount,
 } from "#/lib/model";
 import { canHostStack, isStackRider, roomAtPoint } from "#/lib/model";
-import { mountAcrossRooms } from "#/lib/mount-place";
+import { mountAt } from "#/lib/mount-place";
 import {
   furnitureObstacle,
   outlineWallObstacles,
@@ -226,6 +227,7 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
  */
 export function MoveDragSession({
   rooms,
+  floor,
   drag,
   unit,
   snapEnabled,
@@ -234,6 +236,8 @@ export function MoveDragSession({
 }: {
   /** Every room of the floor — the drag resolves its target per move. */
   rooms: Room[];
+  /** The graph floor — wall-mount drags re-anchor to its edges. */
+  floor: Floor;
   drag: MoveDrag;
   unit: Unit;
   /** Snap toggle: off means free move (contained, but no flush/quantize). */
@@ -257,6 +261,8 @@ export function MoveDragSession({
   endRef.current = onEnd;
   const roomsRef = useRef(rooms);
   roomsRef.current = rooms;
+  const floorRef = useRef(floor);
+  floorRef.current = floor;
   const snapRef = useRef(snapEnabled);
   snapRef.current = snapEnabled;
   // The room the drag last targeted — the fallback when the dragged center
@@ -292,25 +298,27 @@ export function MoveDragSession({
         y: point.y - drag.grab.y,
       };
       if (drag.mount) {
-        // Wall item: re-mount to the nearest wall of any room that fits it
-        // (landing on another room's wall reparents). When no wall does,
-        // hold the item still rather than dropping it.
-        const result = mountAcrossRooms(
-          rooms,
+        // Wall item: re-mount to the nearest graph edge that fits it. The
+        // owning room falls out of where the mounted position lands (the
+        // graph is one shared space — no cross-room mount variant needed).
+        const result = mountAt(
+          floorRef.current,
           target,
           drag.mount.footprint,
           drag.mount.elevation,
           snapRef.current,
         );
         if (!result) return;
-        lastRoomIdRef.current = result.mount.roomId;
+        const roomId =
+          roomAtPoint(rooms, result.position)?.id ?? lastRoomIdRef.current;
+        lastRoomIdRef.current = roomId;
         moveRef.current(
           {
             position: result.position,
             rotation: result.rotation,
             mount: result.mount,
           },
-          result.mount.roomId,
+          roomId,
         );
         setGuides(result.guides);
         return;
@@ -354,7 +362,7 @@ export function MoveDragSession({
       // room's walls are the snap obstacles, so a piece can't slide over a
       // party wall unnoticed.
       const targetRoom =
-        roomAtPoint({ rooms }, target) ??
+        roomAtPoint(rooms, target) ??
         rooms.find((room) => room.id === lastRoomIdRef.current) ??
         rooms[0];
       if (!targetRoom) return;

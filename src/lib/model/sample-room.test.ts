@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { overlappingFurnitureIds } from "#/lib/collision";
 import { floorPortals } from "#/lib/seams";
+import { deriveFloor } from "./derived";
 import { floorArea, outlineBounds, wallLength, wallsOf } from "./geometry";
 import {
   createSampleFloor,
@@ -8,7 +9,6 @@ import {
   createSampleRoom,
 } from "./sample-room";
 import type { FurnitureItem, Room } from "./types";
-import { deriveMountTransform, wallFrames } from "./wall-mount";
 
 /** Axis-aligned x/y half-extents of a footprint after rotation. */
 function halfExtents(item: FurnitureItem): { hx: number; hy: number } {
@@ -21,86 +21,6 @@ function halfExtents(item: FurnitureItem): { hx: number; hy: number } {
     hy: (width * sin + depth * cos) / 2,
   };
 }
-
-describe("createSampleRoom", () => {
-  it("computes the mockup's 33.28 m² from the area helper", () => {
-    expect(floorArea(createSampleRoom().outline)).toBeCloseTo(33.28, 10);
-  });
-
-  it("spans 6.40 × 5.20 m", () => {
-    const bounds = outlineBounds(createSampleRoom().outline);
-    expect(bounds?.width).toBeCloseTo(6.4, 10);
-    expect(bounds?.height).toBeCloseTo(5.2, 10);
-  });
-
-  it("has one door and one window, each fitting inside its host wall", () => {
-    const room = createSampleRoom();
-    const walls = wallsOf(room.outline);
-    expect(room.openings.map((o) => o.kind).sort()).toEqual(["door", "window"]);
-    for (const opening of room.openings) {
-      const wall = walls[opening.wallIndex];
-      expect(wall).toBeDefined();
-      expect(opening.offset).toBeGreaterThan(0);
-      expect(opening.offset + opening.width).toBeLessThan(wallLength(wall));
-    }
-  });
-
-  it("places every furniture item fully inside the room", () => {
-    const room = createSampleRoom();
-    expect(room.furniture).toHaveLength(7);
-    // Wall-mounted items sit flush against a wall face, so a footprint edge
-    // lands exactly on the boundary (within floating-point noise).
-    const EPS = 1e-9;
-    for (const item of room.furniture) {
-      const { hx, hy } = halfExtents(item);
-      expect(item.position.x - hx).toBeGreaterThanOrEqual(-EPS);
-      expect(item.position.x + hx).toBeLessThanOrEqual(6.4 + EPS);
-      expect(item.position.y - hy).toBeGreaterThanOrEqual(-EPS);
-      expect(item.position.y + hy).toBeLessThanOrEqual(5.2 + EPS);
-    }
-  });
-
-  it("gives every item a unique id", () => {
-    const room = createSampleRoom();
-    const ids = [
-      ...room.openings.map((o) => o.id),
-      ...room.furniture.map((f) => f.id),
-    ];
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it("returns a fresh room on every call", () => {
-    const a = createSampleRoom();
-    const b = createSampleRoom();
-    expect(a).not.toBe(b);
-    a.furniture.pop();
-    expect(b.furniture).toHaveLength(7);
-  });
-
-  it("has no overlapping furniture on a fresh load", () => {
-    expect(overlappingFurnitureIds(createSampleRoom().furniture).size).toBe(0);
-  });
-
-  it("keeps the wall-mounted frame's position/rotation in sync with its mount", () => {
-    const room = createSampleRoom();
-    const frame = room.furniture.find((item) => item.mount);
-    expect(frame?.mount).toBeDefined();
-    if (!frame?.mount) return;
-    const wall = wallFrames(room.outline).find(
-      (f) => f.index === frame.mount?.wallIndex,
-    );
-    expect(wall).toBeDefined();
-    if (!wall) return;
-    const derived = deriveMountTransform(
-      wall,
-      frame.mount.offset,
-      frame.footprint,
-    );
-    expect(frame.position.x).toBeCloseTo(derived.position.x);
-    expect(frame.position.y).toBeCloseTo(derived.position.y);
-    expect(frame.rotation).toBeCloseTo(derived.rotation);
-  });
-});
 
 /** Every furniture item's rotated AABB sits inside the room's bounds. */
 function expectFurnitureInside(room: Room) {
@@ -117,17 +37,15 @@ function expectFurnitureInside(room: Room) {
   }
 }
 
-describe("createSampleKitchen", () => {
-  it("abuts the living room's right wall over its full span", () => {
-    const bounds = outlineBounds(createSampleKitchen().outline);
-    expect(bounds?.min.x).toBeCloseTo(6.4, 10);
-    expect(bounds?.min.y).toBeCloseTo(0, 10);
-    expect(bounds?.max.y).toBeCloseTo(5.2, 10);
+describe("createSampleRoom (test fixture)", () => {
+  it("computes the mockup's 33.28 m² from the area helper", () => {
+    expect(floorArea(createSampleRoom().outline)).toBeCloseTo(33.28, 10);
   });
 
-  it("keeps every opening inside its host wall", () => {
-    const room = createSampleKitchen();
+  it("has one door and one window, each fitting inside its host wall", () => {
+    const room = createSampleRoom();
     const walls = wallsOf(room.outline);
+    expect(room.openings.map((o) => o.kind).sort()).toEqual(["door", "window"]);
     for (const opening of room.openings) {
       const wall = walls[opening.wallIndex];
       expect(wall).toBeDefined();
@@ -136,7 +54,15 @@ describe("createSampleKitchen", () => {
     }
   });
 
-  it("places every furniture item inside, with no overlap warnings", () => {
+  it("places every furniture item inside, no overlaps", () => {
+    const room = createSampleRoom();
+    expectFurnitureInside(room);
+    expect(overlappingFurnitureIds(room.furniture).size).toBe(0);
+  });
+});
+
+describe("createSampleKitchen (test fixture)", () => {
+  it("places every furniture item inside, no overlaps", () => {
     const room = createSampleKitchen();
     expectFurnitureInside(room);
     expect(overlappingFurnitureIds(room.furniture).size).toBe(0);
@@ -144,23 +70,52 @@ describe("createSampleKitchen", () => {
 });
 
 describe("createSampleFloor", () => {
-  it("connects the two rooms through the living room's door as a derived portal", () => {
-    const floor = createSampleFloor();
-    const portals = floorPortals(floor.rooms);
-    const door = portals.find((portal) => portal.kind === "door");
-    expect(door).toBeDefined();
-    expect(door?.openingId).toBe("door-1");
-    expect(door?.roomId).toBe("living-room");
-    expect(door?.otherRoomId).toBe("kitchen");
+  it("derives two named rooms sitting back-to-back across the shared edge", () => {
+    const derived = deriveFloor(createSampleFloor());
+    expect(derived.rooms).toHaveLength(2);
+    const names = derived.rooms.map((r) => r.name).sort();
+    expect(names).toEqual(["Kitchen", "Living room"]);
+    // Interior outlines land at the wall centerlines inset by t/2: the living
+    // room ends at x ≈ 6.35, the kitchen starts at x ≈ 6.45 (0.1 m apart).
+    const living = derived.rooms.find((r) => r.id === "living-room");
+    const kitchen = derived.rooms.find((r) => r.id === "kitchen");
+    expect(outlineBounds(living?.outline ?? [])?.max.x).toBeCloseTo(6.35, 4);
+    expect(outlineBounds(kitchen?.outline ?? [])?.min.x).toBeCloseTo(6.45, 4);
+    // Areas come straight from the derived outlines — never hardcoded.
+    expect(floorArea(living?.outline ?? [])).toBeCloseTo(6.35 * 5.2, 4);
+    expect(floorArea(kitchen?.outline ?? [])).toBeCloseTo(2.95 * 5.2, 4);
   });
 
-  it("gives every opening and furniture item a floor-unique id", () => {
-    const floor = createSampleFloor();
-    const ids = floor.rooms.flatMap((room) => [
-      room.id,
-      ...room.openings.map((o) => o.id),
-      ...room.furniture.map((f) => f.id),
+  it("connects the two rooms through the door on the shared edge", () => {
+    const derived = deriveFloor(createSampleFloor());
+    const portals = floorPortals(derived.rooms);
+    const door = portals.find((portal) => portal.openingId === "door-1");
+    expect(door).toBeDefined();
+    expect([door?.roomId, door?.otherRoomId].sort()).toEqual([
+      "kitchen",
+      "living-room",
     ]);
+    // The windows sit on exterior edges — no portal.
+    expect(portals.some((p) => p.openingId === "window-1")).toBe(false);
+    expect(portals.some((p) => p.openingId === "kitchen-window-1")).toBe(false);
+  });
+
+  it("lands every furniture item inside a room, no overlaps", () => {
+    const floor = createSampleFloor();
+    const derived = deriveFloor(floor);
+    expect(derived.unassignedFurniture).toHaveLength(0);
+    expect(overlappingFurnitureIds(floor.furniture).size).toBe(0);
+  });
+
+  it("gives every node, edge, opening and furniture item a unique id", () => {
+    const floor = createSampleFloor();
+    const ids = [
+      ...floor.nodes.map((n) => n.id),
+      ...floor.edges.map((e) => e.id),
+      ...floor.openings.map((o) => o.id),
+      ...floor.furniture.map((f) => f.id),
+      ...floor.rooms.map((r) => r.id),
+    ];
     expect(new Set(ids).size).toBe(ids.length);
   });
 });

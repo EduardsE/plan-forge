@@ -32,6 +32,7 @@ import {
 } from "#/lib/furniture-parts";
 import type {
   Bounds,
+  Floor,
   FurnitureItem,
   FurnitureUpdate,
   Point,
@@ -930,6 +931,8 @@ function RoomLayer({
 export interface RoomSceneProps {
   /** Every room of the floor, all drawn; "which room" is derived per item. */
   rooms: Room[];
+  /** The graph floor — wall-mount drags re-anchor to its edges. */
+  floor: Floor;
   selectedId: string | null;
   unit: Unit;
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
@@ -949,6 +952,7 @@ export interface RoomSceneProps {
 
 export function RoomScene({
   rooms,
+  floor,
   selectedId,
   unit,
   snapEnabled,
@@ -958,7 +962,7 @@ export function RoomScene({
 }: RoomSceneProps) {
   // Lights aim at the whole floor's center, so a two-room flat reads as one
   // warmly lit model rather than per-room hotspots.
-  const bounds = useMemo(() => floorBounds({ rooms }), [rooms]);
+  const bounds = useMemo(() => floorBounds(rooms), [rooms]);
   // Shared walls + portal cuts, derived from the outlines every render pass
   // (never stored): each room draws its half of a party wall and cuts gaps
   // for the neighbor's doors/windows on it.
@@ -1050,6 +1054,7 @@ export function RoomScene({
       {drag && (
         <MoveDragSession
           rooms={rooms}
+          floor={floor}
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}

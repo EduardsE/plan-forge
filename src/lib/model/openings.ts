@@ -1,4 +1,4 @@
-import type { Opening, Room } from "./types";
+import type { Room, RoomOpening } from "./types";
 
 /**
  * Pure opening mutations for the door/window placement tools. Same contract
@@ -7,7 +7,7 @@ import type { Opening, Room } from "./types";
  */
 
 /** A wall-click inserting a new door or window. */
-export function addOpening(room: Room, opening: Opening): Room {
+export function addOpening(room: Room, opening: RoomOpening): Room {
   return { ...room, openings: [...room.openings, opening] };
 }
 

@@ -1,28 +1,18 @@
 import type { Face } from "./faces";
 import { faceLabelPoint } from "./faces";
 import { pointInOutline } from "./geometry";
-import type { Point } from "./types";
+import type { RoomRecord } from "./types";
 
 /**
  * Room identity on top of the wall graph's faces (Task G2): faces are
  * anonymous regions recomputed from scratch on every edit, but a room's
  * name, wall height, and other settings need to survive across edits that
- * don't change its shape. `RoomRecord` is the persistent identity; each
- * `matchRooms` call reconciles the registry against the current faces by
- * anchor containment, so a record that momentarily has no matching face
- * (mid-edit, wall not yet closed) goes dormant instead of disappearing, and
- * revives if its shape closes again later.
+ * don't change its shape. `RoomRecord` (in `types.ts`) is the persistent
+ * identity; each `matchRooms` call reconciles the registry against the
+ * current faces by anchor containment, so a record that momentarily has no
+ * matching face (mid-edit, wall not yet closed) goes dormant instead of
+ * disappearing, and revives if its shape closes again later.
  */
-
-/** Persistent room identity, independent of the graph's current faces. */
-export interface RoomRecord {
-  id: string;
-  name?: string;
-  wallHeight?: number;
-  /** Point last known to lie inside this room's face; re-centered on every
-   * successful match and used to find the room again next time. */
-  anchor: Point;
-}
 
 /** A record matched to the face it currently occupies. */
 export interface MatchedRoom {
@@ -40,7 +30,7 @@ export interface RoomMatchResult {
 
 /**
  * A "Room N" name not already taken, N starting at (entry count + 1) — the
- * `nextRoomName` convention (`model/floor.ts:105`), generalized to work from
+ * old `nextRoomName` convention (pre-graph `model/floor.ts`), generalized to
  * any iterable of already-used names (unnamed entries count, like unnamed
  * rooms do there) rather than a `Floor`.
  */

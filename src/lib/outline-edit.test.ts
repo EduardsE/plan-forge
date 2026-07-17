@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { snapTargetsOf } from "#/lib/draw";
-import type { FurnitureItem, Opening, Point, Room } from "#/lib/model";
+import type { FurnitureItem, Point, Room, RoomOpening } from "#/lib/model";
 import {
   applyOutlineDraft,
   draftFromRoom,
@@ -24,7 +24,7 @@ const RECT: Point[] = [
   { x: 0, y: 5 },
 ];
 
-function opening(overrides: Partial<Opening>): Opening {
+function opening(overrides: Partial<RoomOpening>): RoomOpening {
   return {
     id: "o1",
     kind: "door",

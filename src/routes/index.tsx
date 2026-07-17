@@ -30,16 +30,16 @@ import {
   undoHistory,
 } from "#/lib/history";
 import {
-  addRoom,
   type CatalogItem,
   createSampleFloor,
+  deriveFloor,
   duplicateFurniture,
   type Floor,
   type Footprint,
   floorBounds,
-  nextRoomName,
   type Point,
   type Room,
+  reconcileFloor,
   removeFurniture,
   roomById,
   roomOfFurniture,
@@ -50,16 +50,14 @@ import {
   setMountElevation,
   setRoomName,
   setRoomWallHeight,
+  updateDerivedRoom,
   updateFurniture,
-  updateRoomIn,
 } from "#/lib/model";
 import {
-  applyOutlineDraft,
   draftFromRoom,
   emptyOutlineDraft,
   type OutlineDraft,
   removeOutlineCorner,
-  sameOutline,
   setClosedSegmentLength,
   splitOutlineWall,
 } from "#/lib/outline-edit";
@@ -75,6 +73,22 @@ import type { ViewMode } from "#/lib/view-mode";
 
 /** Shift-arrow nudge step, meters — the "fine" 1 cm move. */
 const FINE_NUDGE_STEP = 0.01;
+
+/**
+ * Draw-mode editing is disabled for Task G4: the lens still renders the
+ * derived outlines, but pointer handlers are inert and nothing commits back
+ * to the graph. G5 rebuilds draw directly on the wall graph
+ * (`lib/graph-edit.ts`).
+ */
+const DRAW_EDITING_DISABLED = true;
+
+/** Inert handler for the disabled draw-editing pointer callbacks. */
+const noop = () => {};
+
+/** A fresh, empty graph floor — the "New room" reset target. */
+function emptyFloor(): Floor {
+  return { nodes: [], edges: [], openings: [], furniture: [], rooms: [] };
+}
 
 // Loaded lazily after mount: the three.js scene is client-only, so keep it
 // out of the SSR pass entirely.
@@ -116,26 +130,32 @@ function Planner() {
     createHistory(createSampleFloor()),
   );
   const floor = floorHistory.current;
-  // The floor's first room still anchors the header breadcrumb (the "Loft
-  // apartment / room" line stays single-name until projects exist).
-  // Everything selection-shaped resolves its owning room from the item id
-  // instead (floor-wide, no active-room mode), and the draw draft carries
-  // the id of the room it edits.
-  const room = floor.rooms[0];
-  // Whole-floor commits ("New room" and draw mode's "add room").
+  // Rooms are *derived* from the graph (`deriveFloor`): scenes, readouts, and
+  // every per-room edit speak this `Room[]` view; the graph `Floor` is what
+  // history/persistence hold. Recomputed on each floor change.
+  const derived = useMemo(() => deriveFloor(floor), [floor]);
+  // The first derived room anchors the header breadcrumb; everything
+  // selection-shaped resolves its owning room from the item id instead.
+  const room = derived.rooms[0] as Room | undefined;
+  // Whole-floor commits ("New room" and — post-G5 — draw mode's edits).
   const setFloor = useCallback((next: Floor) => {
     setFloorHistory((history) =>
       next === history.current ? history : commitHistory(history, next),
     );
   }, []);
-  // One room's discrete mutation, addressed by id — one undo step.
-  // `updateRoomIn` keeps the pure setters' no-op contract at floor level: a
-  // same-reference room yields the same floor, which must not become an
-  // empty undo step (or clear the redo stack).
+  // One derived room's discrete mutation, addressed by id — one undo step.
+  // `updateDerivedRoom` runs the edit back through the graph and keeps the
+  // pure setters' no-op contract at floor level (a same-reference room yields
+  // the same floor, which must not become an empty undo step).
   const commitToRoom = useCallback(
     (targetId: string, update: (room: Room) => Room) => {
       setFloorHistory((history) => {
-        const value = updateRoomIn(history.current, targetId, update);
+        const value = updateDerivedRoom(
+          history.current,
+          deriveFloor(history.current),
+          targetId,
+          update,
+        );
         return value === history.current
           ? history
           : commitHistory(history, value);
@@ -152,16 +172,14 @@ function Planner() {
       setFloorHistory((history) =>
         previewHistory(
           history,
-          updateRoomIn(history.current, targetId, () => next),
+          updateDerivedRoom(
+            history.current,
+            deriveFloor(history.current),
+            targetId,
+            () => next,
+          ),
         ),
       ),
-    [],
-  );
-  // A mid-drag state touching more than one room — a furniture drag
-  // reparenting its item across a seam. Streams like `previewRoom`.
-  const previewFloor = useCallback(
-    (next: Floor) =>
-      setFloorHistory((history) => previewHistory(history, next)),
     [],
   );
   const settleRoom = useCallback(() => setFloorHistory(settleHistory), []);
@@ -179,7 +197,7 @@ function Planner() {
   // Selection is floor-wide: the owning room is derived from the item id.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedRoom = selectedId
-    ? (roomOfFurniture(floor, selectedId) ?? null)
+    ? (roomOfFurniture(derived.rooms, selectedId) ?? null)
     : null;
   const selectedItem =
     selectedRoom?.furniture.find((item) => item.id === selectedId) ?? null;
@@ -191,7 +209,7 @@ function Planner() {
   );
   const portalStatus = useMemo(() => {
     if (!selectedOpeningId || viewMode !== "2d") return null;
-    const owner = floor.rooms.find((entry) =>
+    const owner = derived.rooms.find((entry) =>
       entry.openings.some((opening) => opening.id === selectedOpeningId),
     );
     const opening = owner?.openings.find(
@@ -199,22 +217,28 @@ function Planner() {
     );
     if (!opening) return null;
     const label = portalLabel(
-      floor.rooms,
-      floorPortals(floor.rooms),
+      derived.rooms,
+      floorPortals(derived.rooms),
       selectedOpeningId,
     );
     if (!label) return null;
     return `${opening.kind === "door" ? "Door" : "Window"} connects ${label}`;
-  }, [selectedOpeningId, viewMode, floor]);
+  }, [selectedOpeningId, viewMode, derived]);
   // One commit against the room owning `itemId`, resolved inside the
   // functional update so bursts never work from a stale floor. One history
   // step per commit; same-reference no-ops land nowhere.
   const mutateRoomOf = useCallback(
     (itemId: string, update: (owner: Room) => Room) => {
       setFloorHistory((history) => {
-        const owner = roomOfFurniture(history.current, itemId);
+        const current = deriveFloor(history.current);
+        const owner = roomOfFurniture(current.rooms, itemId);
         if (!owner) return history;
-        const value = updateRoomIn(history.current, owner.id, update);
+        const value = updateDerivedRoom(
+          history.current,
+          current,
+          owner.id,
+          update,
+        );
         return value === history.current
           ? history
           : commitHistory(history, value);
@@ -325,10 +349,14 @@ function Planner() {
     (dx: number, dy: number) => {
       if (!selectedId) return;
       setFloorHistory((history) => {
-        const owner = roomOfFurniture(history.current, selectedId);
+        const current = deriveFloor(history.current);
+        const owner = roomOfFurniture(current.rooms, selectedId);
         if (!owner) return history;
-        const next = updateRoomIn(history.current, owner.id, (current) =>
-          nudgeFurniture(current, selectedId, dx, dy),
+        const next = updateDerivedRoom(
+          history.current,
+          current,
+          owner.id,
+          (r) => nudgeFurniture(r, selectedId, dx, dy),
         );
         return next === history.current
           ? history
@@ -423,37 +451,10 @@ function Planner() {
   // closed draft, so lens switches never lose edits; esc reverts it instead.
   const [draft, setDraft] = useState(() => emptyOutlineDraft());
   const [drawTool, setDrawTool] = useState<DrawTool>("wall");
-  // Commit a finished draft: reshape its room, or — for a new-room draft —
-  // append a Room to the floor. One history step either way; reshapes that
-  // didn't change the outline land nowhere.
-  const applyDraft = useCallback((finished: OutlineDraft) => {
-    if (finished.corners.length < 3) return;
-    const targetId = finished.roomId;
-    if (targetId !== null) {
-      setFloorHistory((history) => {
-        const value = updateRoomIn(history.current, targetId, (current) =>
-          sameOutline(finished.corners, current.outline)
-            ? current
-            : applyOutlineDraft(current, finished.corners, finished.openings),
-        );
-        return value === history.current
-          ? history
-          : commitHistory(history, value);
-      });
-    } else {
-      setFloorHistory((history) =>
-        commitHistory(
-          history,
-          addRoom(history.current, {
-            id: crypto.randomUUID(),
-            name: nextRoomName(history.current),
-            outline: finished.corners,
-            openings: finished.openings,
-            furniture: [],
-          }),
-        ),
-      );
-    }
+  // Draw editing is disabled this task (G5 rebuilds it on the graph): the
+  // draft is view-only, so committing it never writes back to the floor.
+  const applyDraft = useCallback((_finished: OutlineDraft) => {
+    // Intentionally inert until G5. See `DRAW_EDITING_DISABLED`.
   }, []);
   const prevViewModeRef = useRef(viewMode);
   useEffect(() => {
@@ -465,7 +466,7 @@ function Planner() {
       // new-room drawing) survives the round trip through another lens. The
       // tool follows the seed: a closed draft reshapes (Select), an empty
       // room draws from scratch (Wall).
-      if (draft.corners.length === 0) {
+      if (draft.corners.length === 0 && room) {
         const seeded = draftFromRoom(room);
         setDraft(seeded);
         setDrawTool(seeded.closed ? "select" : "wall");
@@ -493,13 +494,13 @@ function Planner() {
   const activateDraftRoom = useCallback(
     (targetId: string) => {
       if (targetId === draft.roomId) return;
-      const target = roomById(floor, targetId);
+      const target = roomById(derived.rooms, targetId);
       if (!target) return;
       if (draft.closed) applyDraft(draft);
       setDraft(draftFromRoom(target));
       setDrawTool("select");
     },
-    [floor, draft, applyDraft],
+    [derived, draft, applyDraft],
   );
 
   // A live placement drag from the objects panel. Owned here so the header
@@ -645,17 +646,17 @@ function Planner() {
     () =>
       setDraft((current) => {
         if (current.closed && current.roomId !== null) {
-          const target = roomById(floor, current.roomId);
+          const target = roomById(derived.rooms, current.roomId);
           if (target) return draftFromRoom(target);
         }
         return emptyOutlineDraft(current.roomId);
       }),
-    [floor],
+    [derived],
   );
 
-  // The "new room" escape hatch: clear the floor down to one fresh empty
-  // room (autosave persists the cleared state, wiping the old save) and
-  // start over in draw mode.
+  // The "new room" escape hatch: clear the floor down to an empty graph
+  // (autosave persists the cleared state, wiping the old save) and drop into
+  // draw mode — which is view-only until G5 rebuilds drawing on the graph.
   const startNewRoom = useCallback(() => {
     if (
       !window.confirm(
@@ -664,21 +665,8 @@ function Planner() {
     ) {
       return;
     }
-    const freshId = crypto.randomUUID();
-    setFloor({
-      rooms: [
-        {
-          id: freshId,
-          name: "Untitled room",
-          outline: [],
-          openings: [],
-          furniture: [],
-        },
-      ],
-    });
-    // Target the fresh room directly — when "New" is clicked from inside
-    // draw mode the enter-draw seeding effect won't fire again.
-    setDraft(emptyOutlineDraft(freshId));
+    setFloor(reconcileFloor(emptyFloor()));
+    setDraft(emptyOutlineDraft(null));
     setDrawTool("wall");
     setViewMode("draw");
   }, [setFloor]);
@@ -813,7 +801,7 @@ function Planner() {
   // pool for its 6.40 × 5.20 room; absent bounds fall back to that in CSS.
   const canvasStyle = useMemo(() => {
     const style: Record<string, string> = { gridArea: "canvas" };
-    const bounds = floorBounds(floor);
+    const bounds = floorBounds(derived.rooms);
     if (bounds && bounds.width > 0 && bounds.height > 0) {
       const diagonal = Math.hypot(bounds.width, bounds.height);
       const w = Math.round((70 * bounds.width) / diagonal);
@@ -822,7 +810,7 @@ function Planner() {
       style["--pool-h"] = `max(${h}vh, 400px)`;
     }
     return style;
-  }, [floor]);
+  }, [derived.rooms]);
 
   return (
     // The library column animates 0 ↔ 306px (the track count stays constant
@@ -849,7 +837,7 @@ function Planner() {
       />
       {settingsOpen && (
         <SettingsPopover
-          rooms={floor.rooms}
+          rooms={derived.rooms}
           unit={unit}
           onRename={renameRoom}
           onWallHeightChange={setCeilingHeight}
@@ -858,7 +846,7 @@ function Planner() {
       )}
       <WorkspaceHeader
         mode={viewMode}
-        roomName={room.name ?? "Untitled room"}
+        roomName={room?.name ?? "Untitled room"}
         savedAt={savedAt}
         onNewRoom={startNewRoom}
         onSelectMode={setViewMode}
@@ -880,9 +868,9 @@ function Planner() {
           <Suspense fallback={null}>
             <PlannerCanvas
               floor={floor}
+              rooms={derived.rooms}
               onRoomChange={commitRoom}
               onRoomPreview={previewRoom}
-              onFloorPreview={previewFloor}
               onRoomDragActiveChange={handleRoomDragActive}
               viewMode={viewMode}
               selectedId={selectedId}
@@ -898,15 +886,21 @@ function Planner() {
               draftCorners={draft.corners}
               draftClosed={draft.closed}
               draftRoomId={draft.roomId}
-              onActivateDraftRoom={activateDraftRoom}
-              onPlaceCorner={placeCorner}
-              onPlaceRect={placeRect}
-              onSetDraftSegmentLength={setDraftSegmentLength}
+              onActivateDraftRoom={
+                DRAW_EDITING_DISABLED ? noop : activateDraftRoom
+              }
+              onPlaceCorner={DRAW_EDITING_DISABLED ? noop : placeCorner}
+              onPlaceRect={DRAW_EDITING_DISABLED ? noop : placeRect}
+              onSetDraftSegmentLength={
+                DRAW_EDITING_DISABLED ? noop : setDraftSegmentLength
+              }
               onRequestCloseDraft={closeDraft}
-              onMoveDraftCorner={moveDraftCorner}
-              onSplitDraftWall={splitDraftWall}
-              onDeleteDraftCorner={deleteDraftCorner}
-              onStartDraw={startDrawAt}
+              onMoveDraftCorner={DRAW_EDITING_DISABLED ? noop : moveDraftCorner}
+              onSplitDraftWall={DRAW_EDITING_DISABLED ? noop : splitDraftWall}
+              onDeleteDraftCorner={
+                DRAW_EDITING_DISABLED ? noop : deleteDraftCorner
+              }
+              onStartDraw={DRAW_EDITING_DISABLED ? noop : startDrawAt}
               placingItem={placing?.item ?? null}
               onPlacingEnd={endPlacing}
             />
@@ -942,7 +936,7 @@ function Planner() {
       <StatusBar
         mode={viewMode}
         libraryOpen={objectsOpen}
-        floor={floor}
+        rooms={derived.rooms}
         selectedRoomName={selectedRoom?.name ?? null}
         portalStatus={portalStatus}
         cameraReadout={readoutStore}
@@ -975,7 +969,7 @@ function Planner() {
         </div>
       </div>
       <Inspector
-        floor={floor}
+        rooms={derived.rooms}
         unit={unit}
         mode={viewMode}
         selectedRoom={selectedRoom}

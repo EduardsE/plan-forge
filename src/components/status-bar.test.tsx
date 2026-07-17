@@ -1,36 +1,34 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createCameraReadoutStore } from "#/lib/camera";
-import { createSampleRoom, type Floor } from "#/lib/model";
+import { createSampleRoom, type Room } from "#/lib/model";
 import { StatusBar } from "./status-bar";
 
 // The shipping sample floor is a two-room flat (M6); these tests pin a
 // one-room floor so the single-room readout stays covered.
-const oneRoomFloor = (): Floor => ({ rooms: [createSampleRoom()] });
+const oneRoom = (): Room[] => [createSampleRoom()];
 
-const twoRoomFloor = (): Floor => ({
-  rooms: [
-    createSampleRoom(),
-    {
-      id: "kitchen",
-      name: "Kitchen",
-      outline: [
-        { x: 6.4, y: 0 },
-        { x: 9.4, y: 0 },
-        { x: 9.4, y: 3 },
-        { x: 6.4, y: 3 },
-      ],
-      openings: [],
-      furniture: [],
-    },
-  ],
-});
+const twoRooms = (): Room[] => [
+  createSampleRoom(),
+  {
+    id: "kitchen",
+    name: "Kitchen",
+    outline: [
+      { x: 6.4, y: 0 },
+      { x: 9.4, y: 0 },
+      { x: 9.4, y: 3 },
+      { x: 6.4, y: 3 },
+    ],
+    openings: [],
+    furniture: [],
+  },
+];
 
 function renderBar(props: Partial<Parameters<typeof StatusBar>[0]>) {
   return render(
     <StatusBar
       mode="3d"
-      floor={oneRoomFloor()}
+      rooms={oneRoom()}
       cameraReadout={createCameraReadoutStore()}
       unit="m"
       onUnitChange={() => {}}
@@ -109,7 +107,7 @@ describe("StatusBar", () => {
       <StatusBar
         mode="3d"
         libraryOpen
-        floor={oneRoomFloor()}
+        rooms={oneRoom()}
         cameraReadout={createCameraReadoutStore()}
         unit="m"
         onUnitChange={() => {}}
@@ -124,7 +122,7 @@ describe("StatusBar", () => {
   });
 
   it("shows floor totals and the containing room on a multi-room floor", () => {
-    renderBar({ floor: twoRoomFloor(), selectedRoomName: "Kitchen" });
+    renderBar({ rooms: twoRooms(), selectedRoomName: "Kitchen" });
 
     // 33.28 + 9 summed across rooms.
     expect(screen.getByText("42.28 m²")).toBeTruthy();
@@ -132,7 +130,7 @@ describe("StatusBar", () => {
   });
 
   it("shows the room count alone with no selection", () => {
-    renderBar({ floor: twoRoomFloor() });
+    renderBar({ rooms: twoRooms() });
 
     expect(screen.getByText("2 rooms")).toBeTruthy();
   });

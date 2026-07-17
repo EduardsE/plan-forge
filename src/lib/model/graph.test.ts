@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type GraphState, NODE_MERGE_TOLERANCE, normalizeGraph } from "./graph";
+import { type GraphState, normalizeGraph } from "./graph";
 
 let counter = 0;
 const nextId = () => `gen-${counter++}`;

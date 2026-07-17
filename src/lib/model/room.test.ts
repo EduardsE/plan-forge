@@ -29,7 +29,7 @@ const mountedItem = (elevation: number, height = 0.6): FurnitureItem => ({
   position: { x: 2, y: 0.05 },
   rotation: 0,
   footprint: { width: 0.7, depth: 0.1, height },
-  mount: { roomId: "room", wallIndex: 0, offset: 1.6, elevation },
+  mount: { edgeId: "e", offset: 1.6, side: 1, elevation },
 });
 
 describe("wallHeightOf", () => {

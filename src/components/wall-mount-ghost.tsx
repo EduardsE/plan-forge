@@ -13,10 +13,10 @@ import { SnapGuides } from "#/components/snap-guides";
 import {
   type CatalogItem,
   defaultMountElevation,
+  type Floor,
   type Point,
-  type Room,
 } from "#/lib/model";
-import { mountAcrossRooms, type WallMountResult } from "#/lib/mount-place";
+import { mountAt, type WallMountResult } from "#/lib/mount-place";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -34,19 +34,19 @@ const GHOST_COLOR = "#3a5bf0";
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 
 export interface WallMountGhostProps {
-  /** Every room of the floor; the mount targets the nearest fitting wall. */
-  rooms: Room[];
+  /** The graph floor; the mount targets the nearest fitting edge. */
+  floor: Floor;
   item: CatalogItem;
   unit: Unit;
   /** Snap toggle: off means free slide along the wall (no quantize/guides). */
   snapEnabled: boolean;
-  /** The landing room is the mount's own (`result.mount.roomId`). */
+  /** The landing room falls out of where the mounted position lands. */
   onPlace: (result: WallMountResult) => void;
   onCancel: () => void;
 }
 
 export function WallMountGhost({
-  rooms,
+  floor,
   item,
   unit,
   snapEnabled,
@@ -75,10 +75,9 @@ export function WallMountGhost({
         ? { x: hit.x, y: hit.z }
         : null;
     };
-    /** Nearest fitting wall across every room; the winning room rides in
-     * the result's `mount.roomId`. */
+    /** Nearest fitting edge across the graph. */
     const resolve = (point: Point): WallMountResult | null =>
-      mountAcrossRooms(rooms, point, item.footprint, elevation, snapEnabled);
+      mountAt(floor, point, item.footprint, elevation, snapEnabled);
     const handleMove = (event: PointerEvent) => {
       const point = toFloor(event);
       setResult(point ? resolve(point) : null);
@@ -97,7 +96,7 @@ export function WallMountGhost({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [rooms, item, elevation, snapEnabled, camera, gl, onPlace, onCancel]);
+  }, [floor, item, elevation, snapEnabled, camera, gl, onPlace, onCancel]);
 
   if (!result) return null;
   const { width, height } = item.footprint;

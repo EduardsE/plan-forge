@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { createSampleFloor, createSampleRoom } from "./model";
+import { createSampleFloor, type Floor, reconcileFloor } from "./model";
 import {
   deserializeSavedState,
   formatSavedStatus,
   serializeSavedState,
 } from "./persistence";
 
+/** A normalized v6 floor — reconcile is idempotent, so a read round-trips it. */
+const sampleFloor = (): Floor => reconcileFloor(createSampleFloor());
+
 const sampleState = () => ({
-  floor: createSampleFloor(),
+  floor: sampleFloor(),
   unit: "cm" as const,
   savedAt: 1_750_000_000_000,
 });
 
-/** `sampleState` with its (single) room swapped for a patched copy. */
-const withRoom = (room: ReturnType<typeof createSampleRoom>) => ({
-  ...sampleState(),
-  floor: { rooms: [room] },
-});
+/** `sampleState` with a patched floor. */
+const withFloor = (floor: Floor) => ({ ...sampleState(), floor });
 
 describe("serialize / deserialize round trip", () => {
   it("restores the floor, unit, and savedAt exactly", () => {
@@ -25,129 +25,46 @@ describe("serialize / deserialize round trip", () => {
   });
 
   it("round-trips a material colorway override", () => {
-    const base = createSampleRoom();
-    const state = withRoom({
-      ...base,
-      furniture: base.furniture.map((item, i) =>
-        i === 0 ? { ...item, colorway: "#6f7d6a" } : item,
-      ),
-    });
-    const restored = deserializeSavedState(serializeSavedState(state));
-    expect(restored?.floor.rooms[0].furniture[0].colorway).toBe("#6f7d6a");
+    const floor = sampleFloor();
+    floor.furniture[0] = { ...floor.furniture[0], colorway: "#6f7d6a" };
+    const restored = deserializeSavedState(
+      serializeSavedState(withFloor(floor)),
+    );
+    expect(restored?.floor.furniture[0].colorway).toBe("#6f7d6a");
   });
 
   it("round-trips a custom wall height and rejects out-of-range ones", () => {
-    const state = withRoom({ ...createSampleRoom(), wallHeight: 3.1 });
-    expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
+    const floor = sampleFloor();
+    floor.rooms[0] = { ...floor.rooms[0], wallHeight: 3.1 };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(floor))),
+    ).toEqual(withFloor(floor));
 
     for (const wallHeight of [1.9, 12, Number.NaN]) {
-      const bad = withRoom({ ...createSampleRoom(), wallHeight });
-      expect(deserializeSavedState(serializeSavedState(bad))).toBeNull();
+      const bad = sampleFloor();
+      bad.rooms[0] = { ...bad.rooms[0], wallHeight };
+      expect(
+        deserializeSavedState(serializeSavedState(withFloor(bad))),
+      ).toBeNull();
     }
   });
 
-  it("accepts an empty room (a new room awaiting its first draw)", () => {
-    const state = withRoom({
-      id: "room-1",
-      name: "Untitled room",
-      outline: [],
-      openings: [],
-      furniture: [],
-    });
+  it("accepts an empty graph (a new room awaiting its first draw)", () => {
+    const state = withFloor(
+      reconcileFloor({
+        nodes: [],
+        edges: [],
+        openings: [],
+        furniture: [],
+        rooms: [],
+      }),
+    );
     expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
   });
 
   it("round-trips a named floor", () => {
-    const state = {
-      ...sampleState(),
-      floor: { ...createSampleFloor(), name: "Loft apartment" },
-    };
+    const state = withFloor({ ...sampleFloor(), name: "Loft apartment" });
     expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
-  });
-});
-
-/** A room as pre-v5 saves stored it: mounts without a `roomId`. */
-const withLegacyMounts = (room: ReturnType<typeof createSampleRoom>) => ({
-  ...room,
-  furniture: room.furniture.map((item) => {
-    if (!item.mount) return item;
-    const { roomId: _dropped, ...mount } = item.mount;
-    return { ...item, mount };
-  }),
-});
-
-describe("legacy single-room saves (v1–v3)", () => {
-  /** A pre-v4 payload: `room` at the top level, no room id, no mount roomIds. */
-  const legacyPayload = (version: number) => {
-    const { id: _dropped, ...room } = withLegacyMounts(createSampleRoom());
-    return JSON.stringify({
-      version,
-      room,
-      unit: "cm",
-      savedAt: 1_750_000_000_000,
-    });
-  };
-
-  it("migrates each readable legacy version into a one-room floor", () => {
-    for (const version of [1, 2, 3]) {
-      const restored = deserializeSavedState(legacyPayload(version));
-      expect(restored).not.toBeNull();
-      expect(restored?.floor.rooms).toHaveLength(1);
-      const { id, ...rest } = restored?.floor.rooms[0] ?? { id: "" };
-      expect(typeof id).toBe("string");
-      expect(id.length).toBeGreaterThan(0);
-      // Migration fills every mount's roomId with the generated room id.
-      const mounted = rest.furniture?.find((item) => item.mount);
-      expect(mounted?.mount?.roomId).toBe(id);
-      const { id: _sample, ...sampleRest } = createSampleRoom();
-      expect(rest).toEqual({
-        ...sampleRest,
-        furniture: sampleRest.furniture.map((item) =>
-          item.mount ? { ...item, mount: { ...item.mount, roomId: id } } : item,
-        ),
-      });
-      expect(restored?.unit).toBe("cm");
-      expect(restored?.savedAt).toBe(1_750_000_000_000);
-    }
-  });
-
-  it("migrates a v4 floor save, filling mount roomIds from the owning room", () => {
-    const room = withLegacyMounts(createSampleRoom());
-    const json = JSON.stringify({
-      version: 4,
-      floor: { rooms: [room] },
-      unit: "cm",
-      savedAt: 1_750_000_000_000,
-    });
-    const restored = deserializeSavedState(json);
-    expect(restored).not.toBeNull();
-    const mounted = restored?.floor.rooms[0].furniture.find(
-      (item) => item.mount,
-    );
-    expect(mounted?.mount?.roomId).toBe(room.id);
-  });
-
-  it("rejects a v5 mount whose roomId isn't the owning room's", () => {
-    const base = createSampleRoom();
-    const state = withRoom({
-      ...base,
-      furniture: base.furniture.map((item) =>
-        item.mount
-          ? { ...item, mount: { ...item.mount, roomId: "someone-else" } }
-          : item,
-      ),
-    });
-    expect(deserializeSavedState(serializeSavedState(state))).toBeNull();
-  });
-
-  it("still rejects a malformed legacy room", () => {
-    const broken = JSON.stringify({
-      version: 3,
-      room: { outline: 5, openings: [], furniture: [] },
-      unit: "cm",
-      savedAt: 1,
-    });
-    expect(deserializeSavedState(broken)).toBeNull();
   });
 });
 
@@ -158,12 +75,20 @@ describe("deserializeSavedState rejection", () => {
     expect(deserializeSavedState('"a string"')).toBeNull();
   });
 
-  it("rejects an unreadable version", () => {
+  it("rejects an unreadable version (including a pre-v6 payload)", () => {
     const json = serializeSavedState(sampleState()).replace(
-      '"version":5',
+      '"version":6',
       '"version":99',
     );
     expect(deserializeSavedState(json)).toBeNull();
+    // A seeded v5 (per-room-outline) payload is discarded — no migration.
+    const v5 = JSON.stringify({
+      version: 5,
+      floor: { rooms: [{ id: "r", outline: [], openings: [], furniture: [] }] },
+      unit: "cm",
+      savedAt: 1,
+    });
+    expect(deserializeSavedState(v5)).toBeNull();
   });
 
   it("rejects a bad unit or savedAt", () => {
@@ -180,95 +105,135 @@ describe("deserializeSavedState rejection", () => {
     ).toBeNull();
   });
 
-  it("rejects a floor with no rooms, missing ids, or duplicate ids", () => {
-    const state = sampleState();
+  it("rejects duplicate node ids or non-finite coordinates", () => {
+    const dupNode = sampleFloor();
+    dupNode.nodes[1] = { ...dupNode.nodes[1], id: dupNode.nodes[0].id };
     expect(
-      deserializeSavedState(
-        serializeSavedState({ ...state, floor: { rooms: [] } }),
-      ),
+      deserializeSavedState(serializeSavedState(withFloor(dupNode))),
     ).toBeNull();
 
-    const { id: _dropped, ...idless } = createSampleRoom();
+    const badCoord = sampleFloor();
+    badCoord.nodes[0] = { ...badCoord.nodes[0], x: Number.NaN };
     expect(
-      deserializeSavedState(
-        serializeSavedState({
-          ...state,
-          floor: { rooms: [idless] } as never,
-        }),
-      ),
-    ).toBeNull();
-
-    expect(
-      deserializeSavedState(
-        serializeSavedState({
-          ...state,
-          floor: { rooms: [createSampleRoom(), createSampleRoom()] },
-        }),
-      ),
+      deserializeSavedState(serializeSavedState(withFloor(badCoord))),
     ).toBeNull();
   });
 
-  it("rejects malformed outline points and furniture", () => {
-    const badOutline = withRoom({
-      ...createSampleRoom(),
-      outline: [{ x: 0, y: "zero" }] as never,
-    });
-    expect(deserializeSavedState(serializeSavedState(badOutline))).toBeNull();
-    const badFurniture = withRoom({
-      ...createSampleRoom(),
-      furniture: [{ id: "x", catalogId: "desk" }] as never,
-    });
-    expect(deserializeSavedState(serializeSavedState(badFurniture))).toBeNull();
+  it("rejects an edge with a missing endpoint, equal endpoints, or a duplicate id", () => {
+    const missing = sampleFloor();
+    missing.edges[0] = { ...missing.edges[0], a: "ghost" };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(missing))),
+    ).toBeNull();
+
+    const loop = sampleFloor();
+    loop.edges[0] = { ...loop.edges[0], b: loop.edges[0].a };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(loop))),
+    ).toBeNull();
+
+    const dup = sampleFloor();
+    dup.edges[1] = { ...dup.edges[1], id: dup.edges[0].id };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(dup))),
+    ).toBeNull();
   });
 
-  it("rejects an opening whose wallIndex points past the outline's walls", () => {
-    const room = createSampleRoom();
-    room.openings[0].wallIndex = room.outline.length;
+  it("rejects an opening on a missing edge, with a bad side, or overrunning its edge", () => {
+    const noEdge = sampleFloor();
+    noEdge.openings[0] = { ...noEdge.openings[0], edgeId: "ghost" };
     expect(
-      deserializeSavedState(serializeSavedState(withRoom(room))),
+      deserializeSavedState(serializeSavedState(withFloor(noEdge))),
+    ).toBeNull();
+
+    const badSide = sampleFloor();
+    badSide.openings[0] = { ...badSide.openings[0], side: 0 as never };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(badSide))),
+    ).toBeNull();
+
+    const overrun = sampleFloor();
+    overrun.openings[0] = { ...overrun.openings[0], width: 999 };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(overrun))),
+    ).toBeNull();
+  });
+
+  it("rejects duplicate room ids or a non-finite anchor", () => {
+    const dup = sampleFloor();
+    dup.rooms[1] = { ...dup.rooms[1], id: dup.rooms[0].id };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(dup))),
+    ).toBeNull();
+
+    const badAnchor = sampleFloor();
+    badAnchor.rooms[0] = {
+      ...badAnchor.rooms[0],
+      anchor: { x: 0, y: "z" } as never,
+    };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(badAnchor))),
+    ).toBeNull();
+  });
+
+  it("rejects malformed furniture", () => {
+    const bad = sampleFloor();
+    bad.furniture = [{ id: "x", catalogId: "desk" }] as never;
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(bad))),
+    ).toBeNull();
+  });
+
+  it("rejects a mount on a missing edge or a bad side", () => {
+    const noEdge = sampleFloor();
+    const mounted = noEdge.furniture.findIndex((item) => item.mount);
+    const item = noEdge.furniture[mounted];
+    noEdge.furniture[mounted] = {
+      ...item,
+      mount: { ...item.mount, edgeId: "ghost" } as never,
+    };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(noEdge))),
     ).toBeNull();
   });
 
   it("round-trips a stacked rider and rejects broken stack anchors", () => {
-    const stacked = () => {
-      const room = createSampleRoom();
-      room.furniture.push({
-        id: "lamp-1",
-        catalogId: "table-lamp",
-        position: { x: 4, y: 1 },
-        rotation: 0,
-        footprint: { width: 0.22, depth: 0.22, height: 0.48 },
-        stack: { hostId: "desk-1", dx: 0.4, dy: 0.1 },
-      });
-      return withRoom(room);
+    const stacked = (): Floor => {
+      const floor = sampleFloor();
+      floor.furniture = [
+        ...floor.furniture,
+        {
+          id: "lamp-1",
+          catalogId: "table-lamp",
+          position: { x: 4, y: 1 },
+          rotation: 0,
+          footprint: { width: 0.22, depth: 0.22, height: 0.48 },
+          stack: { hostId: "desk-1", dx: 0.4, dy: 0.1 },
+        },
+      ];
+      return floor;
     };
-    expect(deserializeSavedState(serializeSavedState(stacked()))).toEqual(
-      stacked(),
-    );
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(stacked()))),
+    ).toEqual(withFloor(stacked()));
 
-    // Anchor pointing at a missing host.
     const orphaned = stacked();
-    const orphanRider = orphaned.floor.rooms[0].furniture.at(-1);
-    if (orphanRider?.stack) orphanRider.stack.hostId = "gone";
-    expect(deserializeSavedState(serializeSavedState(orphaned))).toBeNull();
+    orphaned.furniture[orphaned.furniture.length - 1] = {
+      ...orphaned.furniture[orphaned.furniture.length - 1],
+      stack: { hostId: "gone", dx: 0, dy: 0 },
+    };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(orphaned))),
+    ).toBeNull();
 
-    // Anchor pointing at another rider (stacks are one level deep).
-    const chained = stacked();
-    chained.floor.rooms[0].furniture.push({
-      id: "lamp-2",
-      catalogId: "table-lamp",
-      position: { x: 4, y: 1 },
-      rotation: 0,
-      footprint: { width: 0.22, depth: 0.22, height: 0.48 },
-      stack: { hostId: "lamp-1", dx: 0, dy: 0 },
-    });
-    expect(deserializeSavedState(serializeSavedState(chained))).toBeNull();
-
-    // Non-finite offsets.
     const bent = stacked();
-    const bentRider = bent.floor.rooms[0].furniture.at(-1);
-    if (bentRider?.stack) bentRider.stack.dx = Number.NaN;
-    expect(deserializeSavedState(serializeSavedState(bent))).toBeNull();
+    bent.furniture[bent.furniture.length - 1] = {
+      ...bent.furniture[bent.furniture.length - 1],
+      stack: { hostId: "desk-1", dx: Number.NaN, dy: 0 },
+    };
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(bent))),
+    ).toBeNull();
   });
 });
 
