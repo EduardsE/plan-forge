@@ -592,8 +592,8 @@ export function DrawScene({
     return SNAP_TOLERANCE_PX / zoom;
   };
 
-  // Esc / ⏎ / delete for the chain and hovered node/edge (a node drag swallows
-  // esc in its own capture-phase handler).
+  // Esc / ⏎ / delete for the chain, in-progress rectangle, and hovered
+  // node/edge (a node drag swallows esc in its own capture-phase handler).
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
@@ -608,6 +608,12 @@ export function DrawScene({
           else onEndChain();
           return;
         }
+      }
+      if (rectMode && rectAnchor && event.key === "Escape") {
+        // Gesture-cancel only: drop the first corner, keep the tool armed;
+        // the floor/history are untouched (nothing committed yet).
+        setRectAnchor(null);
+        return;
       }
       if (selectMode && (event.key === "Delete" || event.key === "Backspace")) {
         if (hoveredNode) {
@@ -625,9 +631,11 @@ export function DrawScene({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     wallTool,
+    rectMode,
     selectMode,
     chainNode,
     pendingPoint,
+    rectAnchor,
     hoveredNode,
     hoveredEdge,
     onEndChain,
