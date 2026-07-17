@@ -607,6 +607,9 @@ export interface PlannerCanvasProps {
   snapEnabled: boolean;
   /** Time-of-day lighting preset (3D lens) — drives the sun/ambient/fill. */
   timeOfDay: TimeOfDay;
+  /** World sun-anchor azimuth in degrees (route-owned: dial override or the
+   * automatic most-glazed-wall pick). The preset's rake swings around it. */
+  sunAnchorDeg: number;
   /** Draw-mode state, owned by the route. Draw edits the wall graph live. */
   drawTool: DrawTool;
   /** Id of the chain's last node (wall tool), or null for no active chain. */
@@ -645,6 +648,7 @@ export function PlannerCanvas({
   gridVisible,
   snapEnabled,
   timeOfDay,
+  sunAnchorDeg,
   drawTool,
   chainNode,
   onExtendChain,
@@ -989,6 +993,7 @@ export function PlannerCanvas({
             unit={unit}
             snapEnabled={snapEnabled}
             timeOfDay={timeOfDay}
+            sunAnchorDeg={sunAnchorDeg}
             onSelectItem={selectItem}
             onMoveItem={moveItem}
             onMoveActiveChange={handleRoomDragActive}

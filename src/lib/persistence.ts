@@ -35,6 +35,12 @@ export interface SavedState {
   unit: Unit;
   /** Epoch ms of the write, so a reload reports "saved 5 min ago" honestly. */
   savedAt: number;
+  /**
+   * Manual sun-anchor azimuth in degrees (world `atan2(z, x)`), set from the
+   * sun dial. Absent = automatic (the most-glazed wall). Optional so pre-dial
+   * v6 saves stay readable — no version bump.
+   */
+  sunAzimuthDeg?: number;
 }
 
 export function serializeSavedState(state: SavedState): string {
@@ -254,11 +260,16 @@ export function deserializeSavedState(json: string | null): SavedState | null {
   }
   if (state.unit !== "cm" && state.unit !== "m") return null;
   if (!isFiniteNumber(state.savedAt)) return null;
+  if (state.sunAzimuthDeg !== undefined && !isFiniteNumber(state.sunAzimuthDeg))
+    return null;
   if (!isFloor(state.floor)) return null;
   return {
     floor: reconcileFloor(state.floor),
     unit: state.unit,
     savedAt: state.savedAt,
+    ...(state.sunAzimuthDeg !== undefined
+      ? { sunAzimuthDeg: state.sunAzimuthDeg }
+      : {}),
   };
 }
 

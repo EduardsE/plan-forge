@@ -52,7 +52,6 @@ import {
   SLAB_THICKNESS,
   STUB_WALL_HEIGHT,
   stubSpans,
-  sunAnchorAzimuth,
   WALL_THICKNESS,
   type WallSolid,
 } from "#/lib/room-scene";
@@ -982,6 +981,9 @@ export interface RoomSceneProps {
   snapEnabled: boolean;
   /** The lighting preset driving the sun, ambient and fill (3D lens). */
   timeOfDay: TimeOfDay;
+  /** World sun-anchor azimuth in degrees — the route owns the dial override
+   * vs automatic (`sunAnchorAzimuth`) choice. */
+  sunAnchorDeg: number;
   onSelectItem: (id: string) => void;
   /** Live update during a move drag (already snapped; wall items carry
    * mount). Furniture is floor-level — the write-back re-partitions the item
@@ -1008,6 +1010,7 @@ export function RoomScene({
   unit,
   snapEnabled,
   timeOfDay,
+  sunAnchorDeg,
   onSelectItem,
   onMoveItem,
   onMoveActiveChange,
@@ -1034,9 +1037,6 @@ export function RoomScene({
   const sunRadius = bounds
     ? Math.hypot(bounds.width, bounds.height) / 2 + 1
     : 6;
-  // World-fixed sun anchor: outside the most-glazed wall, so its patches sit
-  // still on the floor while the camera orbits.
-  const sunAnchor = useMemo(() => sunAnchorAzimuth(solids), [solids]);
   // Selection and drags are floor-wide; the item is found across every room
   // plus the unassigned bucket, with mount/stack positions already derived.
   const allFurniture = useMemo(
@@ -1075,7 +1075,7 @@ export function RoomScene({
         color={lighting.sun.color}
         intensity={lighting.sun.intensity}
         elevationDeg={lighting.sun.elevationDeg}
-        azimuth={sunAnchor + MathUtils.degToRad(lighting.sun.rakeDeg)}
+        azimuth={MathUtils.degToRad(sunAnchorDeg + lighting.sun.rakeDeg)}
       />
       {bounds && <FloorContactShadow bounds={bounds} />}
       <Walls solids={solids} posts={posts} />

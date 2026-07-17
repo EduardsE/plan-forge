@@ -67,6 +67,15 @@ describe("serialize / deserialize round trip", () => {
     expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
   });
 
+  it("round-trips a sun-azimuth override, and its absence", () => {
+    const aimed = { ...sampleState(), sunAzimuthDeg: -117.5 };
+    expect(deserializeSavedState(serializeSavedState(aimed))).toEqual(aimed);
+    // Auto mode (and every pre-dial v6 save) simply omits the field.
+    const auto = deserializeSavedState(serializeSavedState(sampleState()));
+    expect(auto).toEqual(sampleState());
+    expect(auto && "sunAzimuthDeg" in auto).toBe(false);
+  });
+
   it("round-trips opening sill/head overrides, rejects malformed ones", () => {
     const floor = sampleFloor();
     floor.openings = floor.openings.map((o) =>
@@ -129,6 +138,14 @@ describe("deserializeSavedState rejection", () => {
         serializeSavedState({ ...state, savedAt: Number.NaN }),
       ),
     ).toBeNull();
+  });
+
+  it("rejects a non-finite sun azimuth", () => {
+    const json = serializeSavedState(sampleState()).replace(
+      '"unit"',
+      '"sunAzimuthDeg":"south","unit"',
+    );
+    expect(deserializeSavedState(json)).toBeNull();
   });
 
   it("rejects duplicate node ids or non-finite coordinates", () => {

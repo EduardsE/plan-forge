@@ -83,6 +83,7 @@ import {
   serializeSavedState,
 } from "#/lib/persistence";
 import { edgeWallObstacles, type Obstacle, PLACEMENT_GRID } from "#/lib/place";
+import { buildEdgeSolids, sunAnchorAzimuth } from "#/lib/room-scene";
 import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -464,6 +465,26 @@ function Planner() {
   const [snapEnabled, setSnapEnabled] = useState(true);
   // Time-of-day lighting for the 3D lens (ephemeral, like the toggles above).
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(DEFAULT_TIME_OF_DAY);
+  // Manual sun-anchor azimuth from the dial (degrees, world atan2(z,x));
+  // null = automatic (outside the most-glazed wall). Persisted with the room,
+  // unlike the hour — orientation is a fact about the home.
+  const [sunAzimuthDeg, setSunAzimuthDeg] = useState<number | null>(null);
+  const autoSunAnchorDeg = useMemo(
+    () =>
+      (sunAnchorAzimuth(buildEdgeSolids(floor, derived.rooms)) * 180) / Math.PI,
+    [floor, derived.rooms],
+  );
+  const sunAnchorDeg = sunAzimuthDeg ?? autoSunAnchorDeg;
+  // The dial aims the *actual* sun (anchor + the preset's rake); store the
+  // anchor so presets keep swinging their daily arc around the aimed point.
+  const handleAimSun = useCallback(
+    (aimedDeg: number) => {
+      const anchor = aimedDeg - LIGHTING[timeOfDay].sun.rakeDeg;
+      setSunAzimuthDeg((((anchor % 360) + 540) % 360) - 180);
+    },
+    [timeOfDay],
+  );
+  const handleResetSun = useCallback(() => setSunAzimuthDeg(null), []);
   // Fullscreen targets the workspace pane (canvas + its chrome), so the nav
   // rail drops away but the toolbars ride along.
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -497,26 +518,33 @@ function Planner() {
       // history keeps it out of the undo stack.
       setFloorHistory(createHistory(saved.floor));
       setUnit(saved.unit);
+      setSunAzimuthDeg(saved.sunAzimuthDeg ?? null);
       setSavedAt(saved.savedAt);
       lastSavedRef.current = JSON.stringify({
         floor: saved.floor,
         unit: saved.unit,
+        sunAzimuthDeg: saved.sunAzimuthDeg ?? null,
       });
     }
     setStorageReady(true);
   }, []);
   useEffect(() => {
     if (!storageReady) return;
-    const payload = JSON.stringify({ floor, unit });
+    const payload = JSON.stringify({ floor, unit, sunAzimuthDeg });
     if (payload === lastSavedRef.current) return;
     lastSavedRef.current = payload;
     const now = Date.now();
     localStorage.setItem(
       STORAGE_KEY,
-      serializeSavedState({ floor, unit, savedAt: now }),
+      serializeSavedState({
+        floor,
+        unit,
+        savedAt: now,
+        sunAzimuthDeg: sunAzimuthDeg ?? undefined,
+      }),
     );
     setSavedAt(now);
-  }, [storageReady, floor, unit]);
+  }, [storageReady, floor, unit, sunAzimuthDeg]);
 
   // Draw mode edits the wall graph live (Phase 9). Session state is just the
   // active tool plus the chain's last node id (wall tool; null = no chain);
@@ -930,6 +958,7 @@ function Planner() {
               gridVisible={gridVisible}
               snapEnabled={snapEnabled}
               timeOfDay={timeOfDay}
+              sunAnchorDeg={sunAnchorDeg}
               drawTool={drawTool}
               chainNode={chainNode}
               onExtendChain={extendChain}
@@ -963,7 +992,15 @@ function Planner() {
           onZoomToFit={() => cameraApiRef.current?.zoomToFit()}
         />
         {viewMode === "3d" && (
-          <TimeOfDayControl value={timeOfDay} onChange={setTimeOfDay} />
+          <TimeOfDayControl
+            value={timeOfDay}
+            onChange={setTimeOfDay}
+            sunAzimuthDeg={sunAnchorDeg + LIGHTING[timeOfDay].sun.rakeDeg}
+            sunOverridden={sunAzimuthDeg != null}
+            readout={readoutStore}
+            onAimSun={handleAimSun}
+            onResetSun={handleResetSun}
+          />
         )}
         {placing && (
           <PlacementDragLayer
