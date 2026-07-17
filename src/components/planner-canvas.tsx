@@ -41,6 +41,7 @@ import {
 import {
   addFloorOpening,
   addFurniture,
+  allFurnitureOf,
   type Bounds,
   type CatalogItem,
   type DerivedRoom,
@@ -56,11 +57,8 @@ import {
   type Opening,
   type OpeningKind,
   type Point,
-  type Room,
   removeFloorOpening,
   resizeFloorOpening,
-  roomAtPoint,
-  roomById,
   type Stack,
   updateFloorFurniture,
   updateFurniture,
@@ -570,11 +568,7 @@ export interface PlannerCanvasProps {
   /** Furniture that lands in no room (dangling / open-canvas) — rendered and
    * editable like any other; its membership readout is "—". */
   unassignedFurniture: FurnitureItem[];
-  /** A discrete mutation of one room — one undo step in the floor history.
-   * (Furniture drops still target the room under the cursor; furniture edits
-   * are floor-level, through `onFloorChange`/`onFloorPreview`.) */
-  onRoomChange: (roomId: string, room: Room) => void;
-  /** A discrete whole-floor mutation (opening edits) — one undo step. */
+  /** A discrete whole-floor mutation (opening edits, drops) — one undo step. */
   onFloorChange: (floor: Floor) => void;
   /** A mid-drag whole-floor state (opening slide) — not its own step. */
   onFloorPreview: (floor: Floor) => void;
@@ -620,7 +614,6 @@ export function PlannerCanvas({
   floor,
   rooms,
   unassignedFurniture,
-  onRoomChange,
   onFloorChange,
   onFloorPreview,
   onRoomDragActiveChange,
@@ -679,6 +672,12 @@ export function PlannerCanvas({
   );
   // Whole-floor camera framing: every room's outline together.
   const bounds = useMemo(() => floorBounds(rooms), [rooms]);
+  // Every derived furniture item (rooms' + unassigned) — the placement ghost
+  // snaps against all of them, floor-wide.
+  const allFurniture = useMemo(
+    () => allFurnitureOf(rooms, unassignedFurniture),
+    [rooms, unassignedFurniture],
+  );
 
   const selectItem = useCallback(
     (id: string) => {
@@ -769,60 +768,54 @@ export function PlannerCanvas({
   }, [placingItem, setSelectedId, setSelectedOpeningId]);
 
   const placeDraggedItem = useCallback(
-    // The ghost already resolved which room the drop targets (the one whose
-    // outline contains the snapped center).
-    (roomId: string, center: Point, stack?: Stack) => {
+    // Furniture is floor-level: the drop lands on `floor.furniture` wherever
+    // the walls allowed the ghost to sit — a room, the dead band at a shared
+    // wall, or the open canvas. deriveFloor assigns membership (or the
+    // unassigned bucket); no drop is ever silently discarded.
+    (center: Point, stack?: Stack) => {
       if (!placingItem) return;
-      const owner = roomById(rooms, roomId);
-      if (!owner) return;
       const id = crypto.randomUUID();
-      onRoomChange(
-        owner.id,
-        addFurniture(owner, {
-          id,
-          catalogId: placingItem.id,
-          position: center,
-          rotation: 0,
-          footprint: placingItem.footprint,
-          // Dropped on a host's top: the item lands stacked.
-          ...(stack ? { stack } : {}),
-        }),
+      onFloorChange(
+        updateFloorFurniture(floor, (room) =>
+          addFurniture(room, {
+            id,
+            catalogId: placingItem.id,
+            position: center,
+            rotation: 0,
+            footprint: placingItem.footprint,
+            // Dropped on a host's top: the item lands stacked.
+            ...(stack ? { stack } : {}),
+          }),
+        ),
       );
       // Selection follows the drop, same as duplicate.
       setSelectedId(id);
       onPlacingEnd();
     },
-    [
-      placingItem,
-      rooms,
-      onRoomChange,
-      onPlacingEnd, // Selection follows the drop, same as duplicate.
-      setSelectedId,
-    ],
+    [placingItem, floor, onFloorChange, onPlacingEnd, setSelectedId],
   );
   const placeMountedItem = useCallback(
-    // The landing room is wherever the mounted position falls (the graph is
-    // one shared space); the mount stores only the edge.
+    // A mount stores only its edge — floor-level like every other item; the
+    // room (if any) is a derived readout of where the position falls.
     (result: WallMountResult) => {
       if (!placingItem) return;
-      const owner = roomAtPoint(rooms, result.position, 0.05);
-      if (!owner) return;
       const id = crypto.randomUUID();
-      onRoomChange(
-        owner.id,
-        addFurniture(owner, {
-          id,
-          catalogId: placingItem.id,
-          position: result.position,
-          rotation: result.rotation,
-          footprint: placingItem.footprint,
-          mount: result.mount,
-        }),
+      onFloorChange(
+        updateFloorFurniture(floor, (room) =>
+          addFurniture(room, {
+            id,
+            catalogId: placingItem.id,
+            position: result.position,
+            rotation: result.rotation,
+            footprint: placingItem.footprint,
+            mount: result.mount,
+          }),
+        ),
       );
       setSelectedId(id);
       onPlacingEnd();
     },
-    [placingItem, rooms, onRoomChange, onPlacingEnd, setSelectedId],
+    [placingItem, floor, onFloorChange, onPlacingEnd, setSelectedId],
   );
 
   return (
@@ -976,7 +969,8 @@ export function PlannerCanvas({
             />
           ) : (
             <PlacementGhost
-              rooms={rooms}
+              furniture={allFurniture}
+              floor={floor}
               item={placingItem}
               unit={unit}
               snapEnabled={snapEnabled}

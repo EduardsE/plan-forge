@@ -170,10 +170,6 @@ function Planner() {
     },
     [],
   );
-  const commitRoom = useCallback(
-    (targetId: string, next: Room) => commitToRoom(targetId, () => next),
-    [commitToRoom],
-  );
   const settleRoom = useCallback(() => setFloorHistory(settleHistory), []);
   const undoRoom = useCallback(() => setFloorHistory(undoHistory), []);
   const redoRoom = useCallback(() => setFloorHistory(redoHistory), []);
@@ -794,7 +790,6 @@ function Planner() {
               floor={floor}
               rooms={derived.rooms}
               unassignedFurniture={derived.unassignedFurniture}
-              onRoomChange={commitRoom}
               onFloorChange={setFloor}
               onFloorPreview={previewFloor}
               onRoomDragActiveChange={handleRoomDragActive}

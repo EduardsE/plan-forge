@@ -36,7 +36,7 @@ import {
   outlineBounds,
   portalLabel,
 } from "#/lib/model";
-import { rotatedFootprintSize } from "#/lib/place";
+import { edgeWallObstacles, rotatedFootprintSize } from "#/lib/place";
 import {
   circlePoints,
   dashedPolyline,
@@ -938,6 +938,8 @@ export function PlanScene({
   // graph's edge face-adjacency.
   const solids = useMemo(() => buildEdgeSolids(floor, rooms), [floor, rooms]);
   const posts = useMemo(() => nodePosts(floor, solids), [floor, solids]);
+  // Wall slabs for the rotate handle's re-containment (same policy as nudge).
+  const wallObstacles = useMemo(() => edgeWallObstacles(floor), [floor]);
   const portalLabels = useMemo(
     () =>
       new Map(
@@ -1002,10 +1004,13 @@ export function PlanScene({
         onResize={onResizeOpening}
         onDragActiveChange={onMoveActiveChange}
       />
-      {selectedItem && selectedRoom && !selectedItem.mount && !drag && (
+      {selectedItem && !selectedItem.mount && !drag && (
         <RotateHandle
           item={selectedItem}
-          outline={selectedRoom.outline}
+          // An unassigned item has no containing room — no wall-angle
+          // detents, but the knob (and the 15° grid) still works.
+          outline={selectedRoom?.outline ?? []}
+          wallObstacles={wallObstacles}
           snapEnabled={snapEnabled}
           onRotate={(update) => onMoveItem(selectedItem.id, update)}
           onActiveChange={onMoveActiveChange}

@@ -10,9 +10,9 @@ import {
 } from "#/components/move-drag";
 import type { FurnitureItem, FurnitureUpdate, Point } from "#/lib/model";
 import {
-  PLACEMENT_GRID,
+  type Obstacle,
   rotatedFootprintSize,
-  snapPlacement,
+  separateFromWalls,
 } from "#/lib/place";
 import {
   nearbyWallAngles,
@@ -60,8 +60,9 @@ interface RotateDrag {
   /** Nearby non-axis wall tangents joining the detent set. */
   wallAngles: number[];
   footprint: { width: number; depth: number };
-  /** Floor items re-contain against the outline; a stacked rider's position
-   * derives from its host (restack clamps it), so it passes through. */
+  /** Floor items re-contain against the wall slabs; a stacked rider's
+   * position derives from its host (restack clamps it), so it passes
+   * through. */
   contain: boolean;
   originScreen: { x: number; y: number };
 }
@@ -69,12 +70,18 @@ interface RotateDrag {
 export function RotateHandle({
   item,
   outline,
+  wallObstacles,
   snapEnabled,
   onRotate,
   onActiveChange,
 }: {
   item: FurnitureItem;
+  /** The containing room's outline for wall-angle detents — empty for an
+   * unassigned (open-canvas) item, which keeps only the 15° grid. */
   outline: Point[];
+  /** The floor's wall slabs — a spun hull poking into one is pushed back
+   * out, the same wall-collision policy as a nudge. */
+  wallObstacles: Obstacle[];
   /** Snap toggle: off means free rotation (whole degrees, no detents). */
   snapEnabled: boolean;
   /** Live update per pointermove — a preview, settled by `onActiveChange`. */
@@ -94,6 +101,8 @@ export function RotateHandle({
   rotateRef.current = onRotate;
   const snapRef = useRef(snapEnabled);
   snapRef.current = snapEnabled;
+  const wallsRef = useRef(wallObstacles);
+  wallsRef.current = wallObstacles;
 
   useEffect(() => {
     if (!drag) return;
@@ -129,21 +138,18 @@ export function RotateHandle({
       const raw = drag.originalRotation + bearing - drag.grabAngle;
       const free = event.altKey || !snapRef.current;
       const rotation = snapRotationDeg(raw, drag.wallAngles, !free);
-      // Spinning near a wall can poke the hull out; slide the center back
-      // in from the grab position (containment only — no quantize/flush),
-      // exactly like the inspector's Rotate button.
+      // Spinning near a wall can poke the hull into a slab; push the center
+      // back out from the grab position (wall collision only — no
+      // quantize/flush), exactly like a nudge, so detenting back to the grab
+      // angle returns the item exactly where it started.
       let position = drag.originalPosition;
       if (drag.contain) {
         const hull = rotatedFootprintSize(drag.footprint, rotation);
-        position = snapPlacement(
-          outline,
+        position = separateFromWalls(
+          wallsRef.current,
           hull,
           drag.originalPosition,
-          [],
-          0,
-          PLACEMENT_GRID,
-          false,
-        ).center;
+        );
       }
       rotateRef.current({ position, rotation });
     };
@@ -164,7 +170,7 @@ export function RotateHandle({
       window.removeEventListener("pointerup", handleUp);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [drag, camera, gl, outline, end]);
+  }, [drag, camera, gl, end]);
 
   const { width, depth } = item.footprint;
   const knobDistance = width / 2 + KNOB_GAP;
