@@ -16,6 +16,7 @@ import {
   Path,
   RepeatWrapping,
   Shape,
+  ShapeGeometry,
   SRGBColorSpace,
 } from "three";
 import { ModelBody } from "#/components/model-body";
@@ -43,7 +44,12 @@ import type {
   FurnitureUpdate,
   Point,
 } from "#/lib/model";
-import { allFurnitureOf, floorBounds, stackSurfaceHeight } from "#/lib/model";
+import {
+  allFurnitureOf,
+  floorBounds,
+  stackSurfaceHeight,
+  wallHeightOf,
+} from "#/lib/model";
 import { modelForCatalogId } from "#/lib/model/models";
 import {
   buildEdgeSolids,
@@ -109,6 +115,17 @@ const noRaycast = () => null;
 const shadowOnlyMaterial = new MeshBasicMaterial({
   colorWrite: false,
   depthWrite: false,
+});
+
+/**
+ * Shadow-only variant for the ceiling lid: the shadow pass flips FrontSide
+ * to BackSide, which would cull a flat upward-facing plane from an overhead
+ * sun, so the lid must render both faces into the shadow map.
+ */
+const ceilingShadowMaterial = new MeshBasicMaterial({
+  colorWrite: false,
+  depthWrite: false,
+  side: DoubleSide,
 });
 
 /**
@@ -283,6 +300,37 @@ function Platform({ outline }: { outline: Point[] }) {
         <meshLambertMaterial attach="material-1" color={SLAB_SIDE_COLOR} />
       </mesh>
     </group>
+  );
+}
+
+/**
+ * Invisible lid at wall-top height: the roofless dollhouse would let the
+ * world-fixed sun pour straight into the interior, so this proxy casts into
+ * the shadow map (never the camera) and direct sun only reaches the room
+ * through its door and window holes.
+ */
+function CeilingShadowProxy({
+  outline,
+  height,
+}: {
+  outline: Point[];
+  height: number;
+}) {
+  const geometry = useMemo(() => {
+    if (outline.length < 3) return null;
+    return new ShapeGeometry(planShape(outline));
+  }, [outline]);
+
+  if (!geometry) return null;
+  return (
+    <mesh
+      geometry={geometry}
+      material={ceilingShadowMaterial}
+      rotation-x={-Math.PI / 2}
+      position-y={height}
+      raycast={noRaycast}
+      castShadow
+    />
   );
 }
 
@@ -1091,6 +1139,10 @@ export function RoomScene({
       {rooms.map((room) => (
         <group key={room.id}>
           <Platform outline={room.outline} />
+          <CeilingShadowProxy
+            outline={room.outline}
+            height={wallHeightOf(room)}
+          />
           <FurnitureBucket
             furniture={room.furniture}
             selectedId={selectedId}
