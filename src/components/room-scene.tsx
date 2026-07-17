@@ -17,6 +17,7 @@ import {
   Shape,
   SRGBColorSpace,
 } from "three";
+import { ModelBody } from "#/components/model-body";
 import {
   CLICK_SLOP_PX,
   MoveDragSession,
@@ -25,6 +26,7 @@ import {
 import { SelectionChip } from "#/components/selection-chip";
 import { overlappingFurnitureIds } from "#/lib/collision";
 import {
+  furnitureBaseColor,
   furnitureParts,
   type PartShape,
   partHullScale,
@@ -39,6 +41,7 @@ import type {
   Point,
 } from "#/lib/model";
 import { allFurnitureOf, floorBounds, stackSurfaceHeight } from "#/lib/model";
+import { modelForCatalogId } from "#/lib/model/models";
 import {
   buildEdgeSolids,
   type NodePost,
@@ -639,39 +642,60 @@ function FurnitureMesh({
     : stackTop !== undefined
       ? stackTop + 0.002
       : FLOOR_TOP + (isRug ? 0.001 : 0.017);
-  const body = (
+  const partsMeshes = (
     <>
-      {!item.mount && !isRug && shadow}
-      <group position-y={lift}>
-        {parts.map((part, i) => (
+      {parts.map((part, i) => (
+        <mesh
+          // biome-ignore lint/suspicious/noArrayIndexKey: parts are a static list per catalog id.
+          key={i}
+          position={part.position}
+          rotation={part.rotation ?? [0, 0, 0]}
+          scale={partScale(part.shape)}
+        >
+          <PartGeometry shape={part.shape} />
+          <meshLambertMaterial
+            color={warning ? warnColor(part.color) : part.color}
+          />
+        </mesh>
+      ))}
+      {active &&
+        parts.map((part, i) => (
           <mesh
             // biome-ignore lint/suspicious/noArrayIndexKey: parts are a static list per catalog id.
             key={i}
             position={part.position}
             rotation={part.rotation ?? [0, 0, 0]}
-            scale={partScale(part.shape)}
+            scale={partHullScale(part.shape)}
+            raycast={noRaycast}
           >
             <PartGeometry shape={part.shape} />
-            <meshLambertMaterial
-              color={warning ? warnColor(part.color) : part.color}
-            />
+            {hullMaterial}
           </mesh>
         ))}
-        {active &&
-          parts.map((part, i) => (
-            <mesh
-              // biome-ignore lint/suspicious/noArrayIndexKey: parts are a static list per catalog id.
-              key={i}
-              position={part.position}
-              rotation={part.rotation ?? [0, 0, 0]}
-              scale={partHullScale(part.shape)}
-              raycast={noRaycast}
-            >
-              <PartGeometry shape={part.shape} />
-              {hullMaterial}
-            </mesh>
-          ))}
-      </group>
+    </>
+  );
+  // Real-mesh coverage: manifest hit renders the prepared GLB, with the
+  // primitives fragment as its loading/failure fallback; a miss renders the
+  // primitives directly — byte-for-byte the old path.
+  const entry = modelForCatalogId(item.catalogId);
+  const baseColor = item.colorway ?? furnitureBaseColor(item.catalogId);
+  const bodyMeshes = entry ? (
+    <ModelBody
+      entry={entry}
+      footprint={item.footprint}
+      color={warning ? warnColor(baseColor) : baseColor}
+      active={active}
+      hullColor={SELECTION_COLOR}
+      hullOpacity={selected ? 0.85 : 0.4}
+      fallback={partsMeshes}
+    />
+  ) : (
+    partsMeshes
+  );
+  const body = (
+    <>
+      {!item.mount && !isRug && shadow}
+      <group position-y={lift}>{bodyMeshes}</group>
     </>
   );
 
