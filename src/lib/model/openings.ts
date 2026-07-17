@@ -1,59 +1,15 @@
 import { reconcileFloor } from "./derived";
-import type { Floor, Opening, Room, RoomOpening } from "./types";
+import type { Floor, Opening } from "./types";
 
 /**
- * Pure opening mutations. Two families:
- *
- * - The **Room** setters (`addOpening`/`moveOpening`/`flipDoorHinge`/
- *   `removeOpening`) work on a derived room's `RoomOpening[]` — same contract
- *   as `furniture.ts`: a new Room per change, the same reference for no-ops.
- *
- * - The **Floor** setters (`addFloorOpening`, `moveFloorOpening`,
- *   `resizeFloorOpening`, `flipFloorOpeningHinge`, `flipFloorOpeningSide`,
- *   `removeFloorOpening`) edit `floor.openings` directly, in **edge**
- *   coordinates — the graph is the single source of truth now that walls are
- *   one solid per edge. Each is `Floor → Floor`, returns the same reference on
- *   a no-op, and ends in `reconcileFloor` so stored state stays normalized.
+ * Pure opening mutations, all **Floor** setters editing `floor.openings`
+ * directly in **edge** coordinates — the graph is the single source of truth
+ * now that walls are one solid per edge and derived rooms carry no per-wall
+ * opening copies. (`addFloorOpening`, `moveFloorOpening`, `resizeFloorOpening`,
+ * `flipFloorOpeningHinge`, `flipFloorOpeningSide`, `removeFloorOpening`.) Each
+ * is `Floor → Floor`, returns the same reference on a no-op, and ends in
+ * `reconcileFloor` so stored state stays normalized.
  */
-
-/** A wall-click inserting a new door or window. */
-export function addOpening(room: Room, opening: RoomOpening): Room {
-  return { ...room, openings: [...room.openings, opening] };
-}
-
-/** Absolute re-offset along the host wall, from a drag (already snapped). */
-export function moveOpening(room: Room, id: string, offset: number): Room {
-  return {
-    ...room,
-    openings: room.openings.map((opening) =>
-      opening.id === id ? { ...opening, offset } : opening,
-    ),
-  };
-}
-
-/** Swap a door's hinge to the opposite edge; windows are left unchanged. */
-export function flipDoorHinge(room: Room, id: string): Room {
-  return {
-    ...room,
-    openings: room.openings.map((opening) =>
-      opening.id === id && opening.kind === "door"
-        ? {
-            ...opening,
-            hinge: (opening.hinge ?? "start") === "start" ? "end" : "start",
-          }
-        : opening,
-    ),
-  };
-}
-
-export function removeOpening(room: Room, id: string): Room {
-  return {
-    ...room,
-    openings: room.openings.filter((opening) => opening.id !== id),
-  };
-}
-
-// —— Floor-level (edge-coordinate) setters ——————————————————————————————
 
 const MIN_FLOOR_OPENING_WIDTH = 0.3;
 const EPS = 1e-6;

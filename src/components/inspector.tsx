@@ -382,6 +382,10 @@ export interface InspectorProps {
   selectedWallHeight?: number;
   /** Number of graph nodes (corners), for the draw-mode OUTLINE view. */
   nodeCount?: number;
+  /** How many openings sit on the first room's walls (the ROOM overview
+   * count) — sourced from `floor.openings`, since derived rooms no longer
+   * carry per-wall opening copies. */
+  openingCount?: number;
   /** The selected opening is a portal — "Door connects Living ↔ Kitchen"
    * (derived from wall abutment); shown with the floor overview. */
   portalStatus?: string | null;
@@ -404,6 +408,7 @@ export function Inspector({
   selectedHostName = null,
   selectedWallHeight = 2.5,
   nodeCount = 0,
+  openingCount = 0,
   portalStatus = null,
   onResize,
   onRotateTo,
@@ -522,8 +527,7 @@ export function Inspector({
             <div className="text-[12.5px] text-[var(--ink-500)]">
               {firstRoom?.furniture.length ?? 0} object
               {(firstRoom?.furniture.length ?? 0) === 1 ? "" : "s"} ·{" "}
-              {firstRoom?.openings.length ?? 0} opening
-              {(firstRoom?.openings.length ?? 0) === 1 ? "" : "s"}
+              {openingCount} opening{openingCount === 1 ? "" : "s"}
             </div>
             <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
               Select an item in either lens to edit its size, rotation and

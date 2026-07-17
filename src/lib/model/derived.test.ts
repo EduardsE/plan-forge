@@ -37,26 +37,23 @@ describe("deriveFloor", () => {
     );
   });
 
-  it("maps openings onto their room's outline walls with edge refs", () => {
-    const living = deriveFloor(makeFloor()).rooms.find(
-      (r) => r.id === "living",
-    );
-    if (!living) throw new Error("missing living");
-    const door = living.openings.find((o) => o.id === "door-BE");
-    const window = living.openings.find((o) => o.id === "window-AB");
-    if (!door || !window) throw new Error("missing opening");
+  it("counts the openings on each room's walls (matching edge + side)", () => {
+    const derived = deriveFloor(makeFloor());
+    const living = derived.rooms.find((r) => r.id === "living");
+    const kitchen = derived.rooms.find((r) => r.id === "kitchen");
+    if (!living || !kitchen) throw new Error("missing room");
 
-    // Door on the shared wall (x ≈ 6.35), offset ≈ 3.6.
-    const doorWall = living.outline[door.wallIndex];
-    expect(doorWall.x).toBeCloseTo(6.35, 4);
-    expect(door.offset).toBeCloseTo(3.6, 2);
-    expect(living.wallRefs[door.wallIndex].edgeId).toBe("BE");
+    // Both the door on BE (side 1) and the window on AB (side 1) sit on the
+    // living room's walls; neither is on the kitchen's side of any wall.
+    expect(living.openingCount).toBe(2);
+    expect(kitchen.openingCount).toBe(0);
 
-    // Window on the y = 0 wall, offset ≈ 3.5.
-    const windowWall = living.outline[window.wallIndex];
-    expect(windowWall.y).toBeCloseTo(0, 4);
-    expect(window.offset).toBeCloseTo(3.5, 2);
-    expect(living.wallRefs[window.wallIndex].edgeId).toBe("AB");
+    // The shared wall BE reads +1 for living, -1 for kitchen (opposite
+    // traversal), so the door (side 1) counts only for living.
+    const livingBE = living.wallRefs.find((ref) => ref.edgeId === "BE");
+    const kitchenBE = kitchen.wallRefs.find((ref) => ref.edgeId === "BE");
+    expect(livingBE?.side).toBe(1);
+    expect(kitchenBE?.side).toBe(-1);
   });
 
   it("derives wall sides from traversal orientation, not a label-point test", () => {

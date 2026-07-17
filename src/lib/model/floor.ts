@@ -81,16 +81,6 @@ export function allFurnitureOf(
   return [...rooms.flatMap((room) => room.furniture), ...unassigned];
 }
 
-/** The room owning this opening, or undefined for an unknown id. */
-export function roomOfOpening(
-  rooms: Room[],
-  openingId: string,
-): Room | undefined {
-  return rooms.find((room) =>
-    room.openings.some((opening) => opening.id === openingId),
-  );
-}
-
 /**
  * The room whose outline contains this plan point (boundary-tolerant), or
  * undefined when the point lies in no room. First match wins — rooms sit

@@ -6,7 +6,6 @@ import {
   roomAtPoint,
   roomById,
   roomOfFurniture,
-  roomOfOpening,
   totalFloorArea,
   totalPerimeter,
   updateFloorFurniture,
@@ -57,12 +56,6 @@ describe("owning-room resolution", () => {
     expect(roomOfFurniture(rooms(), "stool-1")?.id).toBe("kitchen");
     expect(roomOfFurniture(rooms(), "desk-1")?.id).toBe("living-room");
     expect(roomOfFurniture(rooms(), "ghost")).toBeUndefined();
-  });
-
-  it("finds the room owning an opening", () => {
-    expect(roomOfOpening(rooms(), "kitchen-door")?.id).toBe("kitchen");
-    expect(roomOfOpening(rooms(), "window-1")?.id).toBe("living-room");
-    expect(roomOfOpening(rooms(), "ghost")).toBeUndefined();
   });
 });
 

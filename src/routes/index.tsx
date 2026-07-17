@@ -888,6 +888,7 @@ function Planner() {
         selectedWallHeight={selectedWallHeight}
         portalStatus={portalStatus}
         nodeCount={floor.nodes.length}
+        openingCount={derived.rooms[0]?.openingCount ?? 0}
         onResize={resizeSelected}
         onRotateTo={rotateSelectedTo}
         onElevate={elevateSelected}

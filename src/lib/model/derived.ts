@@ -1,31 +1,24 @@
 import type { Face } from "./faces";
 import { extractFaces, insetPolygon } from "./faces";
 import { pointInOutline, WALL_THICKNESS } from "./geometry";
-import type { WallEdge, WallNode } from "./graph";
+import type { WallEdge } from "./graph";
 import { normalizeGraph } from "./graph";
 import { matchRooms } from "./room-match";
-import type {
-  Floor,
-  FurnitureItem,
-  Opening,
-  Point,
-  Room,
-  RoomOpening,
-  RoomRecord,
-} from "./types";
+import type { Floor, FurnitureItem, Room, RoomRecord } from "./types";
 import { deriveMountTransform } from "./wall-mount";
 
 /**
- * The derived-rooms bridge: the app stores a graph `Floor`, but scenes,
- * seams, the inspector and every per-room pure setter still speak `Room`.
+ * The derived-rooms bridge: the app stores a graph `Floor`, but the scenes,
+ * the inspector and the per-room pure setters still speak `Room`.
  * `deriveFloor` turns the graph into renderable rooms whose interior outlines
  * sit exactly where the old per-room outlines sat (the face inset by half a
- * wall thickness), so nothing downstream changed. `updateDerivedRoom` runs an
- * edit expressed against a derived room back through the graph, and
- * `reconcileFloor` re-normalizes + re-matches after every mutation.
+ * wall thickness). Openings are edge-anchored on the graph and rendered
+ * straight from `floor.openings`, so a derived room carries only the *count*
+ * of the openings on its walls (for the inspector), not per-wall copies.
+ * `updateDerivedRoom` runs an edit expressed against a derived room back
+ * through the graph, and `reconcileFloor` re-normalizes + re-matches after
+ * every mutation.
  */
-
-const EPS = 1e-9;
 
 /** A derived room's outline wall, tagged with the graph edge it came from. */
 export interface WallRef {
@@ -37,6 +30,8 @@ export interface WallRef {
 export interface DerivedRoom extends Room {
   /** `wallRefs[i]` is the graph edge (and side) of outline wall `i`. */
   wallRefs: WallRef[];
+  /** How many `floor.openings` sit on this room's walls (its side). */
+  openingCount: number;
   face: Face;
 }
 
@@ -47,106 +42,15 @@ export interface DerivedFloor {
   faces: Face[];
 }
 
-function nodesMap(floor: Floor): Map<string, WallNode> {
-  return new Map(floor.nodes.map((n) => [n.id, n]));
-}
-
 function edgesMap(floor: Floor): Map<string, WallEdge> {
   return new Map(floor.edges.map((e) => [e.id, e]));
-}
-
-interface UnitLine {
-  start: Point;
-  dir: Point;
-  length: number;
-}
-
-/** The a→b unit line of an edge, or null when degenerate/missing. */
-function edgeLine(
-  edge: WallEdge | undefined,
-  nodes: Map<string, WallNode>,
-): UnitLine | null {
-  if (!edge) return null;
-  const a = nodes.get(edge.a);
-  const b = nodes.get(edge.b);
-  if (!a || !b) return null;
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const length = Math.hypot(dx, dy);
-  if (length < EPS) return null;
-  return {
-    start: { x: a.x, y: a.y },
-    dir: { x: dx / length, y: dy / length },
-    length,
-  };
-}
-
-/** The start→end unit line of a derived outline wall, or null when degenerate. */
-function wallLine(outline: Point[], wallIndex: number): UnitLine | null {
-  const start = outline[wallIndex];
-  const end = outline[(wallIndex + 1) % outline.length];
-  if (!start || !end) return null;
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const length = Math.hypot(dx, dy);
-  if (length < EPS) return null;
-  return { start, dir: { x: dx / length, y: dy / length }, length };
-}
-
-function projectOnto(line: UnitLine, p: Point): number {
-  return (p.x - line.start.x) * line.dir.x + (p.y - line.start.y) * line.dir.y;
-}
-
-/**
- * Map a stored edge `Opening` onto derived outline wall `wallIndex`: project
- * its world span onto the wall and take the near-to-wall-start offset. Hinge
- * flips when the wall runs opposite the edge.
- */
-function mapOpeningToWall(
-  opening: Opening,
-  outline: Point[],
-  wallIndex: number,
-  nodes: Map<string, WallNode>,
-  edges: Map<string, WallEdge>,
-): RoomOpening | null {
-  const edge = edgeLine(edges.get(opening.edgeId), nodes);
-  const wall = wallLine(outline, wallIndex);
-  if (!edge || !wall) return null;
-  const near = {
-    x: edge.start.x + edge.dir.x * opening.offset,
-    y: edge.start.y + edge.dir.y * opening.offset,
-  };
-  const far = {
-    x: edge.start.x + edge.dir.x * (opening.offset + opening.width),
-    y: edge.start.y + edge.dir.y * (opening.offset + opening.width),
-  };
-  const t0 = projectOnto(wall, near);
-  const t1 = projectOnto(wall, far);
-  const width = opening.width;
-  const offset = Math.max(0, Math.min(Math.min(t0, t1), wall.length - width));
-  const mapped: RoomOpening = {
-    id: opening.id,
-    kind: opening.kind,
-    wallIndex,
-    offset,
-    width,
-  };
-  if (opening.hinge) {
-    const sameDir = edge.dir.x * wall.dir.x + edge.dir.y * wall.dir.y >= 0;
-    mapped.hinge = sameDir
-      ? opening.hinge
-      : opening.hinge === "start"
-        ? "end"
-        : "start";
-  }
-  return mapped;
 }
 
 /**
  * Turn a graph `Floor` into renderable rooms: every graph face becomes a
  * `DerivedRoom` (matched to its `RoomRecord`, or a stable fallback), its
- * interior outline the face inset by half a wall thickness, its openings the
- * edge openings on its side of each wall, its furniture the items whose
+ * interior outline the face inset by half a wall thickness, its `openingCount`
+ * the number of `floor.openings` on its walls, its furniture the items whose
  * center it contains (first face wins; the rest are `unassignedFurniture`).
  * Mounted items get their `position`/`rotation` derived from the edge.
  */
@@ -156,7 +60,6 @@ export function deriveFloor(floor: Floor): DerivedFloor {
   const recordByFace = new Map<Face, RoomRecord>();
   for (const m of match.matched) recordByFace.set(m.face, m.record);
 
-  const nodes = nodesMap(floor);
   const edges = edgesMap(floor);
 
   // Derive mounted furniture transforms once, floor-wide.
@@ -193,21 +96,17 @@ export function deriveFloor(floor: Floor): DerivedFloor {
       return { edgeId, side };
     });
 
-    const openings: RoomOpening[] = [];
-    for (const opening of floor.openings) {
-      const wallIndex = wallRefs.findIndex(
-        (ref) => ref.edgeId === opening.edgeId && ref.side === opening.side,
-      );
-      if (wallIndex === -1) continue;
-      const mapped = mapOpeningToWall(
-        opening,
-        outline,
-        wallIndex,
-        nodes,
-        edges,
-      );
-      if (mapped) openings.push(mapped);
-    }
+    // Openings live on the graph edges (rendered from `floor.openings`); a
+    // room only needs to know how many sit on its walls, for the inspector.
+    const openingCount = floor.openings.reduce(
+      (count, opening) =>
+        wallRefs.some(
+          (ref) => ref.edgeId === opening.edgeId && ref.side === opening.side,
+        )
+          ? count + 1
+          : count,
+      0,
+    );
 
     const roomFurniture: FurnitureItem[] = [];
     for (const item of furniture) {
@@ -225,7 +124,8 @@ export function deriveFloor(floor: Floor): DerivedFloor {
         ? { wallHeight: record.wallHeight }
         : {}),
       outline,
-      openings,
+      openings: [],
+      openingCount,
       furniture: roomFurniture,
       wallRefs,
       face,
