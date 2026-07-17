@@ -33,9 +33,17 @@ const HULL_INFLATE = 1.04;
 const preloadModel = useGLTF.preload;
 if (typeof window !== "undefined") {
   window.addEventListener("error", (event) => {
-    if (event.message?.includes("Could not load /models/")) {
-      event.preventDefault();
-    }
+    const message = event.message;
+    if (!message) return;
+    const isKnownManifestFile = Object.values(MODEL_MANIFEST).some((entry) =>
+      message.includes(entry.file),
+    );
+    if (!isKnownManifestFile) return;
+    console.warn(
+      "Model preload failed (primitives fallback will render):",
+      message,
+    );
+    event.preventDefault();
   });
   for (const entry of Object.values(MODEL_MANIFEST)) preloadModel(entry.file);
 }
