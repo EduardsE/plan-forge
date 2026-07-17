@@ -45,21 +45,28 @@ import {
   DEFAULT_WALL_HEIGHT,
   deriveFloor,
   duplicateFurniture,
+  edgeCeiling,
   type Floor,
   type Footprint,
+  flipFloorOpeningHinge,
+  flipFloorOpeningSide,
   floorBounds,
   furnitureDisplayName,
+  openingVerticals,
   type Point,
   portalLabel,
   type Room,
   reconcileFloor,
+  removeFloorOpening,
   removeFurniture,
+  resizeFloorOpening,
   roomOfFurniture,
   rotateFurniture,
   setFurnitureColorway,
   setFurnitureFootprint,
   setFurnitureRotation,
   setMountElevation,
+  setOpeningVerticals,
   setRoomName,
   setRoomWallHeight,
   updateDerivedRoom,
@@ -220,14 +227,67 @@ function Planner() {
   const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(
     null,
   );
-  const portalStatus = useMemo(() => {
-    if (!selectedOpeningId || viewMode !== "2d") return null;
+  // Everything the inspector's opening view needs, resolved once: effective
+  // verticals, the host edge's ceiling, the portal label, whether the wall
+  // borders two rooms. Openings are editable in both furnish lenses.
+  const selectedOpening = useMemo(() => {
+    if (!selectedOpeningId || viewMode === "draw") return null;
     const opening = floor.openings.find((o) => o.id === selectedOpeningId);
     if (!opening) return null;
-    const label = portalLabel(derived.rooms, floor, selectedOpeningId);
-    if (!label) return null;
-    return `${opening.kind === "door" ? "Door" : "Window"} connects ${label}`;
+    const { bottom, top } = openingVerticals(opening);
+    return {
+      opening,
+      bottom,
+      top,
+      ceiling: edgeCeiling(derived.rooms, opening.edgeId),
+      connects: portalLabel(derived.rooms, floor, opening.id),
+      twoFace:
+        derived.rooms.filter((r) =>
+          r.wallRefs.some((ref) => ref.edgeId === opening.edgeId),
+        ).length === 2,
+    };
   }, [selectedOpeningId, viewMode, derived, floor]);
+  const portalStatus = useMemo(() => {
+    if (!selectedOpening?.connects) return null;
+    const kind = selectedOpening.opening.kind === "door" ? "Door" : "Window";
+    return `${kind} connects ${selectedOpening.connects}`;
+  }, [selectedOpening]);
+  // Inspector opening commits: one history step each, clamping in the model
+  // setters (a same-reference no-op lands nowhere).
+  const resizeSelectedOpening = useCallback(
+    (width: number) => {
+      if (!selectedOpeningId) return;
+      setFloor(resizeFloorOpening(floorRef.current, selectedOpeningId, width));
+    },
+    [selectedOpeningId, setFloor],
+  );
+  const setSelectedOpeningVerticals = useCallback(
+    (verticals: { bottom?: number; top?: number }) => {
+      if (!selectedOpening) return;
+      setFloor(
+        setOpeningVerticals(
+          floorRef.current,
+          selectedOpening.opening.id,
+          verticals,
+          selectedOpening.ceiling,
+        ),
+      );
+    },
+    [selectedOpening, setFloor],
+  );
+  const flipSelectedOpeningHinge = useCallback(() => {
+    if (!selectedOpeningId) return;
+    setFloor(flipFloorOpeningHinge(floorRef.current, selectedOpeningId));
+  }, [selectedOpeningId, setFloor]);
+  const flipSelectedOpeningSide = useCallback(() => {
+    if (!selectedOpeningId) return;
+    setFloor(flipFloorOpeningSide(floorRef.current, selectedOpeningId));
+  }, [selectedOpeningId, setFloor]);
+  const deleteSelectedOpening = useCallback(() => {
+    if (!selectedOpeningId) return;
+    setFloor(removeFloorOpening(floorRef.current, selectedOpeningId));
+    setSelectedOpeningId(null);
+  }, [selectedOpeningId, setFloor]);
   // One floor-level furniture commit: the pure setter runs over the whole
   // floor's furniture (`updateFloorFurniture`), re-contained against the wall
   // slabs — furniture is floor-level now, so an item may sit in any room, the
@@ -711,6 +771,42 @@ function Planner() {
     settleRoom,
   ]);
 
+  // The opening selection's keyboard: delete removes, esc deselects. Same
+  // input-skipping window listener as above; furniture selection (which
+  // clears the opening one) owns the richer set.
+  useEffect(() => {
+    if (!selectedOpeningId || selectedId || viewMode === "draw") return;
+    if (sceneDragActive) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest("input, textarea, [contenteditable]")
+      ) {
+        return;
+      }
+      switch (event.key) {
+        case "Delete":
+        case "Backspace":
+          event.preventDefault();
+          deleteSelectedOpening();
+          break;
+        case "Escape":
+          if (!settingsOpen) setSelectedOpeningId(null);
+          break;
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    selectedOpeningId,
+    selectedId,
+    viewMode,
+    sceneDragActive,
+    settingsOpen,
+    deleteSelectedOpening,
+  ]);
+
   // Screen 2d, amended 2026-07-16: the library docks as its own column
   // between rail and canvas while the inspector keeps the right edge — the
   // place → tweak → place loop never has to swap panels.
@@ -887,7 +983,7 @@ function Planner() {
         selectedRoomName={selectedRoomName}
         selectedHostName={selectedHostName}
         selectedWallHeight={selectedWallHeight}
-        portalStatus={portalStatus}
+        selectedOpening={selectedOpening}
         nodeCount={floor.nodes.length}
         openingCount={derived.rooms[0]?.openingCount ?? 0}
         onResize={resizeSelected}
@@ -897,6 +993,11 @@ function Planner() {
         onRecolor={recolorSelected}
         onRotate90={rotateSelected90}
         onClone={cloneSelected}
+        onOpeningResize={resizeSelectedOpening}
+        onOpeningVerticals={setSelectedOpeningVerticals}
+        onOpeningFlipHinge={flipSelectedOpeningHinge}
+        onOpeningFlipSide={flipSelectedOpeningSide}
+        onOpeningDelete={deleteSelectedOpening}
         onDelete={deleteSelected}
       />
     </div>

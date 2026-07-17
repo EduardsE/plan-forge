@@ -111,6 +111,16 @@ describe("buildEdgeSolids", () => {
     expect(byEdge(solids, "CD").height).toBe(3.2);
   });
 
+  it("honors per-opening sill/head overrides", () => {
+    const floor = makeFloor();
+    floor.openings = floor.openings.map((o) =>
+      o.id === "window-AB" ? { ...o, sill: 0.9, head: 2.2 } : o,
+    );
+    const hole = byEdge(solidsOf(floor), "AB").holes[0];
+    expect(hole.bottom).toBe(0.9);
+    expect(hole.top).toBe(2.2);
+  });
+
   it("clamps hole tops to a low wall height", () => {
     const floor = makeFloor();
     floor.rooms = floor.rooms.map((r) => ({ ...r, wallHeight: undefined }));

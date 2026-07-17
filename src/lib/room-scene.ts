@@ -1,10 +1,14 @@
 import type { DerivedRoom } from "#/lib/model";
 import {
   DEFAULT_WALL_HEIGHT,
+  DOOR_HEIGHT,
   type Floor,
   type Opening,
+  openingVerticals,
   type Point,
   WALL_THICKNESS,
+  WINDOW_HEAD,
+  WINDOW_SILL,
   wallHeightOf,
 } from "#/lib/model";
 
@@ -21,19 +25,15 @@ import {
  * no room) renders as a plain wall.
  *
  * All values are meters in plan coordinates (x right, y down — see
- * `model/types.ts`). The vertical extent of openings isn't in the model yet,
- * so this module owns the defaults, measured from the mockup's 3D scene
- * (walls 250 px = 2.5 m at 100 px/m, window at top:56/height:158 px).
+ * `model/types.ts`). Opening vertical extents live on the model now
+ * (`Opening.sill`/`head`, defaults in `model/openings.ts`).
  */
 
 /** Default wall height; rooms can override it (`Room.wallHeight`). */
 export const WALL_HEIGHT = DEFAULT_WALL_HEIGHT;
-export { WALL_THICKNESS };
+export { DOOR_HEIGHT, WALL_THICKNESS, WINDOW_HEAD, WINDOW_SILL };
 /** Thickness of the dollhouse floor platform (mockup slab edge: 18 px). */
 export const SLAB_THICKNESS = 0.18;
-export const DOOR_HEIGHT = 2.05;
-export const WINDOW_SILL = 0.36;
-export const WINDOW_HEAD = 1.94;
 /**
  * Height of a cut-down wall in the dollhouse cutaway (Sims-style): occluding
  * walls drop to this stub instead of hiding, tall enough to read as a wall
@@ -126,11 +126,9 @@ function cutHole(
 ): void {
   const start = Math.min(Math.max(opening.offset, 0), length);
   const end = Math.min(Math.max(opening.offset + opening.width, 0), length);
-  const bottom = opening.kind === "window" ? WINDOW_SILL : 0;
-  const top = Math.min(
-    opening.kind === "window" ? WINDOW_HEAD : DOOR_HEIGHT,
-    height,
-  );
+  const verticals = openingVerticals(opening);
+  const bottom = Math.max(verticals.bottom, 0);
+  const top = Math.min(verticals.top, height);
   if (end - start < MIN_HOLE_SIZE || top - bottom < MIN_HOLE_SIZE) return;
   holes.push({
     id: opening.id,

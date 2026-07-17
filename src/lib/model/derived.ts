@@ -3,6 +3,7 @@ import { extractFaces, insetPolygon } from "./faces";
 import { pointInOutline, WALL_THICKNESS } from "./geometry";
 import type { WallEdge } from "./graph";
 import { normalizeGraph } from "./graph";
+import { DEFAULT_WALL_HEIGHT, wallHeightOf } from "./room";
 import { matchRooms } from "./room-match";
 import type { Floor, FurnitureItem, Room, RoomRecord } from "./types";
 import { deriveMountTransform } from "./wall-mount";
@@ -164,6 +165,17 @@ export function portalLabel(
   const other = adjacent.find((room) => room !== owner) ?? adjacent[1];
   const name = (room: DerivedRoom) => room.name ?? "Untitled room";
   return `${name(owner)} ↔ ${name(other)}`;
+}
+
+/**
+ * Ceiling for openings/mounts on a graph edge: the tallest adjacent room's
+ * wall height (matching `buildEdgeSolids`), the default for a dangling edge.
+ */
+export function edgeCeiling(rooms: DerivedRoom[], edgeId: string): number {
+  const heights = rooms
+    .filter((room) => room.wallRefs.some((ref) => ref.edgeId === edgeId))
+    .map((room) => wallHeightOf(room));
+  return heights.length ? Math.max(...heights) : DEFAULT_WALL_HEIGHT;
 }
 
 function applyFurnitureDiff(

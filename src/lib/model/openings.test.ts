@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   addFloorOpening,
+  DOOR_HEIGHT,
   flipFloorOpeningHinge,
   flipFloorOpeningSide,
+  MIN_OPENING_HEIGHT,
   moveFloorOpening,
+  openingVerticals,
   removeFloorOpening,
   resizeFloorOpening,
+  setOpeningVerticals,
+  shiftOpeningVertical,
+  WINDOW_HEAD,
+  WINDOW_SILL,
 } from "./openings";
 import { makeFloor } from "./test-fixtures";
 import type { Opening } from "./types";
@@ -93,5 +100,123 @@ describe("floor-level opening setters", () => {
     const next = removeFloorOpening(floor, "door-BE");
     expect(next.openings.some((o) => o.id === "door-BE")).toBe(false);
     expect(removeFloorOpening(floor, "nope")).toBe(floor);
+  });
+});
+
+describe("opening vertical extents", () => {
+  const window = (floor: ReturnType<typeof makeFloor>) =>
+    floor.openings.find((o) => o.id === "window-AB");
+  const door = (floor: ReturnType<typeof makeFloor>) =>
+    floor.openings.find((o) => o.id === "door-BE");
+
+  it("defaults come from the constants; stored fields override", () => {
+    const floor = makeFloor();
+    const w = window(floor) as Opening;
+    expect(openingVerticals(w)).toEqual({
+      bottom: WINDOW_SILL,
+      top: WINDOW_HEAD,
+    });
+    expect(openingVerticals(door(floor) as Opening)).toEqual({
+      bottom: 0,
+      top: DOOR_HEIGHT,
+    });
+    expect(openingVerticals({ ...w, sill: 0.8, head: 2.1 })).toEqual({
+      bottom: 0.8,
+      top: 2.1,
+    });
+  });
+
+  it("sets a window's sill and head, clamped to floor/ceiling", () => {
+    const floor = makeFloor();
+    const raised = setOpeningVerticals(
+      floor,
+      "window-AB",
+      { bottom: 0.8, top: 2.2 },
+      2.5,
+    );
+    expect(openingVerticals(window(raised) as Opening)).toEqual({
+      bottom: 0.8,
+      top: 2.2,
+    });
+    // Below the floor / above the ceiling clamp.
+    const clamped = setOpeningVerticals(
+      floor,
+      "window-AB",
+      { bottom: -1, top: 99 },
+      2.5,
+    );
+    expect(openingVerticals(window(clamped) as Opening)).toEqual({
+      bottom: 0,
+      top: 2.5,
+    });
+  });
+
+  it("keeps a minimum extent against the other edge", () => {
+    const floor = makeFloor();
+    // Sill pushed up against the default head stops MIN short of it.
+    const squeezed = setOpeningVerticals(
+      floor,
+      "window-AB",
+      { bottom: 1.9 },
+      2.5,
+    );
+    expect(openingVerticals(window(squeezed) as Opening).bottom).toBeCloseTo(
+      WINDOW_HEAD - MIN_OPENING_HEIGHT,
+      6,
+    );
+    const shrunk = setOpeningVerticals(floor, "window-AB", { top: 0.1 }, 2.5);
+    expect(openingVerticals(window(shrunk) as Opening).top).toBeCloseTo(
+      WINDOW_SILL + MIN_OPENING_HEIGHT,
+      6,
+    );
+  });
+
+  it("pins a door's bottom to the floor, resizes its head", () => {
+    const floor = makeFloor();
+    const tall = setOpeningVerticals(
+      floor,
+      "door-BE",
+      { bottom: 0.5, top: 2.3 },
+      2.5,
+    );
+    expect(openingVerticals(door(tall) as Opening)).toEqual({
+      bottom: 0,
+      top: 2.3,
+    });
+    expect(door(tall)?.sill).toBeUndefined();
+  });
+
+  it("stores defaults as absent fields; no-ops by reference", () => {
+    const floor = makeFloor();
+    const roundTrip = setOpeningVerticals(
+      setOpeningVerticals(floor, "window-AB", { bottom: 0.9 }, 2.5),
+      "window-AB",
+      { bottom: WINDOW_SILL },
+      2.5,
+    );
+    expect(window(roundTrip)?.sill).toBeUndefined();
+    expect(window(roundTrip)?.head).toBeUndefined();
+    // Same values → same reference; unknown id → same reference.
+    expect(
+      setOpeningVerticals(floor, "window-AB", { bottom: WINDOW_SILL }, 2.5),
+    ).toBe(floor);
+    expect(setOpeningVerticals(floor, "nope", { bottom: 1 }, 2.5)).toBe(floor);
+  });
+
+  it("shifts a window vertically preserving height; doors no-op", () => {
+    const floor = makeFloor();
+    const height = WINDOW_HEAD - WINDOW_SILL;
+    const shifted = shiftOpeningVertical(floor, "window-AB", 0.63, 2.5, 0.05);
+    const v = openingVerticals(window(shifted) as Opening);
+    // Quantized to the grid, height preserved.
+    expect(v.bottom).toBeCloseTo(0.65, 6);
+    expect(v.top - v.bottom).toBeCloseTo(height, 6);
+    // Ceiling clamp keeps the whole hole under the ceiling.
+    const high = shiftOpeningVertical(floor, "window-AB", 99, 2.5);
+    expect(openingVerticals(window(high) as Opening).top).toBeCloseTo(2.5, 6);
+    expect(shiftOpeningVertical(floor, "door-BE", 1, 2.5)).toBe(floor);
+    expect(shiftOpeningVertical(floor, "window-AB", WINDOW_SILL, 2.5)).toBe(
+      floor,
+    );
   });
 });

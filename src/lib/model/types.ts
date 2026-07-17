@@ -45,6 +45,17 @@ export interface Opening {
   /** Distance from the edge's node `a` to the opening's near edge, along a→b. */
   offset: number;
   width: number;
+  /**
+   * Windows only: height of the hole's lower edge above the floor. Absent
+   * means the default (`WINDOW_SILL`); doors always start at the floor.
+   * Effective values come from `openingVerticals` (model/openings.ts).
+   */
+  sill?: number;
+  /**
+   * Height of the hole's upper edge above the floor. Absent means the default
+   * (`DOOR_HEIGHT` / `WINDOW_HEAD`).
+   */
+  head?: number;
   /** Doors only: which edge carries the hinge (near edge = `"start"`). */
   hinge?: "start" | "end";
   /**

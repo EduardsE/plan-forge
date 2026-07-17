@@ -23,6 +23,7 @@ import {
   MoveDragSession,
   useMoveDrag,
 } from "#/components/move-drag";
+import { RoomOpenings } from "#/components/room-openings";
 import { SelectionChip } from "#/components/selection-chip";
 import { overlappingFurnitureIds } from "#/lib/collision";
 import {
@@ -820,6 +821,8 @@ export interface RoomSceneProps {
   /** The graph floor — walls are one solid per edge; mounts re-anchor to it. */
   floor: Floor;
   selectedId: string | null;
+  /** Opening selection — doors/windows pick and drag in this lens too. */
+  selectedOpeningId: string | null;
   unit: Unit;
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
   snapEnabled: boolean;
@@ -830,6 +833,14 @@ export interface RoomSceneProps {
   onMoveItem: (id: string, update: FurnitureUpdate) => void;
   /** A move drag started/ended — the canvas locks orbit while it runs. */
   onMoveActiveChange: (active: boolean) => void;
+  onSelectOpening: (id: string) => void;
+  /** One combined opening-drag preview: along-wall offset + (windows) the
+   * raw whole-hole bottom, applied to one floor by the canvas. */
+  onDragOpening: (
+    id: string,
+    offset: number | null,
+    bottom: number | null,
+  ) => void;
 }
 
 export function RoomScene({
@@ -837,11 +848,14 @@ export function RoomScene({
   unassignedFurniture,
   floor,
   selectedId,
+  selectedOpeningId,
   unit,
   snapEnabled,
   onSelectItem,
   onMoveItem,
   onMoveActiveChange,
+  onSelectOpening,
+  onDragOpening,
 }: RoomSceneProps) {
   // Lights aim at the whole floor's center, so a two-room flat reads as one
   // warmly lit model rather than per-room hotspots.
@@ -850,6 +864,11 @@ export function RoomScene({
   // posts at the corner/junction nodes — all floor-level now, drawn once.
   const solids = useMemo(() => buildEdgeSolids(floor, rooms), [floor, rooms]);
   const posts = useMemo(() => nodePosts(floor, solids), [floor, solids]);
+  // Per-edge wall heights: the ceiling clamp for free-vertical mount drags.
+  const edgeHeights = useMemo(
+    () => new Map(solids.map((solid) => [solid.edgeId, solid.height])),
+    [solids],
+  );
   const center: [number, number, number] = bounds
     ? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
     : [0, 0, 0];
@@ -879,6 +898,15 @@ export function RoomScene({
       />
       {bounds && <FloorContactShadow bounds={bounds} />}
       <Walls solids={solids} posts={posts} />
+      <RoomOpenings
+        solids={solids}
+        selectedId={selectedOpeningId}
+        unit={unit}
+        snapEnabled={snapEnabled}
+        onSelect={onSelectOpening}
+        onDrag={onDragOpening}
+        onDragActiveChange={onMoveActiveChange}
+      />
       {rooms.map((room) => (
         <group key={room.id}>
           <Platform outline={room.outline} />
@@ -932,6 +960,8 @@ export function RoomScene({
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}
+          freeVerticalMounts
+          edgeHeights={edgeHeights}
           onMove={(update) => onMoveItem(drag.id, update)}
           onEnd={endDrag}
         />

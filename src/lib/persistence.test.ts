@@ -66,6 +66,32 @@ describe("serialize / deserialize round trip", () => {
     const state = withFloor({ ...sampleFloor(), name: "Loft apartment" });
     expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
   });
+
+  it("round-trips opening sill/head overrides, rejects malformed ones", () => {
+    const floor = sampleFloor();
+    floor.openings = floor.openings.map((o) =>
+      o.kind === "window" ? { ...o, sill: 0.9, head: 2.2 } : o,
+    );
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(floor))),
+    ).toEqual(withFloor(floor));
+
+    // A door can't carry a sill; a head at/under its bottom is malformed.
+    const doorSill = sampleFloor();
+    doorSill.openings = doorSill.openings.map((o) =>
+      o.kind === "door" ? { ...o, sill: 0.5 } : o,
+    );
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(doorSill))),
+    ).toBeNull();
+    const inverted = sampleFloor();
+    inverted.openings = inverted.openings.map((o) =>
+      o.kind === "window" ? { ...o, sill: 1.5, head: 1.2 } : o,
+    );
+    expect(
+      deserializeSavedState(serializeSavedState(withFloor(inverted))),
+    ).toBeNull();
+  });
 });
 
 describe("deserializeSavedState rejection", () => {

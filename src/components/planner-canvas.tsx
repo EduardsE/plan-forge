@@ -45,6 +45,7 @@ import {
   type Bounds,
   type CatalogItem,
   type DerivedRoom,
+  edgeCeiling,
   type Floor,
   type FurnitureItem,
   type FurnitureUpdate,
@@ -60,11 +61,12 @@ import {
   removeFloorOpening,
   resizeFloorOpening,
   type Stack,
+  shiftOpeningVertical,
   updateFloorFurniture,
   updateFurniture,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
-import type { OpeningPlacement } from "#/lib/opening-place";
+import { OPENING_GRID, type OpeningPlacement } from "#/lib/opening-place";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -736,6 +738,30 @@ export function PlannerCanvas({
       onFloorPreview(moveFloorOpening(floor, id, offset)),
     [floor, onFloorPreview],
   );
+  const dragOpening3D = useCallback(
+    // Streams per pointermove during a 3D opening drag: the along-wall slide
+    // and (for windows) the whole-hole vertical shift — height preserved,
+    // clamped to floor/ceiling (the host edge's tallest adjacent room) and
+    // quantized like the slide — land on ONE floor, one preview.
+    (id: string, offset: number | null, bottom: number | null) => {
+      let next = floor;
+      if (offset !== null) next = moveFloorOpening(next, id, offset);
+      if (bottom !== null) {
+        const opening = next.openings.find((o) => o.id === id);
+        if (opening) {
+          next = shiftOpeningVertical(
+            next,
+            id,
+            bottom,
+            edgeCeiling(rooms, opening.edgeId),
+            snapEnabled ? OPENING_GRID : 0,
+          );
+        }
+      }
+      if (next !== floor) onFloorPreview(next);
+    },
+    [floor, rooms, snapEnabled, onFloorPreview],
+  );
   const flipHinge = useCallback(
     (id: string) => onFloorChange(flipFloorOpeningHinge(floor, id)),
     [floor, onFloorChange],
@@ -936,11 +962,14 @@ export function PlannerCanvas({
             unassignedFurniture={unassignedFurniture}
             floor={floor}
             selectedId={selectedId}
+            selectedOpeningId={selectedOpeningId}
             unit={unit}
             snapEnabled={snapEnabled}
             onSelectItem={selectItem}
             onMoveItem={moveItem}
             onMoveActiveChange={handleRoomDragActive}
+            onSelectOpening={selectOpening}
+            onDragOpening={dragOpening3D}
           />
         )}
         {/* The placement ghost raycasts the active camera onto the floor

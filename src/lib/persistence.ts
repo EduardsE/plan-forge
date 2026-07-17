@@ -113,6 +113,17 @@ function areOpenings(
     if (o.hinge !== undefined && o.hinge !== "start" && o.hinge !== "end") {
       return false;
     }
+    // Optional vertical extent: sill (windows only) and head, floor-relative.
+    if (
+      o.sill !== undefined &&
+      (o.kind !== "window" || !isFiniteNumber(o.sill) || o.sill < 0)
+    ) {
+      return false;
+    }
+    if (o.head !== undefined) {
+      const bottom = typeof o.sill === "number" ? o.sill : 0;
+      if (!isFiniteNumber(o.head) || o.head <= bottom) return false;
+    }
     ids.add(o.id);
   }
   return ids.size === value.length;

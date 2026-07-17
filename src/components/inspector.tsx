@@ -1,4 +1,4 @@
-import { Copy, RotateCw, Trash2 } from "lucide-react";
+import { ArrowLeftRight, Copy, DoorOpen, RotateCw, Trash2 } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { CatalogThumbnail } from "#/components/catalog-thumbnails";
 import { colorwaysForCatalog, furnitureBaseColor } from "#/lib/furniture-parts";
@@ -9,6 +9,7 @@ import {
   type FurnitureItem,
   floorArea,
   furnitureDisplayName,
+  type Opening,
   type Point,
   type Room,
   totalFloorArea,
@@ -366,6 +367,175 @@ function SelectionSection({
   );
 }
 
+/** The route-resolved selected opening: the stored shape plus everything the
+ * fields need that only the derived rooms know (effective verticals, the
+ * ceiling clamp, the portal connection, whether the wall has two rooms). */
+export interface OpeningSelection {
+  opening: Opening;
+  /** Effective hole bottom/top above the floor (`openingVerticals`). */
+  bottom: number;
+  top: number;
+  /** The host edge's ceiling — the head clamp (`edgeCeiling`). */
+  ceiling: number;
+  /** "Living room ↔ Kitchen" when the opening is a portal, else null. */
+  connects: string | null;
+  /** The host edge borders two rooms — a door can open either way. */
+  twoFace: boolean;
+}
+
+interface OpeningSectionProps {
+  selection: OpeningSelection;
+  unit: Unit;
+  /** A committed width from the WIDTH field (clamping is the model's). */
+  onResize: (width: number) => void;
+  /** Committed sill/head values, meters above the floor (model clamps). */
+  onVerticals: (verticals: { bottom?: number; top?: number }) => void;
+  onFlipHinge: () => void;
+  onFlipSide: () => void;
+  onDelete: () => void;
+}
+
+function OpeningSection({
+  selection,
+  unit,
+  onResize,
+  onVerticals,
+  onFlipHinge,
+  onFlipSide,
+  onDelete,
+}: OpeningSectionProps) {
+  const { opening, bottom, top } = selection;
+  const isDoor = opening.kind === "door";
+
+  const commitLength =
+    (apply: (meters: number) => void, current: number) => (text: string) => {
+      const meters = parseLength(text, unit);
+      if (meters === null) return;
+      if (Math.abs(meters - current) < SAME_EPSILON) return;
+      apply(meters);
+    };
+
+  const lengthField = (
+    label: string,
+    ariaLabel: string,
+    meters: number,
+    onCommit: (text: string) => void,
+  ) => (
+    <Field
+      label={label}
+      ariaLabel={ariaLabel}
+      suffix={unit}
+      value={formatLengthValue(meters, unit)}
+      onCommit={onCommit}
+    />
+  );
+
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[10px] border border-[var(--control-border)] bg-[var(--well)]">
+          <div
+            aria-hidden
+            style={{
+              width: 92,
+              height: 92,
+              transform: "scale(0.5217)",
+              transformOrigin: "top left",
+            }}
+          >
+            <CatalogThumbnail
+              catalogId={opening.kind}
+              className="bg-transparent"
+            />
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div
+            className="truncate font-semibold text-[15px] text-[var(--ink-900)]"
+            data-testid="inspector-item-name"
+          >
+            {isDoor ? "Door" : "Window"}
+          </div>
+          <div className="mt-[2px] truncate text-[12.5px] text-[var(--ink-400)]">
+            {selection.connects ?? CATALOG_CATEGORY_LABELS.openings}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        <SectionLabel>TRANSFORM</SectionLabel>
+        <div className="grid grid-cols-2 gap-2">
+          {lengthField(
+            "WIDTH",
+            "Opening width",
+            opening.width,
+            commitLength(onResize, opening.width),
+          )}
+          {lengthField(
+            "HEIGHT",
+            "Opening height",
+            top - bottom,
+            commitLength(
+              (meters) => onVerticals({ top: bottom + meters }),
+              top - bottom,
+            ),
+          )}
+          {!isDoor &&
+            lengthField(
+              "ELEVATION",
+              "Sill elevation",
+              bottom,
+              // Elevation moves the whole window, height preserved — HEIGHT
+              // is the sibling field, so the two stay independent.
+              commitLength(
+                (meters) =>
+                  onVerticals({ bottom: meters, top: meters + (top - bottom) }),
+                bottom,
+              ),
+            )}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        <SectionLabel>ARRANGE</SectionLabel>
+        <div className="grid grid-cols-3 gap-2">
+          {isDoor && (
+            <button
+              type="button"
+              aria-label="Flip hinge side"
+              onClick={onFlipHinge}
+              className="flex flex-col items-center gap-[5px] rounded-[8px] border border-[var(--control-border)] bg-[var(--frame)] py-[9px] text-[var(--ink-600)] hover:bg-[var(--well)]"
+            >
+              <ArrowLeftRight width={17} height={17} strokeWidth={1.6} />
+              <span className="text-[10px] text-[var(--ink-500)]">Hinge</span>
+            </button>
+          )}
+          {isDoor && selection.twoFace && (
+            <button
+              type="button"
+              aria-label="Flip which room it opens into"
+              onClick={onFlipSide}
+              className="flex flex-col items-center gap-[5px] rounded-[8px] border border-[var(--control-border)] bg-[var(--frame)] py-[9px] text-[var(--ink-600)] hover:bg-[var(--well)]"
+            >
+              <DoorOpen width={17} height={17} strokeWidth={1.6} />
+              <span className="text-[10px] text-[var(--ink-500)]">Swing</span>
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Delete opening"
+            onClick={onDelete}
+            className="flex flex-col items-center gap-[5px] rounded-[8px] border border-[rgba(214,69,69,0.22)] bg-[rgba(214,69,69,0.05)] py-[9px] text-[var(--danger)] hover:bg-[rgba(214,69,69,0.1)]"
+          >
+            <Trash2 width={17} height={17} strokeWidth={1.6} />
+            <span className="text-[10px]">Delete</span>
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export interface InspectorProps {
   /** The floor's derived rooms (footer totals + the room overview). */
   rooms: Room[];
@@ -386,9 +556,9 @@ export interface InspectorProps {
    * count) — sourced from `floor.openings`, since derived rooms no longer
    * carry per-wall opening copies. */
   openingCount?: number;
-  /** The selected opening is a portal — "Door connects Living ↔ Kitchen"
-   * (derived from wall abutment); shown with the floor overview. */
-  portalStatus?: string | null;
+  /** The selected door/window (either lens): its own SELECTION view with
+   * editable width/height/elevation and the flip/delete actions. */
+  selectedOpening?: OpeningSelection | null;
   onResize: (footprint: Footprint) => void;
   onRotateTo: (deg: number) => void;
   onElevate: (elevation: number) => void;
@@ -397,6 +567,11 @@ export interface InspectorProps {
   onRotate90: () => void;
   onClone: () => void;
   onDelete: () => void;
+  onOpeningResize?: (width: number) => void;
+  onOpeningVerticals?: (verticals: { bottom?: number; top?: number }) => void;
+  onOpeningFlipHinge?: () => void;
+  onOpeningFlipSide?: () => void;
+  onOpeningDelete?: () => void;
 }
 
 export function Inspector({
@@ -409,7 +584,7 @@ export function Inspector({
   selectedWallHeight = 2.5,
   nodeCount = 0,
   openingCount = 0,
-  portalStatus = null,
+  selectedOpening = null,
   onResize,
   onRotateTo,
   onElevate,
@@ -418,13 +593,19 @@ export function Inspector({
   onRotate90,
   onClone,
   onDelete,
+  onOpeningResize = () => {},
+  onOpeningVerticals = () => {},
+  onOpeningFlipHinge = () => {},
+  onOpeningFlipSide = () => {},
+  onOpeningDelete = () => {},
 }: InspectorProps) {
   const drawing = mode === "draw";
   const showSelection = selectedItem !== null && !drawing;
+  const showOpening = !showSelection && selectedOpening !== null && !drawing;
   const multiRoom = rooms.length > 1;
   const header = drawing
     ? "OUTLINE"
-    : showSelection
+    : showSelection || showOpening
       ? "SELECTION"
       : multiRoom
         ? "FLOOR"
@@ -480,6 +661,16 @@ export function Inspector({
             onClone={onClone}
             onDelete={onDelete}
           />
+        ) : showOpening ? (
+          <OpeningSection
+            selection={selectedOpening}
+            unit={unit}
+            onResize={onOpeningResize}
+            onVerticals={onOpeningVerticals}
+            onFlipHinge={onOpeningFlipHinge}
+            onFlipSide={onOpeningFlipSide}
+            onDelete={onOpeningDelete}
+          />
         ) : multiRoom ? (
           <div className="flex flex-col gap-2.5">
             <div
@@ -503,14 +694,6 @@ export function Inspector({
                 </div>
               ))}
             </div>
-            {portalStatus && (
-              <div
-                className="text-[12.5px] text-[var(--ink-500)]"
-                data-testid="inspector-portal"
-              >
-                {portalStatus}
-              </div>
-            )}
             <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
               Select an item in either lens to edit its size, rotation and
               position here.

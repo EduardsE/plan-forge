@@ -100,7 +100,7 @@ export function StatusBar({
     context = drawStatusText(nodeCount);
   } else if (placingName) {
     context = `Placing “${placingName}” — drop to confirm`;
-  } else if (mode === "2d" && portalStatus) {
+  } else if (portalStatus) {
     context = portalStatus;
   } else if (libraryOpen) {
     context = `${objectCount} objects placed`;

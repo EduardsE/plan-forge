@@ -14,6 +14,124 @@ import type { Floor, Opening } from "./types";
 const MIN_FLOOR_OPENING_WIDTH = 0.3;
 const EPS = 1e-6;
 
+/**
+ * Default vertical extents, measured from the mockup's 3D scene (walls
+ * 250 px = 2.5 m at 100 px/m, window at top:56/height:158 px). An opening
+ * stores `sill`/`head` only when it departs from these — `openingVerticals`
+ * resolves the effective extent.
+ */
+export const DOOR_HEIGHT = 2.05;
+export const WINDOW_SILL = 0.36;
+export const WINDOW_HEAD = 1.94;
+/** Shortest vertical extent the setters allow, meters. */
+export const MIN_OPENING_HEIGHT = 0.3;
+
+/** Effective vertical extent of an opening's hole, floor-relative meters. */
+export function openingVerticals(opening: Opening): {
+  bottom: number;
+  top: number;
+} {
+  if (opening.kind === "door") {
+    return { bottom: 0, top: opening.head ?? DOOR_HEIGHT };
+  }
+  return {
+    bottom: opening.sill ?? WINDOW_SILL,
+    top: opening.head ?? WINDOW_HEAD,
+  };
+}
+
+/** Write `bottom`/`top` back onto an opening, storing defaults as absent
+ * fields (so an untouched opening keeps its pre-verticals shape). */
+function withVerticals(opening: Opening, bottom: number, top: number): Opening {
+  const next = { ...opening };
+  const defaultSill = opening.kind === "door" ? 0 : WINDOW_SILL;
+  const defaultHead = opening.kind === "door" ? DOOR_HEIGHT : WINDOW_HEAD;
+  if (opening.kind === "door" || Math.abs(bottom - defaultSill) < EPS) {
+    delete next.sill;
+  } else {
+    next.sill = bottom;
+  }
+  if (Math.abs(top - defaultHead) < EPS) delete next.head;
+  else next.head = top;
+  return next;
+}
+
+/**
+ * Set an opening's vertical extent from the inspector's fields: the window
+ * sill (`bottom`) and/or the hole top (`top`), each clamped to the floor, the
+ * `ceiling`, and a minimum `MIN_OPENING_HEIGHT` extent against the other.
+ * Doors pin `bottom` to the floor. Non-finite values and unknown ids no-op.
+ */
+export function setOpeningVerticals(
+  floor: Floor,
+  id: string,
+  verticals: { bottom?: number; top?: number },
+  ceiling: number,
+): Floor {
+  const opening = floor.openings.find((o) => o.id === id);
+  if (!opening) return floor;
+  const current = openingVerticals(opening);
+  let bottom = current.bottom;
+  let top = current.top;
+  if (verticals.top !== undefined && Number.isFinite(verticals.top)) {
+    top = Math.min(
+      Math.max(verticals.top, bottom + MIN_OPENING_HEIGHT),
+      ceiling,
+    );
+  }
+  if (
+    opening.kind === "window" &&
+    verticals.bottom !== undefined &&
+    Number.isFinite(verticals.bottom)
+  ) {
+    bottom = Math.min(Math.max(verticals.bottom, 0), top - MIN_OPENING_HEIGHT);
+  }
+  if (
+    Math.abs(bottom - current.bottom) < EPS &&
+    Math.abs(top - current.top) < EPS
+  ) {
+    return floor;
+  }
+  return withOpenings(
+    floor,
+    floor.openings.map((o) =>
+      o.id === id ? withVerticals(o, bottom, top) : o,
+    ),
+  );
+}
+
+/**
+ * Slide a window vertically along its wall, preserving its height: `bottom`
+ * quantizes to `grid` (non-positive = no quantize) and clamps into
+ * [0, ceiling − height]. Doors sit on the floor — they no-op.
+ */
+export function shiftOpeningVertical(
+  floor: Floor,
+  id: string,
+  bottom: number,
+  ceiling: number,
+  grid = 0,
+): Floor {
+  const opening = floor.openings.find((o) => o.id === id);
+  if (!opening || opening.kind !== "window" || !Number.isFinite(bottom)) {
+    return floor;
+  }
+  const current = openingVerticals(opening);
+  const height = current.top - current.bottom;
+  const quantized = grid > 0 ? Math.round(bottom / grid) * grid : bottom;
+  const clamped = Math.min(
+    Math.max(quantized, 0),
+    Math.max(ceiling - height, 0),
+  );
+  if (Math.abs(clamped - current.bottom) < EPS) return floor;
+  return withOpenings(
+    floor,
+    floor.openings.map((o) =>
+      o.id === id ? withVerticals(o, clamped, clamped + height) : o,
+    ),
+  );
+}
+
 /** Length of the edge an opening sits on, or null when it's gone/degenerate. */
 function edgeLengthOf(floor: Floor, edgeId: string): number | null {
   const edge = floor.edges.find((e) => e.id === edgeId);
