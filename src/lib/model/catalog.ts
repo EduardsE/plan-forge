@@ -57,8 +57,11 @@ const item = (
 export const CATALOG: CatalogItem[] = [
   // Seating, in the mockup's card order.
   item("lounge-chair", "Lounge Chair", "seating", 0.74, 0.8, 0.75),
-  item("sofa-2", "Sofa · 2-seat", "seating", 1.68, 0.88, 0.82),
-  item("armchair", "Armchair", "seating", 0.84, 0.86, 0.78),
+  // Real-mesh pilot items: footprints mirror the prepared model's natural
+  // size (model-manifest.gen.ts) so a fresh drop fills its footprint exactly
+  // — locked by models.test.ts.
+  item("sofa-2", "Sofa · 2-seat", "seating", 1.68, 0.703, 0.789),
+  item("armchair", "Armchair", "seating", 0.84, 0.703, 0.789),
   item("stool", "Stool", "seating", 0.42, 0.42, 0.45),
   item("bench", "Bench", "seating", 1.2, 0.44, 0.45),
   item("pouf", "Pouf", "seating", 0.55, 0.55, 0.4),
@@ -66,13 +69,13 @@ export const CATALOG: CatalogItem[] = [
   item("desk", "Desk", "tables", 2.2, 0.85, 1.12),
   item("coffee-table", "Coffee Table", "tables", 0.9, 0.55, 0.42),
   item("side-table", "Side Table", "tables", 0.45, 0.45, 0.52),
-  item("dining-table", "Dining Table", "tables", 1.6, 0.9, 0.75),
+  item("dining-table", "Dining Table", "tables", 1.6, 0.851, 0.621),
   item("credenza", "Credenza", "storage", 1.5, 0.65, 0.78),
   item("shelf", "Shelf", "storage", 1.4, 0.44, 1.7),
-  item("wardrobe", "Wardrobe", "storage", 1.0, 0.6, 2.0),
-  item("bed-double", "Double Bed", "beds", 1.6, 2.0, 0.95),
+  item("wardrobe", "Wardrobe", "storage", 1.0, 0.625, 2.125),
+  item("bed-double", "Double Bed", "beds", 1.6, 1.883, 0.628),
   item("bed-single", "Single Bed", "beds", 0.9, 2.0, 0.95),
-  item("floor-lamp", "Floor Lamp", "lighting", 0.38, 0.38, 1.55),
+  item("floor-lamp", "Floor Lamp", "lighting", 0.38, 0.439, 2.149),
   item("table-lamp", "Table Lamp", "lighting", 0.22, 0.22, 0.48),
   item("rug", "Rug", "decor", 2.8, 2.0, 0.01),
   item("floor-mirror", "Floor Mirror", "decor", 0.55, 0.4, 1.65),

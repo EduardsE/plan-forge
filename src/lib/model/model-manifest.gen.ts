@@ -7,4 +7,34 @@ export const MODEL_MANIFEST = {
     natural: { width: 1.68, depth: 0.703, height: 0.789 },
     slots: { carpet: "body", wood: "neutral" },
   },
+  armchair: {
+    file: "/models/armchair.glb",
+    natural: { width: 0.84, depth: 0.703, height: 0.789 },
+    slots: { carpet: "body", wood: "neutral" },
+  },
+  "bed-double": {
+    file: "/models/bed-double.glb",
+    natural: { width: 1.6, depth: 1.883, height: 0.628 },
+    slots: {
+      carpet: "body",
+      carpetWhite: "neutral",
+      wood: "neutral",
+      metal: "accent",
+    },
+  },
+  "dining-table": {
+    file: "/models/dining-table.glb",
+    natural: { width: 1.6, depth: 0.851, height: 0.621 },
+    slots: { wood: "body" },
+  },
+  wardrobe: {
+    file: "/models/wardrobe.glb",
+    natural: { width: 1, depth: 0.625, height: 2.125 },
+    slots: { wood: "body", metal: "accent" },
+  },
+  "floor-lamp": {
+    file: "/models/floor-lamp.glb",
+    natural: { width: 0.38, depth: 0.439, height: 2.149 },
+    slots: { lamp: "body", metal: "neutral" },
+  },
 } as const;

@@ -22,9 +22,21 @@ import {
 const HULL_INFLATE = 1.04;
 
 // Warm the loader cache for every prepared model at startup; the files are a
-// few KB each, so the primitives fallback only ever shows for a blink.
+// few KB each, so the primitives fallback only ever shows for a blink. This
+// is fire-and-forget — drei/suspend-react's preload() always returns
+// undefined, so a failed warm-up (e.g. the asset host is briefly down) has
+// no promise a caller can attach a .catch to and surfaces as an uncaught
+// window error instead, even though the real per-item Suspense +
+// ModelLoadBoundary below handles that exact failure cleanly once the model
+// actually renders. Swallow just that one known error shape here; every
+// other window error still reports normally.
 const preloadModel = useGLTF.preload;
 if (typeof window !== "undefined") {
+  window.addEventListener("error", (event) => {
+    if (event.message?.includes("Could not load /models/")) {
+      event.preventDefault();
+    }
+  });
   for (const entry of Object.values(MODEL_MANIFEST)) preloadModel(entry.file);
 }
 

@@ -26,4 +26,64 @@ export const RECIPES = [
       wood: "neutral",
     },
   },
+  {
+    catalogId: "armchair",
+    input: "assets/raw-models/furniture-kit/Models/GLTF format/loungeChair.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.84,
+    rotateYDeg: 0,
+    slots: {
+      carpet: "body",
+      wood: "neutral",
+    },
+  },
+  {
+    catalogId: "bed-double",
+    input: "assets/raw-models/furniture-kit/Models/GLTF format/bedDouble.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 1.6,
+    rotateYDeg: 0,
+    slots: {
+      carpet: "body",
+      carpetWhite: "neutral",
+      wood: "neutral",
+      metal: "accent",
+    },
+  },
+  {
+    catalogId: "dining-table",
+    input: "assets/raw-models/furniture-kit/Models/GLTF format/table.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 1.6,
+    rotateYDeg: 0,
+    slots: {
+      wood: "body",
+    },
+  },
+  {
+    // The kit has no wardrobe model per se, but bookcaseClosedDoors — a
+    // tall, narrow, two-door cabinet — matches a wardrobe's silhouette and
+    // proportions (scaled to the catalog width, its natural depth/height
+    // land within a few cm of the old wardrobe placeholder footprint).
+    catalogId: "wardrobe",
+    input: "assets/raw-models/furniture-kit/Models/GLTF format/bookcaseClosedDoors.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 1.0,
+    rotateYDeg: 0,
+    slots: {
+      wood: "body",
+      metal: "accent",
+    },
+  },
+  {
+    catalogId: "floor-lamp",
+    input: "assets/raw-models/furniture-kit/Models/GLTF format/lampRoundFloor.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.38,
+    rotateYDeg: 0,
+    slots: {
+      lamp: "body",
+      metal: "neutral",
+    },
+  },
 ];
