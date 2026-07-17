@@ -7,6 +7,7 @@ import {
   wallProjector,
 } from "#/components/move-drag";
 import { GUIDE_PILL_CLASS, SnapGuides } from "#/components/snap-guides";
+import { rangesOverlap, verticalsOverlap } from "#/lib/model";
 import {
   OPENING_GRID,
   offsetAlongWall,
@@ -149,17 +150,36 @@ function WallVerticalGuides({
   hole: WallHole;
   unit: Unit;
 }) {
-  const guides = useMemo(
-    () =>
-      openingVerticalGuides(
+  const guides = useMemo(() => {
+    // The ride is bounded by whatever the hole would actually hit: the
+    // floor/ceiling, or a stacked neighbor's band on the same stretch of
+    // wall — the pills read the real remaining gap.
+    let floorY = 0;
+    let ceilingY = solid.height;
+    for (const other of solid.holes) {
+      if (other.id === hole.id) continue;
+      const overlaps = rangesOverlap(
         hole.start,
-        hole.width,
-        hole.bottom,
-        hole.top,
-        solid.height,
-      ),
-    [hole.start, hole.width, hole.bottom, hole.top, solid.height],
-  );
+        hole.start + hole.width,
+        other.start,
+        other.start + other.width,
+      );
+      if (!overlaps) continue;
+      if (other.top <= hole.bottom + 1e-6) {
+        floorY = Math.max(floorY, other.top);
+      } else if (other.bottom >= hole.top - 1e-6) {
+        ceilingY = Math.min(ceilingY, other.bottom);
+      }
+    }
+    return openingVerticalGuides(
+      hole.start,
+      hole.width,
+      hole.bottom,
+      hole.top,
+      ceilingY,
+      floorY,
+    );
+  }, [hole, solid.height, solid.holes]);
   // Plan point where a guide stands: on the wall line at the hole's center,
   // pushed just past the face toward the room the opening belongs to.
   const off = (WALL_THICKNESS / 2 + 0.02) * hole.side;
@@ -270,7 +290,29 @@ function OpeningDragSession3D({
       const point = toWall(event);
       if (!point) return;
       const wall = solidRef.current;
-      const others = wall.holes.filter((hole) => hole.id !== drag.id);
+      // The along-slide is judged at the vertical band the hole is headed
+      // for (windows ride up/down in the same gesture), so only holes that
+      // band actually crosses block it — that's what lets a window drag
+      // over or under a stacked neighbor. The estimate mirrors the canvas's
+      // clamp (quantize, floor/ceiling); mid-flight mismatches self-correct
+      // on the next move once the preview settles.
+      const live = wall.holes.find((hole) => hole.id === drag.id);
+      let band = live ? { bottom: live.bottom, top: live.top } : null;
+      if (band && drag.kind === "window") {
+        const height = band.top - band.bottom;
+        const grid = snapRef.current ? OPENING_GRID : 0;
+        const raw = point.up - drag.grabUp;
+        const quantized = grid > 0 ? Math.round(raw / grid) * grid : raw;
+        const bottom = Math.min(
+          Math.max(quantized, 0),
+          Math.max(wall.height - height, 0),
+        );
+        band = { bottom, top: bottom + height };
+      }
+      const others = wall.holes.filter(
+        (hole) =>
+          hole.id !== drag.id && (!band || verticalsOverlap(band, hole)),
+      );
       const offset = slideOpening(
         wall.length,
         drag.width,

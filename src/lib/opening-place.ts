@@ -1,4 +1,9 @@
-import { type OpeningKind, type Point, sideOfPoint } from "#/lib/model";
+import {
+  type OpeningKind,
+  type Point,
+  sideOfPoint,
+  verticalsOverlap,
+} from "#/lib/model";
 import type { PlacementGuide } from "#/lib/place";
 import { PLACEMENT_GRID } from "#/lib/place";
 import { wallPoint } from "#/lib/plan-scene";
@@ -148,14 +153,17 @@ function placementSide(solid: WallSolid, cursor: Point): 1 | -1 {
 /**
  * Where an opening of `width` dragged to `cursor` lands across the floor: the
  * nearest edge with a free stretch for it, the offset centered on the cursor's
- * projection then slid clear of the edge's existing holes (both rooms'). Edges
- * that can't fit the width fall through to the next nearest. Null when none
- * fit. A drag near a shared wall opens onto the room the cursor is nearest.
+ * projection then slid clear of the edge's existing holes (both rooms') whose
+ * vertical band overlaps the incoming opening's `verticals` — a hole that sits
+ * entirely above or below doesn't block the stretch. Edges that can't fit the
+ * width fall through to the next nearest. Null when none fit. A drag near a
+ * shared wall opens onto the room the cursor is nearest.
  */
 export function openingAt(
   solids: WallSolid[],
   cursor: Point,
   width: number,
+  verticals: { bottom: number; top: number },
   snap = true,
 ): OpeningPlacement | null {
   const candidates = solids
@@ -165,7 +173,7 @@ export function openingAt(
     const offset = slideOpening(
       solid.length,
       width,
-      solid.holes,
+      solid.holes.filter((hole) => verticalsOverlap(verticals, hole)),
       along - width / 2,
       snap ? OPENING_GRID : 0,
     );
@@ -200,8 +208,11 @@ export interface OpeningVerticalGuide {
 /**
  * The floor/ceiling counterparts of `openingCornerGuides` for a window
  * riding up/down its wall: one guide from the floor to the hole's bottom,
- * one from its top to the ceiling. Flush edges produce no guide (a door's
- * floor-pinned bottom never gets one).
+ * one from its top to the ceiling. `floorY` lifts the lower measure-from
+ * line when something other than the floor bounds the ride (a stacked
+ * neighbor's top) — callers pass the tightened `ceiling` the same way.
+ * Flush edges produce no guide (a door's floor-pinned bottom never gets
+ * one).
  */
 export function openingVerticalGuides(
   offset: number,
@@ -209,16 +220,17 @@ export function openingVerticalGuides(
   bottom: number,
   top: number,
   ceiling: number,
+  floorY = 0,
 ): OpeningVerticalGuide[] {
   const along = offset + width / 2;
   const guides: OpeningVerticalGuide[] = [];
-  if (bottom > FLUSH_EPSILON) {
+  if (bottom - floorY > FLUSH_EPSILON) {
     guides.push({
       id: "floor",
       along,
-      fromY: 0,
+      fromY: floorY,
       toY: bottom,
-      distance: bottom,
+      distance: bottom - floorY,
     });
   }
   const headGap = ceiling - top;

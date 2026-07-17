@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveFloor, type Floor } from "#/lib/model";
+import { defaultVerticals, deriveFloor, type Floor } from "#/lib/model";
 import {
   offsetAlongWall,
   openingAt,
@@ -147,11 +147,31 @@ describe("openingVerticalGuides", () => {
     expect(high).toHaveLength(1);
     expect(high[0].id).toBe("floor");
   });
+
+  it("measures from a raised floorY (a stacked neighbor's top) and drops it when flush", () => {
+    // A window at 2.0–2.6 over a neighbor topping out at 1.94.
+    const guides = openingVerticalGuides(3.55, 2.1, 2.0, 2.6, 3.2, 1.94);
+    expect(guides).toHaveLength(2);
+    expect(guides[0]).toEqual({
+      id: "floor",
+      along: 3.55 + 1.05,
+      fromY: 1.94,
+      toY: 2.0,
+      distance: expect.closeTo(0.06, 10),
+    });
+    // Dropped flush onto the neighbor: no lower guide.
+    const flush = openingVerticalGuides(3.55, 2.1, 1.94, 2.6, 3.2, 1.94);
+    expect(flush).toHaveLength(1);
+    expect(flush[0].id).toBe("ceiling");
+  });
 });
 
 describe("openingAt", () => {
+  const doorBand = defaultVerticals("door");
+  const windowBand = defaultVerticals("window");
+
   it("lands on the nearest edge, centered on the cursor projection, snapped", () => {
-    const placed = openingAt(solids, { x: 2.53, y: 0.3 }, 0.9);
+    const placed = openingAt(solids, { x: 2.53, y: 0.3 }, 0.9, doorBand);
     expect(placed?.edgeId).toBe("ab");
     // 2.53 - 0.45 = 2.08, snapped to the 0.05 grid.
     expect(placed?.offset).toBeCloseTo(2.1);
@@ -161,9 +181,35 @@ describe("openingAt", () => {
   });
 
   it("keeps the exact offset with snap off (still clamped)", () => {
-    const placed = openingAt(solids, { x: 2.53, y: 0.3 }, 0.9, false);
+    const placed = openingAt(solids, { x: 2.53, y: 0.3 }, 0.9, doorBand, false);
     expect(placed?.offset).toBeCloseTo(2.08);
     expect(placed?.guides).toHaveLength(0);
+  });
+
+  it("ignores holes on a vertically disjoint band (stacked windows land)", () => {
+    // An existing window fills [1.5, 3.6] on the top wall at the default
+    // band; an incoming default window must slide clear, but one aimed at a
+    // raised band (2.0–2.6, clear of the 1.94 head) lands right on top.
+    const floor = rectFloor();
+    floor.openings.push({
+      id: "w1",
+      edgeId: "ab",
+      offset: 1.5,
+      width: 2.1,
+      kind: "window",
+      side: 1,
+    });
+    const stacked = buildEdgeSolids(floor, deriveFloor(floor).rooms);
+    // Same band → slid clear into the nearest gap ([0, 1.5], flush at 0.6).
+    const blocked = openingAt(stacked, { x: 2.53, y: 0.3 }, 0.9, windowBand);
+    expect(blocked?.edgeId).toBe("ab");
+    expect(blocked?.offset).toBeCloseTo(0.6);
+    const above = openingAt(stacked, { x: 2.53, y: 0.3 }, 0.9, {
+      bottom: 2.0,
+      top: 2.6,
+    });
+    expect(above?.edgeId).toBe("ab");
+    expect(above?.offset).toBeCloseTo(2.1);
   });
 
   it("falls through to the next-nearest edge when the nearest can't fit", () => {
@@ -190,7 +236,7 @@ describe("openingAt", () => {
       rooms: [{ id: "r", anchor: { x: 2, y: 3 } }],
     };
     const lSolids = buildEdgeSolids(lShaped, deriveFloor(lShaped).rooms);
-    const placed = openingAt(lSolids, { x: 0.3, y: 0.1 }, 0.9);
+    const placed = openingAt(lSolids, { x: 0.3, y: 0.1 }, 0.9, doorBand);
     expect(placed).not.toBeNull();
     expect(placed?.edgeId).not.toBe("ab");
   });

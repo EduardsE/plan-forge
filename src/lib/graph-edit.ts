@@ -1,7 +1,12 @@
 import { DRAW_GRID_STEP, quantizeToStep } from "#/lib/draw";
 import type { Floor, Opening, Point, WallEdge, WallNode } from "#/lib/model";
-import { NODE_MERGE_TOLERANCE, reconcileFloor } from "#/lib/model";
-import { slideOpening, type WallSpan } from "#/lib/opening-place";
+import {
+  NODE_MERGE_TOLERANCE,
+  openingVerticals,
+  reconcileFloor,
+  verticalsOverlap,
+} from "#/lib/model";
+import { slideOpening } from "#/lib/opening-place";
 
 /**
  * Pure graph-edit operations for draw mode. Every op is `Floor → Floor`,
@@ -242,7 +247,12 @@ export function deleteNode(
         mergedLength < EPS
           ? null
           : { x: (y.x - x.x) / mergedLength, y: (y.y - x.y) / mergedLength };
-      const spans: WallSpan[] = [];
+      const spans: Array<{
+        start: number;
+        width: number;
+        bottom: number;
+        top: number;
+      }> = [];
       const openings: Opening[] = [];
       for (const o of floor.openings) {
         if (o.edgeId !== e1.id && o.edgeId !== e2.id) {
@@ -257,14 +267,17 @@ export function deleteNode(
         };
         const along =
           (center.x - x.x) * mergedDir.x + (center.y - x.y) * mergedDir.y;
+        // Only already-placed openings on an overlapping vertical band block —
+        // a stacked pair re-projects without shoving each other sideways.
+        const band = openingVerticals(o);
         const offset = slideOpening(
           mergedLength,
           o.width,
-          spans,
+          spans.filter((span) => verticalsOverlap(band, span)),
           along - o.width / 2,
         );
         if (offset === null) continue;
-        spans.push({ start: offset, width: o.width });
+        spans.push({ start: offset, width: o.width, ...band });
         const sameDir =
           host.dir.x * mergedDir.x + host.dir.y * mergedDir.y >= 0;
         const next: Opening = { ...o, edgeId: mergedId, offset };

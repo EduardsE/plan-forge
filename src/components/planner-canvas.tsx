@@ -754,10 +754,12 @@ export function PlannerCanvas({
     // Streams per pointermove during a 3D opening drag: the along-wall slide
     // and (for windows) the whole-hole vertical shift — height preserved,
     // clamped to floor/ceiling (the host edge's tallest adjacent room) and
-    // quantized like the slide — land on ONE floor, one preview.
+    // quantized like the slide — land on ONE floor, one preview. The shift
+    // applies first so the slide's no-overlap check sees the band the window
+    // is headed for: a diagonal drag can lift it over a stacked neighbor and
+    // slide across in the same gesture.
     (id: string, offset: number | null, bottom: number | null) => {
       let next = floor;
-      if (offset !== null) next = moveFloorOpening(next, id, offset);
       if (bottom !== null) {
         const opening = next.openings.find((o) => o.id === id);
         if (opening) {
@@ -770,6 +772,7 @@ export function PlannerCanvas({
           );
         }
       }
+      if (offset !== null) next = moveFloorOpening(next, id, offset);
       if (next !== floor) onFloorPreview(next);
     },
     [floor, rooms, snapEnabled, onFloorPreview],

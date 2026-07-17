@@ -195,6 +195,47 @@ describe("deleteNode", () => {
     expect(worldCenter(merged, "win").x).toBeCloseTo(4.5, 4);
   });
 
+  it("keeps a stacked pair in place through a merge (no sideways shove)", () => {
+    const floor: Floor = {
+      nodes: [
+        { id: "P", x: 0, y: 0 },
+        { id: "M", x: 3, y: 0 },
+        { id: "Q", x: 6, y: 0 },
+      ],
+      edges: [
+        { id: "PM", a: "P", b: "M" },
+        { id: "MQ", a: "M", b: "Q" },
+      ],
+      openings: [
+        {
+          id: "win-low",
+          kind: "window",
+          edgeId: "MQ",
+          offset: 1,
+          width: 1,
+          side: 1,
+        },
+        {
+          // Same span, vertically clear band — a stacked window.
+          id: "win-high",
+          kind: "window",
+          edgeId: "MQ",
+          offset: 1,
+          width: 1,
+          side: 1,
+          sill: 2.0,
+          head: 2.6,
+        },
+      ],
+      furniture: [],
+      rooms: [],
+    };
+    const merged = deleteNode(floor, "M", idFactory());
+    // Both survive at the same world spot: (4.5, 0) center each.
+    expect(worldCenter(merged, "win-low").x).toBeCloseTo(4.5, 4);
+    expect(worldCenter(merged, "win-high").x).toBeCloseTo(4.5, 4);
+  });
+
   it("no-ops by reference on an unknown id", () => {
     const floor = makeFloor();
     expect(deleteNode(floor, "nope")).toBe(floor);

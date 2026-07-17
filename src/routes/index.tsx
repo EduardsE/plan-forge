@@ -69,6 +69,7 @@ import {
   setOpeningVerticals,
   setRoomName,
   setRoomWallHeight,
+  shiftOpeningVertical,
   updateDerivedRoom,
   updateFloorFurniture,
   updateFurniture,
@@ -269,6 +270,23 @@ function Planner() {
           floorRef.current,
           selectedOpening.opening.id,
           verticals,
+          selectedOpening.ceiling,
+        ),
+      );
+    },
+    [selectedOpening, setFloor],
+  );
+  const shiftSelectedOpening = useCallback(
+    // ELEVATION moves the whole hole, height preserved — the model slides it
+    // into the free vertical stretch (a stacked neighbor clamps, never
+    // squishes).
+    (bottom: number) => {
+      if (!selectedOpening) return;
+      setFloor(
+        shiftOpeningVertical(
+          floorRef.current,
+          selectedOpening.opening.id,
+          bottom,
           selectedOpening.ceiling,
         ),
       );
@@ -996,6 +1014,7 @@ function Planner() {
         onClone={cloneSelected}
         onOpeningResize={resizeSelectedOpening}
         onOpeningVerticals={setSelectedOpeningVerticals}
+        onOpeningShift={shiftSelectedOpening}
         onOpeningFlipHinge={flipSelectedOpeningHinge}
         onOpeningFlipSide={flipSelectedOpeningSide}
         onOpeningDelete={deleteSelectedOpening}

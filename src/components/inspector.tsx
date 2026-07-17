@@ -390,6 +390,10 @@ interface OpeningSectionProps {
   onResize: (width: number) => void;
   /** Committed sill/head values, meters above the floor (model clamps). */
   onVerticals: (verticals: { bottom?: number; top?: number }) => void;
+  /** A committed ELEVATION: the whole hole moves to this bottom, height
+   * preserved — the model slides it into the free vertical stretch (past a
+   * stacked neighbor it clamps instead of squishing). */
+  onShift: (bottom: number) => void;
   onFlipHinge: () => void;
   onFlipSide: () => void;
   onDelete: () => void;
@@ -400,6 +404,7 @@ function OpeningSection({
   unit,
   onResize,
   onVerticals,
+  onShift,
   onFlipHinge,
   onFlipSide,
   onDelete,
@@ -487,11 +492,7 @@ function OpeningSection({
               bottom,
               // Elevation moves the whole window, height preserved — HEIGHT
               // is the sibling field, so the two stay independent.
-              commitLength(
-                (meters) =>
-                  onVerticals({ bottom: meters, top: meters + (top - bottom) }),
-                bottom,
-              ),
+              commitLength(onShift, bottom),
             )}
         </div>
       </div>
@@ -569,6 +570,7 @@ export interface InspectorProps {
   onDelete: () => void;
   onOpeningResize?: (width: number) => void;
   onOpeningVerticals?: (verticals: { bottom?: number; top?: number }) => void;
+  onOpeningShift?: (bottom: number) => void;
   onOpeningFlipHinge?: () => void;
   onOpeningFlipSide?: () => void;
   onOpeningDelete?: () => void;
@@ -595,6 +597,7 @@ export function Inspector({
   onDelete,
   onOpeningResize = () => {},
   onOpeningVerticals = () => {},
+  onOpeningShift = () => {},
   onOpeningFlipHinge = () => {},
   onOpeningFlipSide = () => {},
   onOpeningDelete = () => {},
@@ -667,6 +670,7 @@ export function Inspector({
             unit={unit}
             onResize={onOpeningResize}
             onVerticals={onOpeningVerticals}
+            onShift={onOpeningShift}
             onFlipHinge={onOpeningFlipHinge}
             onFlipSide={onOpeningFlipSide}
             onDelete={onOpeningDelete}

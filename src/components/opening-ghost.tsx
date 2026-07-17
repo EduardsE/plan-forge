@@ -2,22 +2,17 @@ import { useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useState } from "react";
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
 import { SnapGuides } from "#/components/snap-guides";
-import type {
-  CatalogItem,
-  DerivedRoom,
-  Floor,
-  OpeningKind,
-  Point,
+import {
+  type CatalogItem,
+  type DerivedRoom,
+  defaultVerticals,
+  type Floor,
+  type OpeningKind,
+  type Point,
 } from "#/lib/model";
 import { type OpeningPlacement, openingAt } from "#/lib/opening-place";
 import { wallPoint } from "#/lib/plan-scene";
-import {
-  buildEdgeSolids,
-  DOOR_HEIGHT,
-  WALL_THICKNESS,
-  WINDOW_HEAD,
-  WINDOW_SILL,
-} from "#/lib/room-scene";
+import { buildEdgeSolids, WALL_THICKNESS } from "#/lib/room-scene";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -87,7 +82,7 @@ export function OpeningGhost({
         : null;
     };
     const resolve = (point: Point): OpeningPlacement | null =>
-      openingAt(solids, point, width, snapEnabled);
+      openingAt(solids, point, width, defaultVerticals(kind), snapEnabled);
     const handleMove = (event: PointerEvent) => {
       const point = toFloor(event);
       setPlacement(point ? resolve(point) : null);
@@ -114,8 +109,7 @@ export function OpeningGhost({
   // on the line.
   const mid = offset + width / 2;
   const center = wallPoint(solid, mid, 0);
-  const bottom = kind === "window" ? WINDOW_SILL : 0;
-  const top = kind === "window" ? WINDOW_HEAD : DOOR_HEIGHT;
+  const { bottom, top } = defaultVerticals(kind);
 
   return (
     <group>

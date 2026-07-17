@@ -1,5 +1,5 @@
 import { reconcileFloor } from "./derived";
-import type { Floor, Opening } from "./types";
+import type { Floor, Opening, OpeningKind } from "./types";
 
 /**
  * Pure opening mutations, all **Floor** setters editing `floor.openings`
@@ -40,6 +40,38 @@ export function openingVerticals(opening: Opening): {
   };
 }
 
+/** The vertical extent a freshly inserted opening of `kind` gets. */
+export function defaultVerticals(kind: OpeningKind): {
+  bottom: number;
+  top: number;
+} {
+  return kind === "door"
+    ? { bottom: 0, top: DOOR_HEIGHT }
+    : { bottom: WINDOW_SILL, top: WINDOW_HEAD };
+}
+
+/** Whether two 1D ranges genuinely overlap (sharing an endpoint doesn't). */
+export function rangesOverlap(
+  aStart: number,
+  aEnd: number,
+  bStart: number,
+  bEnd: number,
+): boolean {
+  return aStart < bEnd - EPS && bStart < aEnd - EPS;
+}
+
+/**
+ * Whether two openings' vertical bands overlap. Openings block each other
+ * along the wall only when they do — vertically disjoint bands may share a
+ * stretch of wall (two windows stacked, a transom window over a door).
+ */
+export function verticalsOverlap(
+  a: { bottom: number; top: number },
+  b: { bottom: number; top: number },
+): boolean {
+  return rangesOverlap(a.bottom, a.top, b.bottom, b.top);
+}
+
 /** Write `bottom`/`top` back onto an opening, storing defaults as absent
  * fields (so an untouched opening keeps its pre-verticals shape). */
 function withVerticals(opening: Opening, bottom: number, top: number): Opening {
@@ -57,10 +89,49 @@ function withVerticals(opening: Opening, bottom: number, top: number): Opening {
 }
 
 /**
+ * The vertical room an opening has on its wall: the floor and ceiling,
+ * tightened by any *other* opening sharing a stretch of the same edge —
+ * a neighbor below raises the floor to its top, one above lowers the
+ * ceiling to its bottom. (Openings on the same span are vertically
+ * disjoint by invariant, so every such neighbor is entirely above or
+ * entirely below.)
+ */
+function verticalBounds(
+  floor: Floor,
+  opening: Opening,
+  ceiling: number,
+): { floorY: number; ceilingY: number } {
+  const current = openingVerticals(opening);
+  let floorY = 0;
+  let ceilingY = ceiling;
+  for (const other of floor.openings) {
+    if (other.id === opening.id || other.edgeId !== opening.edgeId) continue;
+    if (
+      !rangesOverlap(
+        opening.offset,
+        opening.offset + opening.width,
+        other.offset,
+        other.offset + other.width,
+      )
+    ) {
+      continue;
+    }
+    const band = openingVerticals(other);
+    if (band.top <= current.bottom + EPS) {
+      floorY = Math.max(floorY, band.top);
+    } else if (band.bottom >= current.top - EPS) {
+      ceilingY = Math.min(ceilingY, band.bottom);
+    }
+  }
+  return { floorY, ceilingY };
+}
+
+/**
  * Set an opening's vertical extent from the inspector's fields: the window
  * sill (`bottom`) and/or the hole top (`top`), each clamped to the floor, the
- * `ceiling`, and a minimum `MIN_OPENING_HEIGHT` extent against the other.
- * Doors pin `bottom` to the floor. Non-finite values and unknown ids no-op.
+ * `ceiling`, any opening stacked on the same stretch of wall, and a minimum
+ * `MIN_OPENING_HEIGHT` extent against the other edge. Doors pin `bottom` to
+ * the floor. Non-finite values and unknown ids no-op.
  */
 export function setOpeningVerticals(
   floor: Floor,
@@ -71,12 +142,13 @@ export function setOpeningVerticals(
   const opening = floor.openings.find((o) => o.id === id);
   if (!opening) return floor;
   const current = openingVerticals(opening);
+  const { floorY, ceilingY } = verticalBounds(floor, opening, ceiling);
   let bottom = current.bottom;
   let top = current.top;
   if (verticals.top !== undefined && Number.isFinite(verticals.top)) {
     top = Math.min(
       Math.max(verticals.top, bottom + MIN_OPENING_HEIGHT),
-      ceiling,
+      ceilingY,
     );
   }
   if (
@@ -84,7 +156,10 @@ export function setOpeningVerticals(
     verticals.bottom !== undefined &&
     Number.isFinite(verticals.bottom)
   ) {
-    bottom = Math.min(Math.max(verticals.bottom, 0), top - MIN_OPENING_HEIGHT);
+    bottom = Math.min(
+      Math.max(verticals.bottom, floorY),
+      top - MIN_OPENING_HEIGHT,
+    );
   }
   if (
     Math.abs(bottom - current.bottom) < EPS &&
@@ -102,8 +177,11 @@ export function setOpeningVerticals(
 
 /**
  * Slide a window vertically along its wall, preserving its height: `bottom`
- * quantizes to `grid` (non-positive = no quantize) and clamps into
- * [0, ceiling − height]. Doors sit on the floor — they no-op.
+ * quantizes to `grid` (non-positive = no quantize) and clamps into the
+ * nearest free vertical stretch of [0, ceiling] — the wall's height minus
+ * the bands of other openings sharing this stretch of wall, so a window
+ * can ride over or under a stacked neighbor but never through it. Doors sit
+ * on the floor — they no-op, as does a window with no free stretch left.
  */
 export function shiftOpeningVertical(
   floor: Floor,
@@ -119,11 +197,26 @@ export function shiftOpeningVertical(
   const current = openingVerticals(opening);
   const height = current.top - current.bottom;
   const quantized = grid > 0 ? Math.round(bottom / grid) * grid : bottom;
-  const clamped = Math.min(
-    Math.max(quantized, 0),
-    Math.max(ceiling - height, 0),
-  );
-  if (Math.abs(clamped - current.bottom) < EPS) return floor;
+  const blocked = floor.openings
+    .filter(
+      (other) =>
+        other.id !== id &&
+        other.edgeId === opening.edgeId &&
+        rangesOverlap(
+          opening.offset,
+          opening.offset + opening.width,
+          other.offset,
+          other.offset + other.width,
+        ),
+    )
+    .map((other) => {
+      const band = openingVerticals(other);
+      return { start: band.bottom, end: band.top };
+    });
+  const clamped = slideIntoGap(ceiling, height, blocked, quantized);
+  if (clamped === null || Math.abs(clamped - current.bottom) < EPS) {
+    return floor;
+  }
   return withOpenings(
     floor,
     floor.openings.map((o) =>
@@ -148,14 +241,22 @@ function withOpenings(floor: Floor, openings: Opening[]): Floor {
   return reconcileFloor({ ...floor, openings });
 }
 
-/** The occupied spans of every *other* opening on `edgeId`. */
+/** The occupied spans of every *other* opening on `edgeId` whose vertical
+ * band overlaps `band` — vertically disjoint openings don't block the slide,
+ * which is what lets windows stack. */
 function otherSpansOnEdge(
   floor: Floor,
   edgeId: string,
   excludeId: string,
+  band: { bottom: number; top: number },
 ): Array<{ start: number; end: number }> {
   return floor.openings
-    .filter((o) => o.edgeId === edgeId && o.id !== excludeId)
+    .filter(
+      (o) =>
+        o.edgeId === edgeId &&
+        o.id !== excludeId &&
+        verticalsOverlap(band, openingVerticals(o)),
+    )
     .map((o) => ({ start: o.offset, end: o.offset + o.width }));
 }
 
@@ -212,7 +313,12 @@ export function addFloorOpening(floor: Floor, opening: Opening): Floor {
     const slid = slideIntoGap(
       length,
       opening.width,
-      otherSpansOnEdge(floor, opening.edgeId, opening.id),
+      otherSpansOnEdge(
+        floor,
+        opening.edgeId,
+        opening.id,
+        openingVerticals(opening),
+      ),
       opening.offset,
     );
     if (slid !== null && slid !== opening.offset) {
@@ -237,7 +343,7 @@ export function moveFloorOpening(
   const slid = slideIntoGap(
     length,
     opening.width,
-    otherSpansOnEdge(floor, opening.edgeId, id),
+    otherSpansOnEdge(floor, opening.edgeId, id, openingVerticals(opening)),
     offset,
   );
   if (slid === null || slid === opening.offset) return floor;
@@ -250,7 +356,9 @@ export function moveFloorOpening(
 /**
  * Set an opening's width from the chip's field, keeping its center where the
  * edge allows. Clamps into the free stretch around it — the edge minus the
- * other openings on it (both sides). Unknown ids / non-finite widths no-op.
+ * other openings on it (both sides) whose vertical band overlaps this one's
+ * (a stacked window doesn't cap the one under it). Unknown ids / non-finite
+ * widths no-op.
  */
 export function resizeFloorOpening(
   floor: Floor,
@@ -261,10 +369,12 @@ export function resizeFloorOpening(
   if (!opening || !Number.isFinite(width)) return floor;
   const length = edgeLengthOf(floor, opening.edgeId);
   if (length === null) return floor;
+  const band = openingVerticals(opening);
   let gapStart = 0;
   let gapEnd = length;
   for (const other of floor.openings) {
     if (other.id === id || other.edgeId !== opening.edgeId) continue;
+    if (!verticalsOverlap(band, openingVerticals(other))) continue;
     const end = other.offset + other.width;
     if (end <= opening.offset + EPS) gapStart = Math.max(gapStart, end);
     if (other.offset + EPS >= opening.offset + opening.width) {

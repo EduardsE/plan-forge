@@ -203,6 +203,29 @@ describe("opening vertical extents", () => {
     expect(setOpeningVerticals(floor, "nope", { bottom: 1 }, 2.5)).toBe(floor);
   });
 
+  it("clamps a vertical edit against a stacked neighbor, not just floor/ceiling", () => {
+    // A second window right above window-AB (0.36–1.94): band 2.0–2.6.
+    const floor = addFloorOpening(makeFloor(), {
+      id: "w-up",
+      kind: "window",
+      edgeId: "AB",
+      offset: 4.0,
+      width: 1.0,
+      side: 1,
+      sill: 2.0,
+      head: 2.6,
+    });
+    // The upper window's sill can't drop through the lower window's head.
+    const lowered = setOpeningVerticals(floor, "w-up", { bottom: 1.0 }, 3.2);
+    expect(
+      openingVerticals(lowered.openings.find((o) => o.id === "w-up") as Opening)
+        .bottom,
+    ).toBeCloseTo(WINDOW_HEAD, 6);
+    // The lower window's head can't grow through the upper window's sill.
+    const raised = setOpeningVerticals(floor, "window-AB", { top: 2.4 }, 3.2);
+    expect(openingVerticals(window(raised) as Opening).top).toBeCloseTo(2.0, 6);
+  });
+
   it("shifts a window vertically preserving height; doors no-op", () => {
     const floor = makeFloor();
     const height = WINDOW_HEAD - WINDOW_SILL;
@@ -218,5 +241,99 @@ describe("opening vertical extents", () => {
     expect(shiftOpeningVertical(floor, "window-AB", WINDOW_SILL, 2.5)).toBe(
       floor,
     );
+  });
+
+  it("a vertical shift rides over a stacked neighbor, never through it", () => {
+    const floor = addFloorOpening(makeFloor(), {
+      id: "w-up",
+      kind: "window",
+      edgeId: "AB",
+      offset: 4.0,
+      width: 1.0,
+      side: 1,
+      sill: 2.0,
+      head: 2.6,
+    });
+    const wUp = (f: ReturnType<typeof makeFloor>) =>
+      f.openings.find((o) => o.id === "w-up");
+    // Dragged down into the lower window's band: clamps flush onto its head.
+    const down = shiftOpeningVertical(floor, "w-up", 0.5, 3.2);
+    expect(openingVerticals(wUp(down) as Opening)).toEqual({
+      bottom: expect.closeTo(WINDOW_HEAD, 6),
+      top: expect.closeTo(WINDOW_HEAD + 0.6, 6),
+    });
+    // The lower window dragged up stops under the upper's sill.
+    const up = shiftOpeningVertical(floor, "window-AB", 2.0, 3.2);
+    expect(openingVerticals(window(up) as Opening).top).toBeCloseTo(2.0, 6);
+    // No free vertical stretch that fits → no-op by reference.
+    expect(shiftOpeningVertical(floor, "w-up", 0.5, 2.3)).toBe(floor);
+  });
+});
+
+describe("stacked openings share a stretch of wall", () => {
+  const stackedFloor = () =>
+    addFloorOpening(makeFloor(), {
+      id: "w-up",
+      kind: "window",
+      edgeId: "AB",
+      offset: 4.0,
+      width: 1.0,
+      side: 1,
+      sill: 2.0,
+      head: 2.6,
+    });
+
+  it("adds a vertically clear window right on top of another", () => {
+    // Band 2.0–2.6 is clear of window-AB's 0.36–1.94 → no slide off [4.0].
+    const floor = stackedFloor();
+    expect(floor.openings.find((o) => o.id === "w-up")?.offset).toBeCloseTo(
+      4.0,
+      6,
+    );
+    // The same insert at the default band slides clear of window-AB.
+    const sameBand = addFloorOpening(makeFloor(), {
+      id: "w-flat",
+      kind: "window",
+      edgeId: "AB",
+      offset: 4.0,
+      width: 1.0,
+      side: 1,
+    });
+    const slid = sameBand.openings.find((o) => o.id === "w-flat");
+    expect((slid?.offset ?? 0) + 1.0).toBeLessThanOrEqual(3.55 + 1e-6);
+  });
+
+  it("adds a transom window above a door", () => {
+    // Door-BE runs 0–2.05; a window silled at 2.1 shares its span freely.
+    const floor = addFloorOpening(makeFloor(), {
+      id: "transom",
+      kind: "window",
+      edgeId: "BE",
+      offset: 3.65,
+      width: 0.95,
+      side: 1,
+      sill: 2.1,
+      head: 2.4,
+    });
+    expect(floor.openings.find((o) => o.id === "transom")?.offset).toBeCloseTo(
+      3.65,
+      6,
+    );
+  });
+
+  it("moves a raised window across a lower one", () => {
+    const moved = moveFloorOpening(stackedFloor(), "w-up", 3.6);
+    expect(moved.openings.find((o) => o.id === "w-up")?.offset).toBeCloseTo(
+      3.6,
+      6,
+    );
+  });
+
+  it("resizes past a stacked neighbor (only same-band openings cap it)", () => {
+    // window-AB (center 4.6) grows to 3.0 wide, straight through w-up's span.
+    const wide = resizeFloorOpening(stackedFloor(), "window-AB", 3.0);
+    const w = wide.openings.find((o) => o.id === "window-AB");
+    expect(w?.width).toBeCloseTo(3.0, 6);
+    expect(w?.offset).toBeCloseTo(3.1, 6);
   });
 });

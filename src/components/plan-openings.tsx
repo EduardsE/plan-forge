@@ -11,7 +11,7 @@ import {
 import { ACTION_BUTTON_CLASS } from "#/components/selection-chip";
 import { SnapGuides } from "#/components/snap-guides";
 import { Tooltip } from "#/components/tooltip";
-import type { Point } from "#/lib/model";
+import { type Point, verticalsOverlap } from "#/lib/model";
 import {
   offsetAlongWall,
   openingCornerGuides,
@@ -403,7 +403,13 @@ function OpeningDragSession({
       const point = toFloor(event);
       if (!point) return;
       const wall = solidRef.current;
-      const others = wall.holes.filter((hole) => hole.id !== drag.id);
+      // Only holes on an overlapping vertical band block the slide — a
+      // window rides over/under a stacked neighbor on the 2D plan too.
+      const live = wall.holes.find((hole) => hole.id === drag.id);
+      const others = wall.holes.filter(
+        (hole) =>
+          hole.id !== drag.id && (!live || verticalsOverlap(live, hole)),
+      );
       const offset = slideOpening(
         wall.length,
         drag.width,
