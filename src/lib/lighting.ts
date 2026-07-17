@@ -37,6 +37,11 @@ export interface LightingPreset {
   };
   /** Flat fill so surfaces the sun misses don't crush to black. */
   ambient: { color: string; intensity: number };
+  /**
+   * What the window panes show: the hour's sky as a vertical gradient,
+   * horizon at the sill up to zenith at the head.
+   */
+  sky: { zenith: string; horizon: string };
   /** Warm window-side key light intensity. */
   key: number;
   /** Cool open-side fill intensity. */
@@ -53,6 +58,7 @@ export const LIGHTING: Record<TimeOfDay, LightingPreset> = {
     label: "Dawn",
     sun: { color: "#ffe1c6", intensity: 1.95, elevationDeg: 17, rakeDeg: -40 },
     ambient: { color: "#e9e6ee", intensity: 0.46 },
+    sky: { zenith: "#b6c2e4", horizon: "#ffd9c6" },
     key: 0.3,
     fill: 0.16,
     pool: [
@@ -66,6 +72,7 @@ export const LIGHTING: Record<TimeOfDay, LightingPreset> = {
     sun: { color: "#fff4e2", intensity: 3.0, elevationDeg: 60, rakeDeg: 14 },
     // Neutral-warm, not cool: midday should still read as an inviting room.
     ambient: { color: "#f2eee6", intensity: 0.52 },
+    sky: { zenith: "#9cc6ee", horizon: "#e8f3fb" },
     key: 0.42,
     fill: 0.2,
     pool: [
@@ -78,6 +85,7 @@ export const LIGHTING: Record<TimeOfDay, LightingPreset> = {
     label: "Golden",
     sun: { color: "#ffca8a", intensity: 2.7, elevationDeg: 27, rakeDeg: 30 },
     ambient: { color: "#f6e8d4", intensity: 0.44 },
+    sky: { zenith: "#9db4d8", horizon: "#ffd08e" },
     key: 0.4,
     fill: 0.15,
     pool: [
@@ -90,6 +98,7 @@ export const LIGHTING: Record<TimeOfDay, LightingPreset> = {
     label: "Dusk",
     sun: { color: "#ff9f63", intensity: 1.7, elevationDeg: 12, rakeDeg: 46 },
     ambient: { color: "#eedac6", intensity: 0.38 },
+    sky: { zenith: "#6b76a4", horizon: "#ffa972" },
     key: 0.3,
     fill: 0.14,
     pool: [

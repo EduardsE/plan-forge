@@ -15,6 +15,7 @@ import {
   Object3D,
   Path,
   RepeatWrapping,
+  ShaderMaterial,
   Shape,
   ShapeGeometry,
   SRGBColorSpace,
@@ -35,7 +36,7 @@ import {
   partHullScale,
   partScale,
 } from "#/lib/furniture-parts";
-import { LIGHTING, type TimeOfDay } from "#/lib/lighting";
+import { LIGHTING, type LightingPreset, type TimeOfDay } from "#/lib/lighting";
 import type {
   Bounds,
   DerivedRoom,
@@ -90,7 +91,6 @@ const BASEBOARD_HEIGHT = 0.12;
 const WALL_EDGE_COLOR = "#ede2ce";
 const WINDOW_FRAME_COLOR = "#e6dbc6";
 const WINDOW_FRAME_SIZE = 0.09;
-const PANE_COLORS = ["#fff6de", "#ffe9c2"] as const;
 
 /** Mockup's selection stroke: rgba(58,91,240,.7) on the desk chair faces. */
 const SELECTION_COLOR = "#3a5bf0";
@@ -129,6 +129,52 @@ const ceilingShadowMaterial = new MeshBasicMaterial({
 });
 
 /**
+ * Window glass: the hour's sky as a vertical gradient (horizon at the sill,
+ * zenith at the head) plus a Fresnel sheen that brightens toward glancing
+ * angles — the angle-dependence is what makes the pane read as glass rather
+ * than a backlit card while the camera orbits. Unlit on purpose, like the
+ * old glow texture: the pane is the light source, not a lit surface.
+ */
+const PANE_VERTEX = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vView;
+void main() {
+	vUv = uv;
+	vec4 mv = modelViewMatrix * vec4(position, 1.0);
+	vNormal = normalize(normalMatrix * normal);
+	vView = normalize(-mv.xyz);
+	gl_Position = projectionMatrix * mv;
+}
+`;
+const PANE_FRAGMENT = /* glsl */ `
+uniform vec3 zenith;
+uniform vec3 horizon;
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vView;
+void main() {
+	vec3 sky = mix(horizon, zenith, vUv.y);
+	float grazing = 1.0 - abs(dot(normalize(vNormal), normalize(vView)));
+	float fresnel = pow(grazing, 3.0);
+	gl_FragColor = vec4(mix(sky, vec3(1.0), fresnel * 0.55), 1.0);
+	#include <colorspace_fragment>
+}
+`;
+
+/** One shared pane material; `WindowDressing` syncs its sky uniforms to the
+ * active preset (idempotent — every window shows the same hour). */
+const paneMaterial = new ShaderMaterial({
+  uniforms: {
+    zenith: { value: new Color("#9cc6ee") },
+    horizon: { value: new Color("#e8f3fb") },
+  },
+  vertexShader: PANE_VERTEX,
+  fragmentShader: PANE_FRAGMENT,
+  side: DoubleSide,
+});
+
+/**
  * Cutaway threshold on the wall-to-camera facing dot: slightly negative so
  * near-edge-on walls cut down too instead of lingering as slivers.
  */
@@ -158,7 +204,6 @@ function makeTexture(
  */
 let textureCache: {
   plank: CanvasTexture;
-  pane: CanvasTexture;
   blob: CanvasTexture;
 } | null = null;
 
@@ -205,15 +250,6 @@ function sharedTextures() {
   plank.wrapT = RepeatWrapping;
   plank.repeat.set(1 / PLANK_PERIOD, 1 / PLANK_PERIOD);
 
-  // Daylight glow for window panes.
-  const pane = makeTexture(4, 128, (ctx) => {
-    const gradient = ctx.createLinearGradient(0, 0, 0, 128);
-    gradient.addColorStop(0, PANE_COLORS[0]);
-    gradient.addColorStop(1, PANE_COLORS[1]);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 4, 128);
-  });
-
   // Radial alpha falloff shared by every soft blob shadow.
   const blob = makeTexture(256, 256, (ctx) => {
     const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
@@ -224,7 +260,7 @@ function sharedTextures() {
     ctx.fillRect(0, 0, 256, 256);
   });
 
-  textureCache = { plank, pane, blob };
+  textureCache = { plank, blob };
   return textureCache;
 }
 
@@ -389,29 +425,33 @@ function windowBars(
   ];
 }
 
-/** Frame, muntin cross and glowing pane for one window hole (wall-local). */
+/** Frame, muntin cross and sky-filled pane for one window hole (wall-local). */
 function WindowDressing({
   hole,
   zCenter,
+  lighting,
 }: {
   hole: WallSolid["holes"][number];
   /** Wall-local z of the dressing's center plane (mid-thickness; on shared
    * walls the seam line, so the frame straddles both rooms' halves). */
   zCenter: number;
+  lighting: LightingPreset;
 }) {
-  const { pane } = sharedTextures();
   const f = WINDOW_FRAME_SIZE;
   const cx = hole.start + hole.width / 2;
   const cy = (hole.bottom + hole.top) / 2;
   const height = hole.top - hole.bottom;
+  useLayoutEffect(() => {
+    (paneMaterial.uniforms.zenith?.value as Color).set(lighting.sky.zenith);
+    (paneMaterial.uniforms.horizon?.value as Color).set(lighting.sky.horizon);
+  }, [lighting]);
   // Centered in the wall, slightly deeper than it, so the frame reads as a
   // lip on both faces without caring which side is the interior.
   const z = zCenter;
   return (
     <group>
-      <mesh position={[cx, cy, z]} raycast={noRaycast}>
+      <mesh position={[cx, cy, z]} material={paneMaterial} raycast={noRaycast}>
         <planeGeometry args={[hole.width - f, height - f]} />
-        <meshBasicMaterial map={pane} side={DoubleSide} />
       </mesh>
       {/* Shadows come from the wall's always-on proxy bars, not from here —
           this dressing vanishes with the cutaway, and the sun patch on the
@@ -422,13 +462,13 @@ function WindowDressing({
           <meshLambertMaterial color={WINDOW_FRAME_COLOR} />
         </mesh>
       ))}
-      {/* A tight warm glow on the frame/reveal — kept local (short distance) so
-          it dresses the window without flooding the floor and flattening the
-          sun patch that rakes in through the same hole. */}
+      {/* A tight glow on the frame/reveal, tinted to the hour's sun — kept
+          local (short distance) so it dresses the window without flooding the
+          floor and flattening the sun patch raking in through the same hole. */}
       <pointLight
         position={[cx, cy, z]}
-        color="#ffd9a0"
-        intensity={2.4}
+        color={lighting.sun.color}
+        intensity={2.0}
         distance={4.5}
         decay={2}
       />
@@ -449,10 +489,12 @@ interface WallDisplay {
 function WallMesh({
   solid,
   display,
+  lighting,
 }: {
   solid: WallSolid;
   /** Owned by `Walls`; the group refs below register themselves into it. */
   display: WallDisplay;
+  lighting: LightingPreset;
 }) {
   const wall = wallTexture(solid.height);
   // One extrusion for the whole edge, holes cut for every opening on it, plus
@@ -557,7 +599,12 @@ function WallMesh({
       >
         {wallMesh(geometry.full)}
         {windows.map((hole) => (
-          <WindowDressing key={hole.id} hole={hole} zCenter={0} />
+          <WindowDressing
+            key={hole.id}
+            hole={hole}
+            zCenter={0}
+            lighting={lighting}
+          />
         ))}
       </group>
       <group
@@ -592,7 +639,15 @@ function WallMesh({
  * two-face wall always stubs while orbiting (it always occludes one of its
  * rooms), a 0/1-face wall stubs only when it faces the camera.
  */
-function Walls({ solids, posts }: { solids: WallSolid[]; posts: NodePost[] }) {
+function Walls({
+  solids,
+  posts,
+  lighting,
+}: {
+  solids: WallSolid[];
+  posts: NodePost[];
+  lighting: LightingPreset;
+}) {
   const displays = useMemo<WallDisplay[]>(
     () => solids.map(() => ({ full: null, stub: null })),
     [solids],
@@ -643,7 +698,12 @@ function Walls({ solids, posts }: { solids: WallSolid[]; posts: NodePost[] }) {
   return (
     <group>
       {solids.map((solid, i) => (
-        <WallMesh key={solid.edgeId} solid={solid} display={displays[i]} />
+        <WallMesh
+          key={solid.edgeId}
+          solid={solid}
+          display={displays[i]}
+          lighting={lighting}
+        />
       ))}
       {posts.map((post, i) => (
         <group key={post.nodeId} position={[post.center.x, 0, post.center.y]}>
@@ -1126,7 +1186,7 @@ export function RoomScene({
         azimuth={MathUtils.degToRad(sunAnchorDeg + lighting.sun.rakeDeg)}
       />
       {bounds && <FloorContactShadow bounds={bounds} />}
-      <Walls solids={solids} posts={posts} />
+      <Walls solids={solids} posts={posts} lighting={lighting} />
       <RoomOpenings
         solids={solids}
         selectedId={selectedOpeningId}
