@@ -11,6 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "prepare-models": "node scripts/prepare-model.mjs && biome check --write src/lib/model/model-manifest.gen.ts",
     "format": "biome format",
     "lint": "biome lint",
     "check": "biome check"
@@ -37,6 +38,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.5",
+    "@gltf-transform/core": "^4.4.1",
+    "@gltf-transform/functions": "^4.4.1",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/devtools-vite": "latest",
     "@tanstack/router-cli": "^1.132.0",
