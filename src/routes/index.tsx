@@ -402,9 +402,9 @@ function Planner() {
   // localStorage only exists on the client), then write back on every floor
   // or unit change. `lastSavedRef` holds the last payload written or loaded,
   // so hydration itself doesn't count as a save and reloads keep the honest
-  // saved-at time instead of resetting the clock to "just now". A legacy
-  // single-room save hydrates as a migrated one-room floor and stays on disk
-  // in its old shape until the first real change writes v4.
+  // saved-at time instead of resetting the clock to "just now". Older payload
+  // versions can't be reconstructed as a wall graph, so a stale or malformed
+  // save is discarded (hydrates as the sample floor) — no migration.
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [storageReady, setStorageReady] = useState(false);
   const lastSavedRef = useRef<string | null>(null);

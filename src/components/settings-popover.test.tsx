@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { createSampleRoom } from "#/lib/model";
+import { createSampleRoom } from "#/lib/model/test-fixtures";
 import { SettingsPopover } from "./settings-popover";
 
 function renderPopover(

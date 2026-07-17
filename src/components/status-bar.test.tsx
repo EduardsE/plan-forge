@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createCameraReadoutStore } from "#/lib/camera";
-import { createSampleRoom, type Room } from "#/lib/model";
+import type { Room } from "#/lib/model";
+import { createSampleRoom } from "#/lib/model/test-fixtures";
 import { StatusBar } from "./status-bar";
 
 // The shipping sample floor is a two-room flat (M6); these tests pin a

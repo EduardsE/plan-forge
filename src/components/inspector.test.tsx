@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { createSampleRoom, type FurnitureItem, type Room } from "#/lib/model";
+import type { FurnitureItem, Room } from "#/lib/model";
+import { createSampleRoom } from "#/lib/model/test-fixtures";
 import { Inspector } from "./inspector";
 
 const room = createSampleRoom();

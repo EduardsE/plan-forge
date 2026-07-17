@@ -15,7 +15,7 @@ import {
   setMountElevation,
   updateFurniture,
 } from "./furniture";
-import { createSampleRoom } from "./sample-room";
+import { createSampleRoom } from "./test-fixtures";
 import type { FurnitureItem, Room } from "./types";
 
 /**

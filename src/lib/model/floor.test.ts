@@ -11,8 +11,7 @@ import {
   updateFloorFurniture,
 } from "./floor";
 import { addFurniture } from "./furniture";
-import { createSampleRoom } from "./sample-room";
-import { makeFloor } from "./test-fixtures";
+import { createSampleRoom, makeFloor } from "./test-fixtures";
 import type { FurnitureItem, Room } from "./types";
 
 /**

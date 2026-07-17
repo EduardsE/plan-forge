@@ -6,7 +6,7 @@ import {
   filterCatalog,
   formatSizeCm,
 } from "./catalog";
-import { createSampleRoom } from "./sample-room";
+import { createSampleRoom } from "./test-fixtures";
 
 describe("CATALOG", () => {
   it("has unique ids", () => {

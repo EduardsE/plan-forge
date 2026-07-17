@@ -2,11 +2,8 @@ import { describe, expect, it } from "vitest";
 import { overlappingFurnitureIds } from "#/lib/collision";
 import { deriveFloor, portalLabel } from "./derived";
 import { floorArea, outlineBounds, wallLength, wallsOf } from "./geometry";
-import {
-  createSampleFloor,
-  createSampleKitchen,
-  createSampleRoom,
-} from "./sample-room";
+import { createSampleFloor } from "./sample-room";
+import { createSampleKitchen, createSampleRoom } from "./test-fixtures";
 import type { FurnitureItem, Room } from "./types";
 
 /** Axis-aligned x/y half-extents of a footprint after rotation. */
