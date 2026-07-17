@@ -166,5 +166,30 @@ describe("normalizeGraph", () => {
     );
     const twice = normalizeGraph(once, nextId);
     expect(twice).toEqual(once);
+    // No-op contract: a settled graph returns the very same object reference.
+    expect(twice).toBe(once);
+  });
+
+  it("returns the same reference when nothing needs repair", () => {
+    const settled = state({
+      nodes: [node("a", 0, 0), node("b", 4, 0)],
+      edges: [edge("e1", "a", "b")],
+    });
+    expect(normalizeGraph(settled, nextId)).toBe(settled);
+  });
+
+  it("drops an edge whose endpoint resolves to no node", () => {
+    const g = normalizeGraph(
+      state({
+        nodes: [node("a", 0, 0), node("b", 4, 0)],
+        edges: [
+          edge("e1", "a", "b"),
+          edge("e2", "a", "ghost"), // dangling reference → dropped
+        ],
+      }),
+      nextId,
+    );
+    expect(g.edges.map((e) => e.id)).toEqual(["e1"]);
+    expect(g.nodes.map((n) => n.id)).toEqual(["a", "b"]);
   });
 });

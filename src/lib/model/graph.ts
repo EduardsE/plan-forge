@@ -84,7 +84,12 @@ function weldNodes(
   return { nodes: kept, edges: nextEdges, changed: true };
 }
 
-/** 2. Drop edges with equal endpoints, or endpoints closer than `EPS`. */
+/**
+ * 2. Drop edges with equal endpoints, endpoints closer than `EPS`, or an
+ * endpoint that resolves to no node — a dangling reference is malformed, so
+ * it's dropped rather than carried into the face walk (defensive: normal
+ * pipeline input never has one, but persisted/hand-edited state might).
+ */
 function dropDegenerateEdges(
   edges: WallEdge[],
   nodes: WallNode[],
@@ -94,7 +99,7 @@ function dropDegenerateEdges(
     if (e.a === e.b) return false;
     const a = byId.get(e.a);
     const b = byId.get(e.b);
-    if (!a || !b) return true;
+    if (!a || !b) return false;
     return distance(a, b) >= EPS;
   });
   return { edges: next, changed: next.length !== edges.length };
@@ -231,7 +236,12 @@ function splitAtNodes(
 }
 
 /** Intersection of two segments a1→b1 and a2→b2, with each hit's parameter
- * (0..1) along its own segment. Null when parallel (or nearly so). */
+ * (0..1) along its own segment. Null when parallel (or nearly so). `denom` is
+ * the cross product of the two direction vectors, so its units are length²;
+ * the `EPS` (1e-6) parallel guard is therefore a length² threshold. That's
+ * acceptable here: edges are whole meters, so a genuine crossing's denom is
+ * O(1), far above 1e-6, and the split-tolerance regime (NODE_MERGE_TOLERANCE)
+ * already absorbs near-parallel edges before they'd matter. */
 function segmentIntersection(
   a1: Point,
   b1: Point,

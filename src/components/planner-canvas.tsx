@@ -601,7 +601,7 @@ export interface PlannerCanvasProps {
   onNodeMoveSettle: (nodeId: string, point: Point) => void;
   onNodeMoveCancel: (nodeId: string, original: Point) => void;
   onBeginSplitDrag: (edgeId: string, point: Point) => string | null;
-  onSetEdgeLength: (edgeId: string, length: number) => void;
+  onSetEdgeLength: (edgeId: string, length: number, fixed: "a" | "b") => void;
   onDeleteNode: (nodeId: string) => void;
   onDeleteEdge: (edgeId: string) => void;
   /** Catalog item mid-drag from the objects panel, if any. */

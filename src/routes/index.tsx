@@ -562,12 +562,13 @@ function Planner() {
     },
     [],
   );
-  // A length pill commit: `setEdgeLength` keeps the near end (node `a`) fixed,
-  // so the far corner (and every wall sharing it) moves — one undo step.
+  // A length pill commit: the pill supplies which end stays `fixed` (it knows
+  // the wall's rendered orientation), and the far corner — plus every wall
+  // sharing it — slides to the new length in one undo step.
   const setEdgeLen = useCallback(
-    (edgeId: string, length: number) =>
+    (edgeId: string, length: number, fixed: "a" | "b") =>
       setFloorHistory((history) => {
-        const next = setEdgeLength(history.current, edgeId, length, "a");
+        const next = setEdgeLength(history.current, edgeId, length, fixed);
         return next === history.current
           ? history
           : commitHistory(history, next);

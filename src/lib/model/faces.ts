@@ -193,6 +193,13 @@ function pointInTriangle(p: Point, a: Point, b: Point, c: Point): boolean {
  * and `n`, either no other vertex intrudes into triangle (p, v, n) and its
  * centroid is interior, or the intruding vertex `q` farthest from line p–n
  * sees `v` across the interior, so the midpoint of v–q is interior.
+ *
+ * Caveat: this assumes a *simple* polygon. A face traced through a stub edge
+ * visits a vertex twice (the same node going out and back), so the loop isn't
+ * strictly simple; the repeated-vertex guards (`c === prev`/`c === next` and
+ * the coincident-coordinate skip) keep it from picking the stub tip as `q`,
+ * but this is only reached as `faceLabelPoint`'s last-resort fallback — real
+ * faces resolve on the centroid or lattice scan first.
  */
 function guaranteedInteriorPoint(polygon: Point[]): Point {
   const count = polygon.length;

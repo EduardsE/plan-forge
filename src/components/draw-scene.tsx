@@ -524,7 +524,10 @@ export interface DrawSceneProps {
   /** Split edge `edgeId` at the clicked point and return the new node's id to
    * drag (null when refused near a corner). */
   onBeginSplitDrag: (edgeId: string, point: Point) => string | null;
-  onSetEdgeLength: (edgeId: string, length: number) => void;
+  /** Commit a length pill: `fixed` is which edge end stays put while the other
+   * slides. The pill knows the wall's rendered orientation (it draws a→b), so
+   * it names the fixed end rather than the state layer assuming one. */
+  onSetEdgeLength: (edgeId: string, length: number, fixed: "a" | "b") => void;
   onDeleteNode: (nodeId: string) => void;
   onDeleteEdge: (edgeId: string) => void;
 }
@@ -804,7 +807,9 @@ export function DrawScene({
             editing={editingEdge === edge.id}
             onBeginEdit={() => setEditingEdge(edge.id)}
             onCommit={(meters) => {
-              onSetEdgeLength(edge.id, meters);
+              // The pill draws from `a` (the rendered start), so keep `a`
+              // fixed and let the far end (`b`) slide to the new length.
+              onSetEdgeLength(edge.id, meters, "a");
               setEditingEdge(null);
             }}
             onCancel={() => setEditingEdge(null)}
