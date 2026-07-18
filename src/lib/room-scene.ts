@@ -295,6 +295,48 @@ export function windowUnitZ(
   return farFace + hole.side * (windowUnitDepth(solid) / 2);
 }
 
+/** Sill board thickness (drops below the hole bottom), meters. */
+export const SILL_THICKNESS = 0.04;
+/** How far the board extends past the hole on each side, meters. */
+export const SILL_EAR = 0.04;
+
+/** One window's sill board, in wall-local coordinates (x along the wall,
+ * y up from the floor, z on the local leftNormal axis). */
+export interface SillBox {
+  x: number;
+  y: number;
+  z: number;
+  width: number;
+  height: number;
+  depth: number;
+  material: "white" | "wood";
+}
+
+/**
+ * The sill board of a window hole: top face flush with `hole.bottom`, running
+ * from the window unit's interior face to `sillOverhang` past the interior
+ * wall face on the hole's room side (`hole.side`), with `SILL_EAR` ears. Null
+ * for doors, and when the board would be zero-deep (default-thickness wall
+ * with overhang 0 — no reveal, nothing to draw).
+ */
+export function sillBox(solid: WallSolid, hole: WallHole): SillBox | null {
+  if (hole.kind !== "window") return null;
+  const overhang = hole.sillOverhang ?? 0;
+  const depth = solid.thickness - windowUnitDepth(solid) + overhang;
+  if (depth < MIN_HOLE_SIZE) return null;
+  const unitInterior =
+    windowUnitZ(solid, hole) + hole.side * (windowUnitDepth(solid) / 2);
+  return {
+    x: hole.start + hole.width / 2,
+    y: hole.bottom - SILL_THICKNESS / 2,
+    z: unitInterior + hole.side * (depth / 2),
+    width: hole.width + 2 * SILL_EAR,
+    height: SILL_THICKNESS,
+    depth,
+    material: hole.sillMaterial ?? "white",
+  };
+}
+
 /**
  * The stretches a wall's cut-down stub still covers: holes reaching below the
  * stub top become full gaps — doors keep reading as openings in the low wall —

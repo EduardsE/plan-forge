@@ -14,6 +14,7 @@ import {
   faceOutwardOffset,
   nodePosts,
   STUB_WALL_HEIGHT,
+  sillBox,
   stubSpans,
   sunAnchorAzimuth,
   WALL_HEIGHT,
@@ -329,5 +330,52 @@ describe("per-edge wall thickness", () => {
     // Unit sits in the outer 10 cm; on a default wall that is centered:
     if (!ab || !hole) throw new Error("window hole missing");
     expect(windowUnitZ(ab, hole)).toBeCloseTo(0, 9);
+  });
+});
+
+describe("sillBox", () => {
+  const solidsOf = (floor: Floor) =>
+    buildEdgeSolids(floor, deriveFloor(floor).rooms);
+  const windowOn = (floor: Floor) => {
+    const ab = solidsOf(floor).find((s) => s.edgeId === "AB");
+    const hole = ab?.holes.find((h) => h.id === "window-AB");
+    if (!ab || !hole) throw new Error("fixture window missing");
+    return { ab, hole };
+  };
+
+  it("default wall + default overhang: a 3 cm ledge on the room side", () => {
+    const { ab, hole } = windowOn(makeFloor());
+    const sill = sillBox(ab, hole);
+    expect(sill).not.toBeNull();
+    if (!sill) return;
+    expect(sill.width).toBeCloseTo(hole.width + 0.08, 9);
+    expect(sill.height).toBe(0.04);
+    expect(sill.y).toBeCloseTo(hole.bottom - 0.02, 9);
+    expect(sill.depth).toBeCloseTo(0.03, 9);
+    // Room is on side +1; the board spans interior face (+0.05) → +0.08.
+    expect(sill.z).toBeCloseTo(0.065, 9);
+    expect(sill.material).toBe("white");
+  });
+
+  it("thick wall + overhang 0: fills the reveal, flush at the face", () => {
+    let floor = setEdgeThickness(makeFloor(), "AB", 0.3);
+    floor = setOpeningSillOverhang(floor, "window-AB", 0);
+    const { ab, hole } = windowOn(floor);
+    const sill = sillBox(ab, hole);
+    if (!sill) throw new Error("sill missing");
+    // Reveal = 0.3 − 0.1 = 0.2, spanning local z −0.15 (unit's interior
+    // face) → +0.05 (pinned interior wall face).
+    expect(sill.depth).toBeCloseTo(0.2, 9);
+    expect(sill.z).toBeCloseTo(-0.05, 9);
+  });
+
+  it("null for doors and for a zero-depth board", () => {
+    const floor = setOpeningSillOverhang(makeFloor(), "window-AB", 0);
+    const { ab, hole } = windowOn(floor);
+    expect(sillBox(ab, hole)).toBeNull();
+    const be = solidsOf(makeFloor()).find((s) => s.edgeId === "BE");
+    const door = be?.holes.find((h) => h.id === "door-BE");
+    if (!be || !door) throw new Error("fixture door missing");
+    expect(sillBox(be, door)).toBeNull();
   });
 });
