@@ -8,7 +8,7 @@ import {
   wallPoint,
   wallSpanRect,
 } from "#/lib/plan-scene";
-import { WALL_HEIGHT, type WallSolid } from "#/lib/room-scene";
+import { WALL_HEIGHT, WALL_THICKNESS, type WallSolid } from "#/lib/room-scene";
 
 /** A wall solid literal (edge a→b) for the pure geometry helpers. */
 function solid(overrides: Partial<WallSolid> = {}): WallSolid {
@@ -20,6 +20,9 @@ function solid(overrides: Partial<WallSolid> = {}): WallSolid {
     outward: { x: 0, y: -1 },
     length: 6.4,
     height: WALL_HEIGHT,
+    thickness: WALL_THICKNESS,
+    outwardShift: 0,
+    outwardSign: 1,
     holes: [],
     faces: 1,
     faceSides: [1],
