@@ -643,6 +643,10 @@ function WallMesh({
             onSelectWall(solid.edgeId);
           }}
           onPointerOver={(event) => {
+            // R3F hit-tests each mesh's own visibility, not its ancestors' —
+            // the cutaway may have swapped this group out this frame, same
+            // as the click guard above.
+            if (display.full && !display.full.visible) return;
             event.stopPropagation();
             setHovered(true);
           }}
@@ -690,6 +694,7 @@ function WallMesh({
               onSelectWall(solid.edgeId);
             }}
             onPointerOver={(event) => {
+              if (display.stub && !display.stub.visible) return;
               event.stopPropagation();
               setHovered(true);
             }}
