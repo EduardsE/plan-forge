@@ -12,6 +12,7 @@ import {
   type Opening,
   type Point,
   type Room,
+  type SillMaterial,
   totalFloorArea,
   totalPerimeter,
   wallHeightOf,
@@ -381,6 +382,9 @@ export interface OpeningSelection {
   connects: string | null;
   /** The host edge borders two rooms — a door can open either way. */
   twoFace: boolean;
+  /** Effective sill parameters (windows; doors carry the defaults unused). */
+  sillOverhang: number;
+  sillMaterial: SillMaterial;
 }
 
 interface OpeningSectionProps {
@@ -396,6 +400,10 @@ interface OpeningSectionProps {
   onShift: (bottom: number) => void;
   onFlipHinge: () => void;
   onFlipSide: () => void;
+  /** A committed sill overhang, meters past the interior wall face. */
+  onSillOverhang: (meters: number) => void;
+  /** A committed sill material (windows only). */
+  onSillMaterial: (material: SillMaterial) => void;
   onDelete: () => void;
 }
 
@@ -407,6 +415,8 @@ function OpeningSection({
   onShift,
   onFlipHinge,
   onFlipSide,
+  onSillOverhang,
+  onSillMaterial,
   onDelete,
 }: OpeningSectionProps) {
   const { opening, bottom, top } = selection;
@@ -497,6 +507,39 @@ function OpeningSection({
         </div>
       </div>
 
+      {!isDoor && (
+        <div className="flex flex-col gap-2.5">
+          <SectionLabel>SILL</SectionLabel>
+          <div className="grid grid-cols-2 gap-2">
+            {lengthField(
+              "OVERHANG",
+              "Sill overhang",
+              selection.sillOverhang,
+              commitLength(onSillOverhang, selection.sillOverhang),
+            )}
+            <div className="flex items-center gap-2">
+              {(["white", "wood"] as const).map((material) => (
+                <button
+                  key={material}
+                  type="button"
+                  aria-label={`Sill material ${material}`}
+                  aria-pressed={selection.sillMaterial === material}
+                  onClick={() => onSillMaterial(material)}
+                  className={cn(
+                    "flex-1 rounded-[8px] border py-[9px] text-[12px] capitalize",
+                    selection.sillMaterial === material
+                      ? "border-[var(--blue)] text-[var(--ink-900)] ring-1 ring-[var(--blue)]"
+                      : "border-[var(--control-border)] bg-[var(--frame)] text-[var(--ink-500)] hover:bg-[var(--well)]",
+                  )}
+                >
+                  {material}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2.5">
         <SectionLabel>ARRANGE</SectionLabel>
         <div className="grid grid-cols-3 gap-2">
@@ -537,6 +580,96 @@ function OpeningSection({
   );
 }
 
+/** The route-resolved selected wall (a graph edge picked in either lens). */
+export interface WallSelection {
+  edgeId: string;
+  /** Centerline length, meters (read-only here — draw mode edits lengths). */
+  length: number;
+  /** Effective thickness (a shared wall reads the dormant default). */
+  thickness: number;
+  /** The wall borders two rooms — thickness is locked to the default. */
+  twoFace: boolean;
+}
+
+function WallSection({
+  selection,
+  unit,
+  onThickness,
+}: {
+  selection: WallSelection;
+  unit: Unit;
+  onThickness: (meters: number) => void;
+}) {
+  const commitThickness = (text: string) => {
+    const meters = parseLength(text, unit);
+    if (meters === null) return;
+    if (Math.abs(meters - selection.thickness) < SAME_EPSILON) return;
+    onThickness(meters);
+  };
+  return (
+    <>
+      <div className="min-w-0">
+        <div
+          className="truncate font-semibold text-[15px] text-[var(--ink-900)]"
+          data-testid="inspector-item-name"
+        >
+          Wall
+        </div>
+        <div className="mt-[2px] truncate text-[12.5px] text-[var(--ink-400)]">
+          {selection.twoFace ? "Shared between two rooms" : "Exterior wall"}
+        </div>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        <SectionLabel>TRANSFORM</SectionLabel>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex min-w-0 flex-col gap-[3px] rounded-[8px] border border-[var(--control-border)] bg-[var(--frame)] px-[11px] py-2">
+            <span className="text-[10px] text-[var(--ink-400)] tracking-[0.05em]">
+              LENGTH
+            </span>
+            <span className="flex items-baseline">
+              <span className="w-full min-w-0 font-mono text-[14px] text-[var(--ink-900)]">
+                {formatLengthValue(selection.length, unit)}
+              </span>
+              <span className="font-mono text-[11px] text-[var(--ink-300)]">
+                {unit}
+              </span>
+            </span>
+          </div>
+          {selection.twoFace ? (
+            <div className="flex min-w-0 flex-col gap-[3px] rounded-[8px] border border-[var(--control-border)] bg-[var(--well)] px-[11px] py-2 opacity-70">
+              <span className="text-[10px] text-[var(--ink-400)] tracking-[0.05em]">
+                THICKNESS
+              </span>
+              <span className="flex items-baseline">
+                <span className="w-full min-w-0 font-mono text-[14px] text-[var(--ink-500)]">
+                  {formatLengthValue(selection.thickness, unit)}
+                </span>
+                <span className="font-mono text-[11px] text-[var(--ink-300)]">
+                  {unit}
+                </span>
+              </span>
+            </div>
+          ) : (
+            <Field
+              label="THICKNESS"
+              ariaLabel="Wall thickness"
+              suffix={unit}
+              value={formatLengthValue(selection.thickness, unit)}
+              onCommit={commitThickness}
+            />
+          )}
+        </div>
+        {selection.twoFace && (
+          <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
+            Shared walls use the standard {formatLengthValue(0.1, unit)} {unit}{" "}
+            thickness.
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 export interface InspectorProps {
   /** The floor's derived rooms (footer totals + the room overview). */
   rooms: Room[];
@@ -560,6 +693,9 @@ export interface InspectorProps {
   /** The selected door/window (either lens): its own SELECTION view with
    * editable width/height/elevation and the flip/delete actions. */
   selectedOpening?: OpeningSelection | null;
+  /** The selected wall (either lens): its own SELECTION view with a
+   * read-only length readout and an editable thickness field. */
+  selectedWall?: WallSelection | null;
   onResize: (footprint: Footprint) => void;
   onRotateTo: (deg: number) => void;
   onElevate: (elevation: number) => void;
@@ -573,7 +709,12 @@ export interface InspectorProps {
   onOpeningShift?: (bottom: number) => void;
   onOpeningFlipHinge?: () => void;
   onOpeningFlipSide?: () => void;
+  /** A committed sill overhang, meters past the interior wall face. */
+  onOpeningSillOverhang?: (meters: number) => void;
+  /** A committed sill material (windows only). */
+  onOpeningSillMaterial?: (material: SillMaterial) => void;
   onOpeningDelete?: () => void;
+  onWallThickness?: (meters: number) => void;
 }
 
 export function Inspector({
@@ -587,6 +728,7 @@ export function Inspector({
   nodeCount = 0,
   openingCount = 0,
   selectedOpening = null,
+  selectedWall = null,
   onResize,
   onRotateTo,
   onElevate,
@@ -600,15 +742,20 @@ export function Inspector({
   onOpeningShift = () => {},
   onOpeningFlipHinge = () => {},
   onOpeningFlipSide = () => {},
+  onOpeningSillOverhang = () => {},
+  onOpeningSillMaterial = () => {},
   onOpeningDelete = () => {},
+  onWallThickness = () => {},
 }: InspectorProps) {
   const drawing = mode === "draw";
   const showSelection = selectedItem !== null && !drawing;
   const showOpening = !showSelection && selectedOpening !== null && !drawing;
+  const showWall =
+    !showSelection && !showOpening && selectedWall !== null && !drawing;
   const multiRoom = rooms.length > 1;
   const header = drawing
     ? "OUTLINE"
-    : showSelection || showOpening
+    : showSelection || showOpening || showWall
       ? "SELECTION"
       : multiRoom
         ? "FLOOR"
@@ -673,7 +820,15 @@ export function Inspector({
             onShift={onOpeningShift}
             onFlipHinge={onOpeningFlipHinge}
             onFlipSide={onOpeningFlipSide}
+            onSillOverhang={onOpeningSillOverhang}
+            onSillMaterial={onOpeningSillMaterial}
             onDelete={onOpeningDelete}
+          />
+        ) : showWall ? (
+          <WallSection
+            selection={selectedWall}
+            unit={unit}
+            onThickness={onWallThickness}
           />
         ) : multiRoom ? (
           <div className="flex flex-col gap-2.5">

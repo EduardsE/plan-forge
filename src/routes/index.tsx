@@ -54,6 +54,7 @@ import {
   flipFloorOpeningSide,
   floorBounds,
   furnitureDisplayName,
+  openingSill,
   openingVerticals,
   type Point,
   portalLabel,
@@ -64,11 +65,14 @@ import {
   resizeFloorOpening,
   roomOfFurniture,
   rotateFurniture,
+  type SillMaterial,
   setEdgeThickness,
   setFurnitureColorway,
   setFurnitureFootprint,
   setFurnitureRotation,
   setMountElevation,
+  setOpeningSillMaterial,
+  setOpeningSillOverhang,
   setOpeningVerticals,
   setRoomName,
   setRoomWallHeight,
@@ -262,23 +266,22 @@ function Planner() {
     },
     [selectedEdgeId, setFloor],
   );
-  // Not consumed yet: the inspector's wall section lands in the next task.
-  // Referenced here only to keep Biome's dead-code check quiet in the
-  // meantime.
-  void selectedWall;
-  void setWallThickness;
   // Everything the inspector's opening view needs, resolved once: effective
   // verticals, the host edge's ceiling, the portal label, whether the wall
-  // borders two rooms. Openings are editable in both furnish lenses.
+  // borders two rooms, the resolved sill. Openings are editable in both
+  // furnish lenses.
   const selectedOpening = useMemo(() => {
     if (!selectedOpeningId || viewMode === "draw") return null;
     const opening = floor.openings.find((o) => o.id === selectedOpeningId);
     if (!opening) return null;
     const { bottom, top } = openingVerticals(opening);
+    const sill = openingSill(opening);
     return {
       opening,
       bottom,
       top,
+      sillOverhang: sill.overhang,
+      sillMaterial: sill.material,
       ceiling: edgeCeiling(derived.rooms, opening.edgeId),
       connects: portalLabel(derived.rooms, floor, opening.id),
       twoFace:
@@ -331,6 +334,24 @@ function Planner() {
       );
     },
     [selectedOpening, setFloor],
+  );
+  const setSelectedOpeningSillOverhang = useCallback(
+    (meters: number) => {
+      if (!selectedOpeningId) return;
+      setFloor(
+        setOpeningSillOverhang(floorRef.current, selectedOpeningId, meters),
+      );
+    },
+    [selectedOpeningId, setFloor],
+  );
+  const setSelectedOpeningSillMaterial = useCallback(
+    (material: SillMaterial) => {
+      if (!selectedOpeningId) return;
+      setFloor(
+        setOpeningSillMaterial(floorRef.current, selectedOpeningId, material),
+      );
+    },
+    [selectedOpeningId, setFloor],
   );
   const flipSelectedOpeningHinge = useCallback(() => {
     if (!selectedOpeningId) return;
@@ -1126,6 +1147,7 @@ function Planner() {
         selectedHostName={selectedHostName}
         selectedWallHeight={selectedWallHeight}
         selectedOpening={selectedOpening}
+        selectedWall={selectedWall}
         nodeCount={floor.nodes.length}
         openingCount={derived.rooms[0]?.openingCount ?? 0}
         onResize={resizeSelected}
@@ -1140,7 +1162,10 @@ function Planner() {
         onOpeningShift={shiftSelectedOpening}
         onOpeningFlipHinge={flipSelectedOpeningHinge}
         onOpeningFlipSide={flipSelectedOpeningSide}
+        onOpeningSillOverhang={setSelectedOpeningSillOverhang}
+        onOpeningSillMaterial={setSelectedOpeningSillMaterial}
         onOpeningDelete={deleteSelectedOpening}
+        onWallThickness={setWallThickness}
         onDelete={deleteSelected}
       />
     </div>
