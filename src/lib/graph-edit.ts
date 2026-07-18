@@ -241,7 +241,14 @@ export function deleteNode(
     const y = floor.nodes.find((n) => n.id === yId);
     if (x && y && xId !== yId) {
       const mergedId = newId();
-      const merged: WallEdge = { id: mergedId, a: xId, b: yId };
+      const merged: WallEdge = {
+        id: mergedId,
+        a: xId,
+        b: yId,
+        ...(e1.thickness !== undefined && e1.thickness === e2.thickness
+          ? { thickness: e1.thickness }
+          : {}),
+      };
       const mergedLength = distance(x, y);
       const mergedDir =
         mergedLength < EPS

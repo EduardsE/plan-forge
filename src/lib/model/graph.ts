@@ -23,6 +23,13 @@ export interface WallEdge {
   id: string;
   a: string;
   b: string;
+  /**
+   * Optional per-wall thickness override, meters (clamped by
+   * `setEdgeThickness`). Effective only while the edge borders at most one
+   * room face — on a shared wall it goes dormant (the wall renders at
+   * WALL_THICKNESS) and revives if the wall becomes exterior again.
+   */
+  thickness?: number;
 }
 
 export interface GraphState {
@@ -162,8 +169,10 @@ function splitEdgeAt(
   splitNodeId: string,
   newId: () => string,
 ): { edges: WallEdge[]; openings: Opening[] } {
-  const pieceA: WallEdge = { id: newId(), a: edge.a, b: splitNodeId };
-  const pieceB: WallEdge = { id: newId(), a: splitNodeId, b: edge.b };
+  const carry =
+    edge.thickness !== undefined ? { thickness: edge.thickness } : {};
+  const pieceA: WallEdge = { id: newId(), a: edge.a, b: splitNodeId, ...carry };
+  const pieceB: WallEdge = { id: newId(), a: splitNodeId, b: edge.b, ...carry };
   const nextEdges = edges.flatMap((e) =>
     e.id === edge.id ? [pieceA, pieceB] : [e],
   );

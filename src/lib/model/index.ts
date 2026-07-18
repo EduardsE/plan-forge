@@ -13,3 +13,4 @@ export * from "./sample-room";
 export * from "./stack";
 export * from "./types";
 export * from "./wall-mount";
+export * from "./walls";
