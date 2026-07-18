@@ -7,10 +7,13 @@ import {
   flipFloorOpeningSide,
   MIN_OPENING_HEIGHT,
   moveFloorOpening,
+  openingSill,
   openingVerticals,
   removeFloorOpening,
   resizeFloorOpening,
   resolveOpeningDrag,
+  setOpeningSillMaterial,
+  setOpeningSillOverhang,
   setOpeningVerticals,
   shiftOpeningVertical,
   WINDOW_HEAD,
@@ -457,5 +460,48 @@ describe("combined 3D opening drag stacks flush", () => {
     expect(dragOpeningTo(stacked, "w2", 3.55, 1.9, 2.5, 0.05)).toBe(stacked);
     // Unknown id → same reference.
     expect(dragOpeningTo(floor, "nope", 1, 1, 2.5, 0.05)).toBe(floor);
+  });
+});
+
+describe("window sills", () => {
+  it("resolves defaults for an untouched window", () => {
+    const floor = makeFloor();
+    const window = floor.openings.find((o) => o.id === "window-AB");
+    if (!window) throw new Error("fixture window missing");
+    expect(openingSill(window)).toEqual({ overhang: 0.03, material: "white" });
+  });
+
+  it("stores a clamped overhang sparsely", () => {
+    const floor = setOpeningSillOverhang(makeFloor(), "window-AB", 0.18);
+    const window = floor.openings.find((o) => o.id === "window-AB");
+    expect(window?.sillOverhang).toBe(0.18);
+    const back = setOpeningSillOverhang(floor, "window-AB", 0.03);
+    expect(
+      back.openings.find((o) => o.id === "window-AB")?.sillOverhang,
+    ).toBeUndefined();
+    const wild = setOpeningSillOverhang(makeFloor(), "window-AB", 9);
+    expect(wild.openings.find((o) => o.id === "window-AB")?.sillOverhang).toBe(
+      0.4,
+    );
+  });
+
+  it("stores material sparsely (white is the default)", () => {
+    const floor = setOpeningSillMaterial(makeFloor(), "window-AB", "wood");
+    expect(floor.openings.find((o) => o.id === "window-AB")?.sillMaterial).toBe(
+      "wood",
+    );
+    const back = setOpeningSillMaterial(floor, "window-AB", "white");
+    expect(
+      back.openings.find((o) => o.id === "window-AB")?.sillMaterial,
+    ).toBeUndefined();
+  });
+
+  it("no-ops on doors, unknown ids, and non-finite overhangs", () => {
+    const floor = makeFloor();
+    expect(setOpeningSillOverhang(floor, "door-BE", 0.2)).toBe(floor);
+    expect(setOpeningSillMaterial(floor, "door-BE", "wood")).toBe(floor);
+    expect(setOpeningSillOverhang(floor, "nope", 0.2)).toBe(floor);
+    expect(setOpeningSillOverhang(floor, "window-AB", Number.NaN)).toBe(floor);
+    expect(setOpeningSillOverhang(floor, "window-AB", 0.03)).toBe(floor);
   });
 });

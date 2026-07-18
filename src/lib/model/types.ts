@@ -56,6 +56,14 @@ export interface Opening {
    * (`DOOR_HEIGHT` / `WINDOW_HEAD`).
    */
   head?: number;
+  /**
+   * Windows only: how far the sill board protrudes past the interior wall
+   * face, meters. Absent means the default (`DEFAULT_SILL_OVERHANG`); 0 is
+   * the flush/recessed look.
+   */
+  sillOverhang?: number;
+  /** Windows only: sill board material. Absent means `"white"`. */
+  sillMaterial?: "white" | "wood";
   /** Doors only: which edge carries the hinge (near edge = `"start"`). */
   hinge?: "start" | "end";
   /**

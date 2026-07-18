@@ -26,6 +26,11 @@ export const WINDOW_HEAD = 1.94;
 /** Shortest vertical extent the setters allow, meters. */
 export const MIN_OPENING_HEIGHT = 0.3;
 
+export type SillMaterial = "white" | "wood";
+/** Default sill protrusion past the interior wall face, meters. */
+export const DEFAULT_SILL_OVERHANG = 0.03;
+export const MAX_SILL_OVERHANG = 0.4;
+
 /** Effective vertical extent of an opening's hole, floor-relative meters. */
 export function openingVerticals(opening: Opening): {
   bottom: number;
@@ -37,6 +42,17 @@ export function openingVerticals(opening: Opening): {
   return {
     bottom: opening.sill ?? WINDOW_SILL,
     top: opening.head ?? WINDOW_HEAD,
+  };
+}
+
+/** Effective sill parameters of a window (defaults resolved). */
+export function openingSill(opening: Opening): {
+  overhang: number;
+  material: SillMaterial;
+} {
+  return {
+    overhang: opening.sillOverhang ?? DEFAULT_SILL_OVERHANG,
+    material: opening.sillMaterial ?? "white",
   };
 }
 
@@ -222,6 +238,66 @@ export function shiftOpeningVertical(
     floor.openings.map((o) =>
       o.id === id ? withVerticals(o, clamped, clamped + height) : o,
     ),
+  );
+}
+
+/**
+ * Set a window's sill overhang, clamped to [0, MAX_SILL_OVERHANG]; the
+ * default stores as an absent field. Doors / unknown ids / non-finite
+ * values no-op by reference.
+ */
+export function setOpeningSillOverhang(
+  floor: Floor,
+  id: string,
+  overhang: number,
+): Floor {
+  const opening = floor.openings.find((o) => o.id === id);
+  if (!opening || opening.kind !== "window" || !Number.isFinite(overhang)) {
+    return floor;
+  }
+  const clamped = Math.min(Math.max(overhang, 0), MAX_SILL_OVERHANG);
+  const isDefault = Math.abs(clamped - DEFAULT_SILL_OVERHANG) < EPS;
+  const current = opening.sillOverhang;
+  if (isDefault && current === undefined) return floor;
+  if (
+    !isDefault &&
+    current !== undefined &&
+    Math.abs(clamped - current) < EPS
+  ) {
+    return floor;
+  }
+  return withOpenings(
+    floor,
+    floor.openings.map((o) => {
+      if (o.id !== id) return o;
+      if (isDefault) {
+        const { sillOverhang: _dropped, ...rest } = o;
+        return rest;
+      }
+      return { ...o, sillOverhang: clamped };
+    }),
+  );
+}
+
+/** Set a window's sill material; `"white"` stores as an absent field. */
+export function setOpeningSillMaterial(
+  floor: Floor,
+  id: string,
+  material: SillMaterial,
+): Floor {
+  const opening = floor.openings.find((o) => o.id === id);
+  if (!opening || opening.kind !== "window") return floor;
+  if ((opening.sillMaterial ?? "white") === material) return floor;
+  return withOpenings(
+    floor,
+    floor.openings.map((o) => {
+      if (o.id !== id) return o;
+      if (material === "white") {
+        const { sillMaterial: _dropped, ...rest } = o;
+        return rest;
+      }
+      return { ...o, sillMaterial: material };
+    }),
   );
 }
 
