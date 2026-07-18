@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { createSampleFloor, type Floor, reconcileFloor } from "./model";
+
+import {
+  createSampleFloor,
+  type Floor,
+  reconcileFloor,
+  setEdgeThickness,
+  setOpeningSillMaterial,
+  setOpeningSillOverhang,
+} from "#/lib/model";
+import { makeFloor } from "#/lib/model/test-fixtures";
 import {
   deserializeSavedState,
   formatSavedStatus,
@@ -293,5 +302,63 @@ describe("formatSavedStatus", () => {
 
   it("treats a save from the future as just now (clock skew)", () => {
     expect(formatSavedStatus(at + 5_000, at)).toBe("saved just now");
+  });
+});
+
+describe("wall thickness + sill persistence", () => {
+  const save = (floor: Floor): string =>
+    serializeSavedState({ floor, unit: "m", savedAt: 1 });
+
+  it("round-trips edge thickness and sill fields", () => {
+    let floor = reconcileFloor(makeFloor());
+    floor = setEdgeThickness(floor, "AB", 0.3);
+    floor = setOpeningSillOverhang(floor, "window-AB", 0.18);
+    floor = setOpeningSillMaterial(floor, "window-AB", "wood");
+    const restored = deserializeSavedState(save(floor));
+    expect(restored).not.toBeNull();
+    expect(restored?.floor.edges.find((e) => e.id === "AB")?.thickness).toBe(
+      0.3,
+    );
+    const window = restored?.floor.openings.find((o) => o.id === "window-AB");
+    expect(window?.sillOverhang).toBe(0.18);
+    expect(window?.sillMaterial).toBe("wood");
+  });
+
+  it("rejects out-of-range or wrong-kind values", () => {
+    const base = reconcileFloor(makeFloor());
+    const tamper = (
+      mutate: (parsed: Record<string, unknown>) => void,
+    ): string => {
+      const parsed = JSON.parse(save(base)) as Record<string, unknown>;
+      mutate(parsed);
+      return JSON.stringify(parsed);
+    };
+    expect(
+      deserializeSavedState(
+        tamper((p) => {
+          const floor = p.floor as Record<string, unknown>;
+          const edges = floor.edges as Record<string, unknown>[];
+          edges[0] = { ...edges[0], thickness: 3 };
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      deserializeSavedState(
+        tamper((p) => {
+          const floor = p.floor as Record<string, unknown>;
+          const openings = floor.openings as Record<string, unknown>[];
+          openings[0] = { ...openings[0], sillOverhang: 0.1 };
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      deserializeSavedState(
+        tamper((p) => {
+          const floor = p.floor as Record<string, unknown>;
+          const openings = floor.openings as Record<string, unknown>[];
+          openings[1] = { ...openings[1], sillMaterial: "granite" };
+        }),
+      ),
+    ).toBeNull();
   });
 });

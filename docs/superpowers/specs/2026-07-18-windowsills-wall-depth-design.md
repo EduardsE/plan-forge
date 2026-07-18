@@ -142,8 +142,9 @@ One box per window hole, on the interior side:
 
 - Three new optional fields validated on load: `edge.thickness`,
   `opening.sillOverhang`, `opening.sillMaterial`. Non-finite / out-of-range /
-  wrong-kind values are dropped (field omitted), matching existing validation
-  style. Old saves load unchanged — absent fields mean defaults.
+  wrong-kind values reject the save (hydrates as no-save), matching the module's
+  existing all-or-nothing validation style. Old saves load unchanged — absent
+  fields mean defaults.
 
 ## Part 6 — Testing
 

@@ -6,7 +6,14 @@ import type {
   WallEdge,
   WallNode,
 } from "#/lib/model";
-import { MAX_WALL_HEIGHT, MIN_WALL_HEIGHT, reconcileFloor } from "#/lib/model";
+import {
+  MAX_SILL_OVERHANG,
+  MAX_WALL_HEIGHT,
+  MAX_WALL_THICKNESS,
+  MIN_WALL_HEIGHT,
+  MIN_WALL_THICKNESS,
+  reconcileFloor,
+} from "#/lib/model";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -80,6 +87,14 @@ function areEdges(value: unknown, nodeIds: Set<string>): value is WallEdge[] {
     if (typeof edge.a !== "string" || typeof edge.b !== "string") return false;
     if (edge.a === edge.b) return false;
     if (!nodeIds.has(edge.a) || !nodeIds.has(edge.b)) return false;
+    if (
+      edge.thickness !== undefined &&
+      (!isFiniteNumber(edge.thickness) ||
+        edge.thickness < MIN_WALL_THICKNESS ||
+        edge.thickness > MAX_WALL_THICKNESS)
+    ) {
+      return false;
+    }
     ids.add(edge.id);
   }
   return ids.size === value.length;
@@ -129,6 +144,22 @@ function areOpenings(
     if (o.head !== undefined) {
       const bottom = typeof o.sill === "number" ? o.sill : 0;
       if (!isFiniteNumber(o.head) || o.head <= bottom) return false;
+    }
+    if (
+      o.sillOverhang !== undefined &&
+      (o.kind !== "window" ||
+        !isFiniteNumber(o.sillOverhang) ||
+        o.sillOverhang < 0 ||
+        o.sillOverhang > MAX_SILL_OVERHANG)
+    ) {
+      return false;
+    }
+    if (
+      o.sillMaterial !== undefined &&
+      (o.kind !== "window" ||
+        (o.sillMaterial !== "white" && o.sillMaterial !== "wood"))
+    ) {
+      return false;
     }
     ids.add(o.id);
   }
