@@ -353,6 +353,138 @@ export function moveFloorOpening(
   );
 }
 
+/** An edge's other opening as a wall-local footprint, for a combined drag. */
+export interface OpeningSpan {
+  start: number;
+  width: number;
+  bottom: number;
+  top: number;
+}
+
+/** Where a combined drag lands a window: the along-edge `offset` (null when no
+ * free stretch fits) and the whole-hole `bottom`. */
+export interface OpeningDragResult {
+  offset: number | null;
+  bottom: number;
+}
+
+/**
+ * Resolve one combined 3D window drag to a target `(offset, bottom)` — the
+ * geometry the live preview (`RoomOpenings`) and the commit (`dragOpeningTo`)
+ * share so they can never disagree. That disagreement is what used to fling a
+ * window aside instead of stacking it: the preview judged the along-slide
+ * against a raw bottom sitting a grid-step *inside* the neighbor below, so the
+ * bands overlapped and the window shoved sideways, while a naive quantize could
+ * never land the bottom on a neighbor's off-grid top (no 0 gap ever).
+ *
+ * Both axes resolve against the *target* column, not the window's current spot:
+ *
+ *  1. The bottom snaps flush into the free vertical stretch left by the
+ *     neighbors sharing the target column (one below raises the floor, one
+ *     above lowers the ceiling) — dragging onto another window's column lands
+ *     exactly on its top, grid or no grid ("flush beats grid", per
+ *     `slideIntoGap`).
+ *  2. The offset then slides clear only of neighbors whose band still overlaps
+ *     that snapped band — which, after the flush snap, excludes the very
+ *     neighbor being stacked on, so the window keeps the column.
+ *
+ * `others` are the edge's *other* openings; a door pins `bottom` to 0.
+ */
+export function resolveOpeningDrag(
+  wallLength: number,
+  wallHeight: number,
+  isWindow: boolean,
+  width: number,
+  height: number,
+  currentBottom: number,
+  others: OpeningSpan[],
+  targetOffset: number,
+  targetBottom: number,
+  grid: number,
+): OpeningDragResult {
+  let bottom = 0;
+  if (isWindow) {
+    const column = others
+      .filter((o) =>
+        rangesOverlap(
+          targetOffset,
+          targetOffset + width,
+          o.start,
+          o.start + o.width,
+        ),
+      )
+      .map((o) => ({ start: o.bottom, end: o.top }));
+    const quantized =
+      grid > 0 ? Math.round(targetBottom / grid) * grid : targetBottom;
+    bottom =
+      slideIntoGap(wallHeight, height, column, quantized) ?? currentBottom;
+  }
+  const top = bottom + height;
+  const row = others
+    .filter((o) => rangesOverlap(bottom, top, o.bottom, o.top))
+    .map((o) => ({ start: o.start, end: o.start + o.width }));
+  const quantized =
+    grid > 0 ? Math.round(targetOffset / grid) * grid : targetOffset;
+  return { offset: slideIntoGap(wallLength, width, row, quantized), bottom };
+}
+
+/**
+ * Commit a combined 3D opening drag: slide `id` toward the raw, pre-snap
+ * `(targetOffset, targetBottom)` via `resolveOpeningDrag`. Doors stay
+ * floor-pinned (their `targetBottom` is ignored). Same reference on a no-op.
+ */
+export function dragOpeningTo(
+  floor: Floor,
+  id: string,
+  targetOffset: number,
+  targetBottom: number,
+  ceiling: number,
+  grid = 0,
+): Floor {
+  const opening = floor.openings.find((o) => o.id === id);
+  if (!opening) return floor;
+  const length = edgeLengthOf(floor, opening.edgeId);
+  if (length === null) return floor;
+  const current = openingVerticals(opening);
+  const height = current.top - current.bottom;
+  const others: OpeningSpan[] = floor.openings
+    .filter((o) => o.id !== id && o.edgeId === opening.edgeId)
+    .map((o) => {
+      const band = openingVerticals(o);
+      return {
+        start: o.offset,
+        width: o.width,
+        bottom: band.bottom,
+        top: band.top,
+      };
+    });
+  const { offset, bottom } = resolveOpeningDrag(
+    length,
+    ceiling,
+    opening.kind === "window",
+    opening.width,
+    height,
+    current.bottom,
+    others,
+    targetOffset,
+    targetBottom,
+    grid,
+  );
+  if (offset === null) return floor;
+  const offsetMoved = Math.abs(offset - opening.offset) > EPS;
+  const bottomMoved =
+    opening.kind === "window" && Math.abs(bottom - current.bottom) > EPS;
+  if (!offsetMoved && !bottomMoved) return floor;
+  return withOpenings(
+    floor,
+    floor.openings.map((o) =>
+      o.id === id
+        ? withVerticals({ ...o, offset }, bottom, bottom + height)
+        : o,
+    ),
+  );
+}
+
 /**
  * Set an opening's width from the chip's field, keeping its center where the
  * edge allows. Clamps into the free stretch around it — the edge minus the

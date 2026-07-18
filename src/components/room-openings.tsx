@@ -7,13 +7,12 @@ import {
   wallProjector,
 } from "#/components/move-drag";
 import { GUIDE_PILL_CLASS, SnapGuides } from "#/components/snap-guides";
-import { rangesOverlap, verticalsOverlap } from "#/lib/model";
+import { rangesOverlap, resolveOpeningDrag } from "#/lib/model";
 import {
   OPENING_GRID,
   offsetAlongWall,
   openingCornerGuides,
   openingVerticalGuides,
-  slideOpening,
 } from "#/lib/opening-place";
 import type { PlacementGuide } from "#/lib/place";
 import { dashedPolyline } from "#/lib/plan-scene";
@@ -252,7 +251,7 @@ function OpeningDragSession3D({
   drag: OpeningDrag;
   unit: Unit;
   snapEnabled: boolean;
-  onDrag: (id: string, offset: number | null, bottom: number | null) => void;
+  onDrag: (id: string, offset: number, bottom: number | null) => void;
   onEnd: () => void;
 }) {
   const camera = useThree((state) => state.camera);
@@ -290,40 +289,38 @@ function OpeningDragSession3D({
       const point = toWall(event);
       if (!point) return;
       const wall = solidRef.current;
-      // The along-slide is judged at the vertical band the hole is headed
-      // for (windows ride up/down in the same gesture), so only holes that
-      // band actually crosses block it — that's what lets a window drag
-      // over or under a stacked neighbor. The estimate mirrors the canvas's
-      // clamp (quantize, floor/ceiling); mid-flight mismatches self-correct
-      // on the next move once the preview settles.
       const live = wall.holes.find((hole) => hole.id === drag.id);
-      let band = live ? { bottom: live.bottom, top: live.top } : null;
-      if (band && drag.kind === "window") {
-        const height = band.top - band.bottom;
-        const grid = snapRef.current ? OPENING_GRID : 0;
-        const raw = point.up - drag.grabUp;
-        const quantized = grid > 0 ? Math.round(raw / grid) * grid : raw;
-        const bottom = Math.min(
-          Math.max(quantized, 0),
-          Math.max(wall.height - height, 0),
-        );
-        band = { bottom, top: bottom + height };
-      }
-      const others = wall.holes.filter(
-        (hole) =>
-          hole.id !== drag.id && (!band || verticalsOverlap(band, hole)),
-      );
-      const offset = slideOpening(
+      if (!live) return;
+      // The raw targets go to the canvas, which resolves them onto the floor;
+      // here we run the *same* resolver over the live preview only to draw the
+      // along-corner guides at the offset the window will actually take —
+      // flush onto a stacked neighbor, or slid clear of one it overlaps.
+      const targetOffset = point.along - drag.grabAlong;
+      const targetBottom = point.up - drag.grabUp;
+      const others = wall.holes
+        .filter((hole) => hole.id !== drag.id)
+        .map((hole) => ({
+          start: hole.start,
+          width: hole.width,
+          bottom: hole.bottom,
+          top: hole.top,
+        }));
+      const { offset } = resolveOpeningDrag(
         wall.length,
+        wall.height,
+        drag.kind === "window",
         drag.width,
+        live.top - live.bottom,
+        live.bottom,
         others,
-        point.along - drag.grabAlong,
+        targetOffset,
+        targetBottom,
         snapRef.current ? OPENING_GRID : 0,
       );
       dragRef.current(
         drag.id,
-        offset,
-        drag.kind === "window" ? point.up - drag.grabUp : null,
+        targetOffset,
+        drag.kind === "window" ? targetBottom : null,
       );
       if (offset !== null) {
         setGuides(
@@ -371,10 +368,10 @@ export interface RoomOpeningsProps {
   /** Snap toggle: off means free slide (no quantize, no guides). */
   snapEnabled: boolean;
   onSelect: (id: string) => void;
-  /** One combined drag preview: the along-wall offset (already snapped;
-   * null when no free stretch fits) and, for windows, the raw whole-hole
-   * bottom (the canvas clamps/quantizes it; null for doors). */
-  onDrag: (id: string, offset: number | null, bottom: number | null) => void;
+  /** One combined drag frame: the raw along-wall target and, for windows, the
+   * raw whole-hole bottom (both pre-resolution — the canvas snaps them flush to
+   * neighbors, clamps, and slides; null bottom for doors). */
+  onDrag: (id: string, offset: number, bottom: number | null) => void;
   /** An opening drag started/ended — the canvas locks orbit meanwhile. */
   onDragActiveChange: (active: boolean) => void;
 }

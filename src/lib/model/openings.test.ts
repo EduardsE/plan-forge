@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addFloorOpening,
   DOOR_HEIGHT,
+  dragOpeningTo,
   flipFloorOpeningHinge,
   flipFloorOpeningSide,
   MIN_OPENING_HEIGHT,
@@ -9,6 +10,7 @@ import {
   openingVerticals,
   removeFloorOpening,
   resizeFloorOpening,
+  resolveOpeningDrag,
   setOpeningVerticals,
   shiftOpeningVertical,
   WINDOW_HEAD,
@@ -335,5 +337,125 @@ describe("stacked openings share a stretch of wall", () => {
     const w = wide.openings.find((o) => o.id === "window-AB");
     expect(w?.width).toBeCloseTo(3.0, 6);
     expect(w?.offset).toBeCloseTo(3.1, 6);
+  });
+});
+
+describe("combined 3D opening drag stacks flush", () => {
+  // window-AB spans [3.55, 5.65] at the default band 0.36–1.94 on a 2.5 m wall.
+  const neighbor = { start: 3.55, width: 2.1, bottom: 0.36, top: 1.94 };
+
+  it("snaps a window's bottom flush onto a neighbor's off-grid top", () => {
+    // Dragging onto window-AB's column with a bottom a grid-step *inside* its
+    // top must land exactly on 1.94 (not a 0.05 multiple) — 0 gap, no shove.
+    const r = resolveOpeningDrag(
+      6.45,
+      2.5,
+      true,
+      0.5,
+      0.5,
+      0.2,
+      [neighbor],
+      3.55,
+      1.9,
+      0.05,
+    );
+    expect(r.bottom).toBeCloseTo(1.94, 6);
+    expect(r.offset).toBeCloseTo(3.55, 6);
+  });
+
+  it("lifts a window onto the column even from a low cursor", () => {
+    // Over the column but dragged low: the nearest fitting vertical gap is the
+    // stretch above the neighbor, so it rides up and keeps the column.
+    const r = resolveOpeningDrag(
+      6.45,
+      2.5,
+      true,
+      0.5,
+      0.5,
+      0.2,
+      [neighbor],
+      3.55,
+      0.5,
+      0.05,
+    );
+    expect(r.bottom).toBeCloseTo(1.94, 6);
+    expect(r.offset).toBeCloseTo(3.55, 6);
+  });
+
+  it("slides clear only when the band genuinely can't stack", () => {
+    // A full-height neighbor leaves no vertical gap: the window stays at its
+    // band and slides off the column instead.
+    const full = { start: 3.55, width: 2.1, bottom: 0, top: 2.5 };
+    const r = resolveOpeningDrag(
+      6.45,
+      2.5,
+      true,
+      0.5,
+      0.5,
+      0.2,
+      [full],
+      3.55,
+      1.0,
+      0.05,
+    );
+    expect(r.bottom).toBeCloseTo(0.2, 6);
+    // Clamped flush to the left of the neighbor's [3.55, 5.65] span.
+    expect(r.offset).toBeCloseTo(3.05, 6);
+  });
+
+  it("pins a door to the floor and only slides along the edge", () => {
+    const r = resolveOpeningDrag(
+      6.45,
+      2.5,
+      false,
+      0.9,
+      2.05,
+      0,
+      [neighbor],
+      1.0,
+      1.5,
+      0.05,
+    );
+    expect(r.bottom).toBe(0);
+    expect(r.offset).toBeCloseTo(1.0, 6);
+  });
+
+  it("returns null offset when no free stretch fits the width", () => {
+    const wall = { start: 0, width: 6.45, bottom: 0.36, top: 1.94 };
+    const r = resolveOpeningDrag(
+      6.45,
+      2.5,
+      true,
+      2.0,
+      1.58,
+      0.36,
+      [wall],
+      1.0,
+      0.36,
+      0.05,
+    );
+    expect(r.offset).toBeNull();
+  });
+
+  it("commits a flush stack through dragOpeningTo, no-ops by reference", () => {
+    const floor = addFloorOpening(makeFloor(), {
+      id: "w2",
+      kind: "window",
+      edgeId: "AB",
+      offset: 0.3,
+      width: 0.5,
+      side: 1,
+      sill: 0.2,
+      head: 0.7,
+    });
+    // Drag w2 onto window-AB's column, cursor bottom just under its 1.94 top.
+    const stacked = dragOpeningTo(floor, "w2", 3.55, 1.9, 2.5, 0.05);
+    const w2 = stacked.openings.find((o) => o.id === "w2");
+    expect(openingVerticals(w2 as Opening).bottom).toBeCloseTo(1.94, 6);
+    expect(w2?.offset).toBeCloseTo(3.55, 6);
+    // Re-dragging to the same resolved spot is a no-op (same reference).
+    expect(dragOpeningTo(stacked, "w2", 3.55, 1.9, 2.5, 0.05)).toBe(stacked);
+    // Unknown id → same reference.
+    expect(dragOpeningTo(floor, "nope", 1, 1, 2.5, 0.05)).toBe(floor);
   });
 });

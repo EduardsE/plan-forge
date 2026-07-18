@@ -46,6 +46,7 @@ import {
   type Bounds,
   type CatalogItem,
   type DerivedRoom,
+  dragOpeningTo,
   edgeCeiling,
   type Floor,
   type FurnitureItem,
@@ -62,7 +63,6 @@ import {
   removeFloorOpening,
   resizeFloorOpening,
   type Stack,
-  shiftOpeningVertical,
   updateFloorFurniture,
   updateFurniture,
 } from "#/lib/model";
@@ -759,28 +759,24 @@ export function PlannerCanvas({
     [floor, onFloorPreview],
   );
   const dragOpening3D = useCallback(
-    // Streams per pointermove during a 3D opening drag: the along-wall slide
-    // and (for windows) the whole-hole vertical shift — height preserved,
-    // clamped to floor/ceiling (the host edge's tallest adjacent room) and
-    // quantized like the slide — land on ONE floor, one preview. The shift
-    // applies first so the slide's no-overlap check sees the band the window
-    // is headed for: a diagonal drag can lift it over a stacked neighbor and
-    // slide across in the same gesture.
-    (id: string, offset: number | null, bottom: number | null) => {
-      let next = floor;
-      if (bottom !== null) {
-        const opening = next.openings.find((o) => o.id === id);
-        if (opening) {
-          next = shiftOpeningVertical(
-            next,
-            id,
-            bottom,
-            edgeCeiling(rooms, opening.edgeId),
-            snapEnabled ? OPENING_GRID : 0,
-          );
-        }
-      }
-      if (offset !== null) next = moveFloorOpening(next, id, offset);
+    // Streams per pointermove during a 3D opening drag: the raw along-wall
+    // target and (for windows) the raw whole-hole bottom, resolved together by
+    // `dragOpeningTo` against the *target* column — the bottom snaps flush onto
+    // a stacked neighbor and the along-slide only fires for bands that still
+    // overlap, so a diagonal drag lifts the window onto another's top in one
+    // gesture instead of shoving it aside. Ceiling is the host edge's tallest
+    // adjacent room; quantize matches the snap toggle.
+    (id: string, offset: number, bottom: number | null) => {
+      const opening = floor.openings.find((o) => o.id === id);
+      if (!opening) return;
+      const next = dragOpeningTo(
+        floor,
+        id,
+        offset,
+        bottom ?? 0,
+        edgeCeiling(rooms, opening.edgeId),
+        snapEnabled ? OPENING_GRID : 0,
+      );
       if (next !== floor) onFloorPreview(next);
     },
     [floor, rooms, snapEnabled, onFloorPreview],

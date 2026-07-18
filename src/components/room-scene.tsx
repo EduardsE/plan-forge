@@ -1100,13 +1100,9 @@ export interface RoomSceneProps {
   /** A move drag started/ended — the canvas locks orbit while it runs. */
   onMoveActiveChange: (active: boolean) => void;
   onSelectOpening: (id: string) => void;
-  /** One combined opening-drag preview: along-wall offset + (windows) the
-   * raw whole-hole bottom, applied to one floor by the canvas. */
-  onDragOpening: (
-    id: string,
-    offset: number | null,
-    bottom: number | null,
-  ) => void;
+  /** One combined opening-drag preview: the raw along-wall target + (windows)
+   * the raw whole-hole bottom, resolved onto one floor by the canvas. */
+  onDragOpening: (id: string, offset: number, bottom: number | null) => void;
 }
 
 export function RoomScene({
