@@ -368,6 +368,24 @@ describe("per-edge wall thickness", () => {
     if (!ab || !hole) throw new Error("window hole missing");
     expect(windowUnitZ(ab, hole)).toBeCloseTo(0, 9);
   });
+
+  it("thin wall (< default): interior face stays pinned, sill degrades to the overhang", () => {
+    const floor = setEdgeThickness(makeFloor(), "AB", 0.05);
+    const ab = solidsOf(floor).find((s) => s.edgeId === "AB");
+    if (!ab) throw new Error("AB solid missing");
+    expect(ab.thickness).toBe(0.05);
+    expect(ab.outwardShift).toBeCloseTo(-0.025, 9);
+    // Interior face (room side +1) still 5 cm off the centerline; the
+    // exterior face lands on the centerline itself.
+    expect(faceOutwardOffset(ab, 1)).toBeCloseTo(-0.05, 9);
+    expect(faceOutwardOffset(ab, -1)).toBeCloseTo(0, 9);
+    const hole = ab.holes.find((h) => h.id === "window-AB");
+    if (!hole) throw new Error("window hole missing");
+    const sill = sillBox(ab, hole);
+    if (!sill) throw new Error("sill missing");
+    // Unit depth clamps to the wall (0.05), so the board is overhang-only.
+    expect(sill.depth).toBeCloseTo(0.03, 9);
+  });
 });
 
 describe("sillBox", () => {

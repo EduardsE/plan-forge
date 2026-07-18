@@ -88,8 +88,9 @@ export interface WallSolid {
   dir: Point;
   /**
    * Unit normal: toward the face-less side when exactly one side has a room,
-   * else the `+1` (`sideOfPoint`-positive) normal. The wall body extrudes
-   * symmetrically about the line, so this only orients symbols/dressing.
+   * else the `+1` (`sideOfPoint`-positive) normal. The wall body sits
+   * `outwardShift` along this normal (symmetric only when the shift is 0), so
+   * it both orients symbols/dressing and directs the band's offset.
    */
   outward: Point;
   length: number;
@@ -98,9 +99,10 @@ export interface WallSolid {
   /** Effective wall thickness (per-edge override; shared walls stay default). */
   thickness: number;
   /**
-   * How far the body's mid-plane sits from the edge centerline along
-   * `outward`, meters (≥ 0). Non-zero only for a thickened 1-face wall,
-   * whose interior face stays pinned at WALL_THICKNESS / 2.
+   * Signed offset of the body's mid-plane from the edge centerline along
+   * `outward`, meters. Zero for default/symmetric walls; positive when a
+   * thickened 1-face wall bulks outward, negative when a thinned one pulls
+   * in — either way the interior face stays pinned at WALL_THICKNESS / 2.
    */
   outwardShift: number;
   /** +1 when `outward` is the leftNormal of `dir`, −1 for the rightNormal.
