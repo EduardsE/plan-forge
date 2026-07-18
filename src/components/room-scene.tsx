@@ -58,9 +58,13 @@ import {
   nodePosts,
   SLAB_THICKNESS,
   STUB_WALL_HEIGHT,
+  sillBox,
   stubSpans,
   WALL_THICKNESS,
   type WallSolid,
+  wallZOffset,
+  windowUnitDepth,
+  windowUnitZ,
 } from "#/lib/room-scene";
 import type { Unit } from "#/lib/units";
 
@@ -91,6 +95,7 @@ const BASEBOARD_HEIGHT = 0.12;
 const WALL_EDGE_COLOR = "#ede2ce";
 const WINDOW_FRAME_COLOR = "#e6dbc6";
 const WINDOW_FRAME_SIZE = 0.09;
+const SILL_WOOD_COLOR = "#b98a5f";
 
 /** Mockup's selection stroke: rgba(58,91,240,.7) on the desk chair faces. */
 const SELECTION_COLOR = "#3a5bf0";
@@ -399,15 +404,17 @@ function FloorContactShadow({ bounds }: { bounds: Bounds }) {
  * width, height, depth]. Shared by the visible dressing and the shadow
  * proxy, so the muntin cross in the sun patch matches the drawn frame. */
 function windowBars(
+  solid: WallSolid,
   hole: WallSolid["holes"][number],
 ): Array<[string, number, number, number, number, number]> {
   const f = WINDOW_FRAME_SIZE;
   const cx = hole.start + hole.width / 2;
   const cy = (hole.bottom + hole.top) / 2;
   const height = hole.top - hole.bottom;
-  const frameDepth = WALL_THICKNESS + 0.02;
+  const unit = windowUnitDepth(solid);
+  const frameDepth = unit + 0.02;
   // Frame bars sit inside the hole, border-box style; the muntin cross
-  // stays within the wall thickness.
+  // stays within the unit's depth.
   return [
     ["sill", cx, hole.bottom + f / 2, hole.width, f, frameDepth],
     ["head", cx, hole.top - f / 2, hole.width, f, frameDepth],
@@ -420,21 +427,19 @@ function windowBars(
       height - 2 * f,
       frameDepth,
     ],
-    ["muntin-v", cx, cy, 0.06, height - 2 * f, WALL_THICKNESS],
-    ["muntin-h", cx, cy, hole.width - 2 * f, 0.06, WALL_THICKNESS],
+    ["muntin-v", cx, cy, 0.06, height - 2 * f, unit],
+    ["muntin-h", cx, cy, hole.width - 2 * f, 0.06, unit],
   ];
 }
 
 /** Frame, muntin cross and sky-filled pane for one window hole (wall-local). */
 function WindowDressing({
+  solid,
   hole,
-  zCenter,
   lighting,
 }: {
+  solid: WallSolid;
   hole: WallSolid["holes"][number];
-  /** Wall-local z of the dressing's center plane (mid-thickness; on shared
-   * walls the seam line, so the frame straddles both rooms' halves). */
-  zCenter: number;
   lighting: LightingPreset;
 }) {
   const f = WINDOW_FRAME_SIZE;
@@ -445,9 +450,9 @@ function WindowDressing({
     (paneMaterial.uniforms.zenith?.value as Color).set(lighting.sky.zenith);
     (paneMaterial.uniforms.horizon?.value as Color).set(lighting.sky.horizon);
   }, [lighting]);
-  // Centered in the wall, slightly deeper than it, so the frame reads as a
-  // lip on both faces without caring which side is the interior.
-  const z = zCenter;
+  // The unit hugs the exterior face (outer windowUnitDepth of the wall); on a
+  // default wall that's the centered placement, unchanged.
+  const z = windowUnitZ(solid, hole);
   return (
     <group>
       <mesh position={[cx, cy, z]} material={paneMaterial} raycast={noRaycast}>
@@ -456,12 +461,26 @@ function WindowDressing({
       {/* Shadows come from the wall's always-on proxy bars, not from here —
           this dressing vanishes with the cutaway, and the sun patch on the
           floor must not. */}
-      {windowBars(hole).map(([id, x, y, w, h, d]) => (
+      {windowBars(solid, hole).map(([id, x, y, w, h, d]) => (
         <mesh key={id} position={[x, y, z]} raycast={noRaycast}>
           <boxGeometry args={[w, h, d]} />
           <meshLambertMaterial color={WINDOW_FRAME_COLOR} />
         </mesh>
       ))}
+      {(() => {
+        const sill = sillBox(solid, hole);
+        if (!sill) return null;
+        return (
+          <mesh position={[sill.x, sill.y, sill.z]} raycast={noRaycast}>
+            <boxGeometry args={[sill.width, sill.height, sill.depth]} />
+            <meshLambertMaterial
+              color={
+                sill.material === "wood" ? SILL_WOOD_COLOR : WINDOW_FRAME_COLOR
+              }
+            />
+          </mesh>
+        );
+      })()}
       {/* A tight glow on the frame/reveal, tinted to the hour's sun — kept
           local (short distance) so it dresses the window without flooding the
           floor and flattening the sun patch raking in through the same hole. */}
@@ -517,7 +536,7 @@ function WallMesh({
       shape.holes.push(path);
     }
     const full = new ExtrudeGeometry(shape, {
-      depth: WALL_THICKNESS,
+      depth: solid.thickness,
       bevelEnabled: false,
     });
     const stubShapes = stubSpans(solid).map((span) => {
@@ -532,7 +551,7 @@ function WallMesh({
     const stub =
       stubShapes.length > 0
         ? new ExtrudeGeometry(stubShapes, {
-            depth: WALL_THICKNESS,
+            depth: solid.thickness,
             bevelEnabled: false,
           })
         : null;
@@ -540,9 +559,9 @@ function WallMesh({
   }, [solid]);
 
   const rotationY = Math.atan2(-solid.dir.y, solid.dir.x);
-  // The extrusion runs local z 0..WALL_THICKNESS; shift it so the wall body
-  // straddles the edge line (± half thickness), independent of `outward`.
-  const zOffset = -WALL_THICKNESS / 2;
+  // The extrusion runs local z 0..solid.thickness; shift it so the wall body
+  // sits at its outward-shifted band, independent of `outward`.
+  const zOffset = wallZOffset(solid);
   const wallMesh = (geom: ExtrudeGeometry) => (
     // Receive so interior faces catch furniture and neighbour-wall shadows.
     // Sun *casting* lives on the shadow proxy below, never here — the display
@@ -579,11 +598,11 @@ function WallMesh({
           castShadow
         />
         {windows.map((hole) =>
-          windowBars(hole).map(([id, x, y, w, h, d]) => (
+          windowBars(solid, hole).map(([id, x, y, w, h, d]) => (
             <mesh
               key={`${hole.id}-${id}`}
               material={shadowOnlyMaterial}
-              position={[x, y, 0]}
+              position={[x, y, windowUnitZ(solid, hole)]}
               raycast={noRaycast}
               castShadow
             >
@@ -601,8 +620,8 @@ function WallMesh({
         {windows.map((hole) => (
           <WindowDressing
             key={hole.id}
+            solid={solid}
             hole={hole}
-            zCenter={0}
             lighting={lighting}
           />
         ))}
@@ -625,7 +644,7 @@ function WallMesh({
           ]}
           raycast={noRaycast}
         >
-          <boxGeometry args={[hole.width, SLAB_THICKNESS, WALL_THICKNESS]} />
+          <boxGeometry args={[hole.width, SLAB_THICKNESS, solid.thickness]} />
           <meshLambertMaterial color={THRESHOLD_COLOR} />
         </mesh>
       ))}
