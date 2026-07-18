@@ -12,7 +12,7 @@ import {
 } from "#/lib/model";
 import { type OpeningPlacement, openingAt } from "#/lib/opening-place";
 import { wallPoint } from "#/lib/plan-scene";
-import { buildEdgeSolids, WALL_THICKNESS } from "#/lib/room-scene";
+import { buildEdgeSolids } from "#/lib/room-scene";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -105,10 +105,8 @@ export function OpeningGhost({
 
   if (!placement) return null;
   const { solid, offset } = placement;
-  // The wall straddles the edge line (± half thickness), so the band centers
-  // on the line.
   const mid = offset + width / 2;
-  const center = wallPoint(solid, mid, 0);
+  const center = wallPoint(solid, mid, solid.outwardShift);
   const { bottom, top } = defaultVerticals(kind);
 
   return (
@@ -118,7 +116,7 @@ export function OpeningGhost({
         rotation-y={-Math.atan2(solid.dir.y, solid.dir.x)}
       >
         <mesh>
-          <boxGeometry args={[width, top - bottom, WALL_THICKNESS + 0.02]} />
+          <boxGeometry args={[width, top - bottom, solid.thickness + 0.02]} />
           <meshBasicMaterial
             color={GHOST_COLOR}
             transparent

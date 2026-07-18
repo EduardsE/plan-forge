@@ -17,9 +17,10 @@ import {
 import type { PlacementGuide } from "#/lib/place";
 import { dashedPolyline } from "#/lib/plan-scene";
 import {
-  WALL_THICKNESS,
+  faceOutwardOffset,
   type WallHole,
   type WallSolid,
+  wallZCenter,
 } from "#/lib/room-scene";
 import { formatLength, type Unit } from "#/lib/units";
 
@@ -82,7 +83,7 @@ function OpeningVolume({
   const cy = (hole.bottom + hole.top) / 2;
   const height = hole.top - hole.bottom;
   return (
-    <group position={[cx, cy, 0]}>
+    <group position={[cx, cy, wallZCenter(solid)]}>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element. */}
       <mesh
         onClick={(event) => {
@@ -115,13 +116,13 @@ function OpeningVolume({
         onPointerOut={() => setHovered(false)}
       >
         <boxGeometry
-          args={[hole.width, height, WALL_THICKNESS + PICK_PAD * 2]}
+          args={[hole.width, height, solid.thickness + PICK_PAD * 2]}
         />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
       {(hovered || selected) && (
         <mesh raycast={() => null}>
-          <boxGeometry args={[hole.width, height, WALL_THICKNESS + 0.03]} />
+          <boxGeometry args={[hole.width, height, solid.thickness + 0.03]} />
           <meshBasicMaterial
             color={SELECTION_COLOR}
             transparent
@@ -181,7 +182,10 @@ function WallVerticalGuides({
   }, [hole, solid.height, solid.holes]);
   // Plan point where a guide stands: on the wall line at the hole's center,
   // pushed just past the face toward the room the opening belongs to.
-  const off = (WALL_THICKNESS / 2 + 0.02) * hole.side;
+  // LeftNormal coordinate of the face on the hole's side, nudged 0.02 m
+  // further toward that side. (Default wall: ±0.07, exactly the old value.)
+  const off =
+    solid.outwardSign * faceOutwardOffset(solid, hole.side) + 0.02 * hole.side;
   return (
     <>
       {guides.map((guide) => {

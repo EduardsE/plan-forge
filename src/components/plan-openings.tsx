@@ -19,11 +19,7 @@ import {
 } from "#/lib/opening-place";
 import type { PlacementGuide } from "#/lib/place";
 import { wallPoint } from "#/lib/plan-scene";
-import {
-  WALL_THICKNESS,
-  type WallHole,
-  type WallSolid,
-} from "#/lib/room-scene";
+import { type WallHole, type WallSolid, wallBandRange } from "#/lib/room-scene";
 import { formatLengthValue, parseLength, type Unit } from "#/lib/units";
 
 /**
@@ -127,30 +123,37 @@ function OpeningTarget({
   const [hovered, setHovered] = useState(false);
   useCursor(hovered);
   const end = hole.start + hole.width;
-  const pickShape = useMemo(
-    () =>
-      shapeFromPoints(
-        wallRect(solid, hole.start, end, -PICK_PAD, WALL_THICKNESS + PICK_PAD),
+  const pickShape = useMemo(() => {
+    const band = wallBandRange(solid);
+    return shapeFromPoints(
+      wallRect(
+        solid,
+        hole.start,
+        end,
+        band.inner - PICK_PAD,
+        band.outer + PICK_PAD,
       ),
-    [solid, hole.start, end],
-  );
+    );
+  }, [solid, hole.start, end]);
   const highlight = useMemo(() => {
+    const band = wallBandRange(solid);
     const rect = wallRect(
       solid,
       hole.start,
       end,
-      -HIGHLIGHT_PAD,
-      WALL_THICKNESS + HIGHLIGHT_PAD,
+      band.inner - HIGHLIGHT_PAD,
+      band.outer + HIGHLIGHT_PAD,
     );
     return [...rect, rect[0]];
   }, [solid, hole.start, end]);
   const halo = useMemo(() => {
+    const band = wallBandRange(solid);
     const rect = wallRect(
       solid,
       hole.start - HALO_PAD,
       end + HALO_PAD,
-      -HALO_PAD,
-      WALL_THICKNESS + HALO_PAD,
+      band.inner - HALO_PAD,
+      band.outer + HALO_PAD,
     );
     return [...rect, rect[0]];
   }, [solid, hole.start, end]);
@@ -286,7 +289,7 @@ function OpeningChip({
   onDelete: (id: string) => void;
   onResize: (id: string, width: number) => void;
 }) {
-  const mid = wallPoint(solid, hole.start + hole.width / 2, WALL_THICKNESS / 2);
+  const mid = wallPoint(solid, hole.start + hole.width / 2, solid.outwardShift);
   return (
     <Html
       position={[mid.x, CHIP_Y, mid.y - CHIP_GAP]}

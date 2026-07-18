@@ -47,12 +47,15 @@ import {
 } from "#/lib/plan-scene";
 import {
   buildEdgeSolids,
+  faceOutwardOffset,
   type NodePost,
   nodePosts,
+  SILL_EAR,
   type Span,
   WALL_THICKNESS,
   type WallHole,
   type WallSolid,
+  wallBandRange,
 } from "#/lib/room-scene";
 import type { Unit } from "#/lib/units";
 
@@ -192,12 +195,12 @@ function shapeFromPoints(points: Point[]): Shape {
 /** The plan footprint of a wall span: a rect straddling the edge line
  * (± half thickness), as 4 corners in plan coordinates. */
 function bandRect(solid: WallSolid, span: Span): [Point, Point, Point, Point] {
-  const half = WALL_THICKNESS / 2;
+  const { inner, outer } = wallBandRange(solid);
   return [
-    wallPoint(solid, span.start, -half),
-    wallPoint(solid, span.end, -half),
-    wallPoint(solid, span.end, half),
-    wallPoint(solid, span.start, half),
+    wallPoint(solid, span.start, inner),
+    wallPoint(solid, span.end, inner),
+    wallPoint(solid, span.end, outer),
+    wallPoint(solid, span.start, outer),
   ];
 }
 
@@ -315,11 +318,11 @@ function PlanShadow({
  * the edge line (the wall now straddles it ± half thickness). */
 function WindowSymbol({ solid, hole }: { solid: WallSolid; hole: WallHole }) {
   const inset = 0.02;
-  const half = WALL_THICKNESS / 2;
+  const { inner, outer } = wallBandRange(solid);
   const lines: Array<{ offset: number; width: number }> = [
-    { offset: -half + inset, width: 3 },
-    { offset: 0, width: 2 },
-    { offset: half - inset, width: 3 },
+    { offset: inner + inset, width: 3 },
+    { offset: solid.outwardShift, width: 2 },
+    { offset: outer - inset, width: 3 },
   ];
   return (
     <group>
@@ -398,6 +401,29 @@ function WallOpenings({ solid }: { solid: WallSolid }) {
           <WindowSymbol key={hole.id} solid={solid} hole={hole} />
         ),
       )}
+      {solid.holes.map((hole) => {
+        const overhang = hole.sillOverhang ?? 0;
+        if (hole.kind !== "window" || overhang <= 0) return null;
+        // Outward-coordinate of the room-side face, then `overhang`
+        // further toward the room (leftNormal side × outwardSign).
+        const face = faceOutwardOffset(solid, hole.side);
+        const step = solid.outwardSign * hole.side * overhang;
+        const rect = [
+          wallPoint(solid, hole.start - SILL_EAR, face),
+          wallPoint(solid, hole.start + hole.width + SILL_EAR, face),
+          wallPoint(solid, hole.start + hole.width + SILL_EAR, face + step),
+          wallPoint(solid, hole.start - SILL_EAR, face + step),
+        ];
+        return (
+          <Line
+            key={`sill-${hole.id}`}
+            points={[...rect, rect[0]].map((p) => v3(p, LINE_Y))}
+            color={SYMBOL_COLOR}
+            lineWidth={1.5}
+            alphaToCoverage={false}
+          />
+        );
+      })}
     </group>
   );
 }
@@ -960,7 +986,9 @@ export function PlanScene({
     : undefined;
 
   if (!bounds) return null;
-  const dimensionOffset = WALL_THICKNESS + DIMENSION_GAP;
+  const dimensionOffset =
+    Math.max(WALL_THICKNESS, ...solids.map((s) => wallBandRange(s).outer)) +
+    DIMENSION_GAP;
   return (
     <group>
       {rooms.map((room) => (
