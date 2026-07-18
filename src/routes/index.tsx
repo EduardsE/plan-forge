@@ -64,6 +64,7 @@ import {
   resizeFloorOpening,
   roomOfFurniture,
   rotateFurniture,
+  setEdgeThickness,
   setFurnitureColorway,
   setFurnitureFootprint,
   setFurnitureRotation,
@@ -75,6 +76,7 @@ import {
   updateDerivedRoom,
   updateFloorFurniture,
   updateFurniture,
+  WALL_THICKNESS,
   wallHeightOf,
 } from "#/lib/model";
 import {
@@ -231,6 +233,40 @@ function Planner() {
   const [selectedOpeningId, setSelectedOpeningId] = useState<string | null>(
     null,
   );
+  // The wall selection (either furnish lens): a graph edge picked by
+  // clicking its body. Mutually exclusive with the furniture and opening
+  // selections; the inspector edits its thickness.
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const selectedWall = useMemo(() => {
+    if (!selectedEdgeId || viewMode === "draw") return null;
+    const edge = floor.edges.find((e) => e.id === selectedEdgeId);
+    if (!edge) return null;
+    const a = floor.nodes.find((n) => n.id === edge.a);
+    const b = floor.nodes.find((n) => n.id === edge.b);
+    if (!a || !b) return null;
+    const faces = derived.rooms.filter((r) =>
+      r.wallRefs.some((ref) => ref.edgeId === edge.id),
+    ).length;
+    const twoFace = faces === 2;
+    return {
+      edgeId: edge.id,
+      length: Math.hypot(b.x - a.x, b.y - a.y),
+      thickness: twoFace ? WALL_THICKNESS : (edge.thickness ?? WALL_THICKNESS),
+      twoFace,
+    };
+  }, [selectedEdgeId, viewMode, floor, derived]);
+  const setWallThickness = useCallback(
+    (meters: number) => {
+      if (!selectedEdgeId) return;
+      setFloor(setEdgeThickness(floorRef.current, selectedEdgeId, meters));
+    },
+    [selectedEdgeId, setFloor],
+  );
+  // Not consumed yet: the inspector's wall section lands in the next task.
+  // Referenced here only to keep Biome's dead-code check quiet in the
+  // meantime.
+  void selectedWall;
+  void setWallThickness;
   // Everything the inspector's opening view needs, resolved once: effective
   // verticals, the host edge's ceiling, the portal label, whether the wall
   // borders two rooms. Openings are editable in both furnish lenses.
@@ -858,6 +894,40 @@ function Planner() {
     deleteSelectedOpening,
   ]);
 
+  // The wall selection's keyboard: esc deselects only (no delete — walls
+  // come from the graph, not a removable item list). Same input-skipping
+  // window listener as the other two, mutually exclusive with them.
+  useEffect(() => {
+    if (
+      !selectedEdgeId ||
+      selectedId ||
+      selectedOpeningId ||
+      viewMode === "draw"
+    ) {
+      return;
+    }
+    if (sceneDragActive) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest("input, textarea, [contenteditable]")
+      ) {
+        return;
+      }
+      if (event.key === "Escape" && !settingsOpen) setSelectedEdgeId(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    selectedEdgeId,
+    selectedId,
+    selectedOpeningId,
+    viewMode,
+    sceneDragActive,
+    settingsOpen,
+  ]);
+
   // Screen 2d, amended 2026-07-16: the library docks as its own column
   // between rail and canvas while the inspector keeps the right edge — the
   // place → tweak → place loop never has to swap panels.
@@ -952,6 +1022,8 @@ function Planner() {
               onSelectedIdChange={setSelectedId}
               selectedOpeningId={selectedOpeningId}
               onSelectedOpeningIdChange={setSelectedOpeningId}
+              selectedEdgeId={selectedEdgeId}
+              onSelectedEdgeIdChange={setSelectedEdgeId}
               cameraApiRef={cameraApiRef}
               readoutStore={readoutStore}
               unit={unit}

@@ -738,9 +738,13 @@ function DimensionLine({
 function WallLayer({
   solids,
   posts,
+  selectedEdgeId,
+  onSelectWall,
 }: {
   solids: WallSolid[];
   posts: NodePost[];
+  selectedEdgeId: string | null;
+  onSelectWall: (edgeId: string) => void;
 }) {
   const wallShapes = useMemo(() => {
     const shapes = solids.flatMap((solid) =>
@@ -759,6 +763,76 @@ function WallLayer({
       {solids.map((solid) => (
         <WallOpenings key={solid.edgeId} solid={solid} />
       ))}
+      {solids.map((solid) => (
+        <WallPickTarget
+          key={`pick-${solid.edgeId}`}
+          solid={solid}
+          selected={solid.edgeId === selectedEdgeId}
+          onSelect={onSelectWall}
+        />
+      ))}
+    </group>
+  );
+}
+
+/** Invisible pick area over a wall's solid spans (openings keep their own
+ * nearer targets), with the accent outline while hovered/selected. */
+function WallPickTarget({
+  solid,
+  selected,
+  onSelect,
+}: {
+  solid: WallSolid;
+  selected: boolean;
+  onSelect: (edgeId: string) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered);
+  const shapes = useMemo(
+    () =>
+      solidSpans(solid).map((span) => shapeFromPoints(bandRect(solid, span))),
+    [solid],
+  );
+  const outline = useMemo(() => {
+    const { inner, outer } = wallBandRange(solid);
+    const rect = [
+      wallPoint(solid, 0, inner - 0.03),
+      wallPoint(solid, solid.length, inner - 0.03),
+      wallPoint(solid, solid.length, outer + 0.03),
+      wallPoint(solid, 0, outer + 0.03),
+    ];
+    return [...rect, rect[0]];
+  }, [solid]);
+  if (shapes.length === 0) return null;
+  return (
+    <group>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element. */}
+      <mesh
+        rotation-x={-Math.PI / 2}
+        position-y={WALL_Y + 0.001}
+        onClick={(event) => {
+          if (event.delta > CLICK_SLOP_PX) return;
+          event.stopPropagation();
+          onSelect(solid.edgeId);
+        }}
+        onPointerOver={(event) => {
+          event.stopPropagation();
+          setHovered(true);
+        }}
+        onPointerOut={() => setHovered(false)}
+      >
+        <shapeGeometry args={[shapes]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      {(hovered || selected) && (
+        <Line
+          points={outline.map((p) => v3(p, LINE_Y))}
+          color={SELECTION_COLOR}
+          lineWidth={selected ? 2.5 : 2}
+          alphaToCoverage={false}
+          raycast={noRaycast}
+        />
+      )}
     </group>
   );
 }
@@ -911,6 +985,8 @@ export interface PlanSceneProps {
   selectedId: string | null;
   /** Selected opening id — never set together with `selectedId`. */
   selectedOpeningId: string | null;
+  /** Selected wall — a graph edge picked by clicking its body. */
+  selectedEdgeId: string | null;
   unit: Unit;
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
   snapEnabled: boolean;
@@ -930,6 +1006,7 @@ export interface PlanSceneProps {
   onDeleteOpening: (id: string) => void;
   /** A committed width from the opening chip's field. */
   onResizeOpening: (id: string, width: number) => void;
+  onSelectWall: (edgeId: string) => void;
 }
 
 export function PlanScene({
@@ -938,6 +1015,7 @@ export function PlanScene({
   floor,
   selectedId,
   selectedOpeningId,
+  selectedEdgeId,
   unit,
   snapEnabled,
   onSelectItem,
@@ -949,6 +1027,7 @@ export function PlanScene({
   onFlipOpeningSide,
   onDeleteOpening,
   onResizeOpening,
+  onSelectWall,
 }: PlanSceneProps) {
   const bounds = useMemo(() => floorBounds(rooms), [rooms]);
   // One wall solid per graph edge + filler posts at the junction nodes, drawn
@@ -1010,7 +1089,12 @@ export function PlanScene({
           onDragStart={beginDrag}
         />
       )}
-      <WallLayer solids={solids} posts={posts} />
+      <WallLayer
+        solids={solids}
+        posts={posts}
+        selectedEdgeId={selectedEdgeId}
+        onSelectWall={onSelectWall}
+      />
       <PlanOpenings
         solids={solids}
         selectedId={selectedOpeningId}

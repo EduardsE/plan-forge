@@ -61,6 +61,7 @@ import {
   sillBox,
   stubSpans,
   type WallSolid,
+  wallZCenter,
   wallZOffset,
   windowUnitDepth,
   windowUnitZ,
@@ -508,12 +509,18 @@ function WallMesh({
   solid,
   display,
   lighting,
+  selected,
+  onSelectWall,
 }: {
   solid: WallSolid;
   /** Owned by `Walls`; the group refs below register themselves into it. */
   display: WallDisplay;
   lighting: LightingPreset;
+  selected: boolean;
+  onSelectWall: (edgeId: string) => void;
 }) {
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered);
   const wall = wallTexture(solid.height);
   // One extrusion for the whole edge, holes cut for every opening on it, plus
   // its cut-down stub (door holes widened into full gaps, windows left as
@@ -624,6 +631,45 @@ function WallMesh({
             lighting={lighting}
           />
         ))}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element. */}
+        <mesh
+          geometry={geometry.full}
+          position-z={zOffset}
+          onClick={(event) => {
+            if (event.delta > CLICK_SLOP_PX) return;
+            // The cutaway may have swapped this group out this frame.
+            if (display.full && !display.full.visible) return;
+            event.stopPropagation();
+            onSelectWall(solid.edgeId);
+          }}
+          onPointerOver={(event) => {
+            event.stopPropagation();
+            setHovered(true);
+          }}
+          onPointerOut={() => setHovered(false)}
+        >
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+        {(hovered || selected) && (
+          <mesh
+            position={[solid.length / 2, solid.height / 2, wallZCenter(solid)]}
+            raycast={noRaycast}
+          >
+            <boxGeometry
+              args={[
+                solid.length + 0.03,
+                solid.height + 0.03,
+                solid.thickness + 0.03,
+              ]}
+            />
+            <meshBasicMaterial
+              color={SELECTION_COLOR}
+              transparent
+              opacity={selected ? 0.25 : 0.12}
+              depthWrite={false}
+            />
+          </mesh>
+        )}
       </group>
       <group
         ref={(group) => {
@@ -632,6 +678,50 @@ function WallMesh({
         visible={false}
       >
         {geometry.stub && wallMesh(geometry.stub)}
+        {geometry.stub && (
+          // biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element.
+          <mesh
+            geometry={geometry.stub}
+            position-z={zOffset}
+            onClick={(event) => {
+              if (event.delta > CLICK_SLOP_PX) return;
+              if (display.stub && !display.stub.visible) return;
+              event.stopPropagation();
+              onSelectWall(solid.edgeId);
+            }}
+            onPointerOver={(event) => {
+              event.stopPropagation();
+              setHovered(true);
+            }}
+            onPointerOut={() => setHovered(false)}
+          >
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        )}
+        {geometry.stub && (hovered || selected) && (
+          <mesh
+            position={[
+              solid.length / 2,
+              STUB_WALL_HEIGHT / 2,
+              wallZCenter(solid),
+            ]}
+            raycast={noRaycast}
+          >
+            <boxGeometry
+              args={[
+                solid.length + 0.03,
+                STUB_WALL_HEIGHT + 0.03,
+                solid.thickness + 0.03,
+              ]}
+            />
+            <meshBasicMaterial
+              color={SELECTION_COLOR}
+              transparent
+              opacity={selected ? 0.25 : 0.12}
+              depthWrite={false}
+            />
+          </mesh>
+        )}
       </group>
       {thresholds.map((hole) => (
         <mesh
@@ -661,10 +751,14 @@ function Walls({
   solids,
   posts,
   lighting,
+  selectedEdgeId,
+  onSelectWall,
 }: {
   solids: WallSolid[];
   posts: NodePost[];
   lighting: LightingPreset;
+  selectedEdgeId: string | null;
+  onSelectWall: (edgeId: string) => void;
 }) {
   const displays = useMemo<WallDisplay[]>(
     () => solids.map(() => ({ full: null, stub: null })),
@@ -740,6 +834,8 @@ function Walls({
           solid={solid}
           display={displays[i]}
           lighting={lighting}
+          selected={solid.edgeId === selectedEdgeId}
+          onSelectWall={onSelectWall}
         />
       ))}
       {posts.map((post, i) => {
@@ -1121,6 +1217,8 @@ export interface RoomSceneProps {
   selectedId: string | null;
   /** Opening selection — doors/windows pick and drag in this lens too. */
   selectedOpeningId: string | null;
+  /** Wall selection — a graph edge picked by clicking its body. */
+  selectedEdgeId: string | null;
   unit: Unit;
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
   snapEnabled: boolean;
@@ -1140,6 +1238,7 @@ export interface RoomSceneProps {
   /** One combined opening-drag preview: the raw along-wall target + (windows)
    * the raw whole-hole bottom, resolved onto one floor by the canvas. */
   onDragOpening: (id: string, offset: number, bottom: number | null) => void;
+  onSelectWall: (edgeId: string) => void;
 }
 
 export function RoomScene({
@@ -1148,6 +1247,7 @@ export function RoomScene({
   floor,
   selectedId,
   selectedOpeningId,
+  selectedEdgeId,
   unit,
   snapEnabled,
   timeOfDay,
@@ -1157,6 +1257,7 @@ export function RoomScene({
   onMoveActiveChange,
   onSelectOpening,
   onDragOpening,
+  onSelectWall,
 }: RoomSceneProps) {
   // Lights aim at the whole floor's center, so a two-room flat reads as one
   // warmly lit model rather than per-room hotspots.
@@ -1219,7 +1320,13 @@ export function RoomScene({
         azimuth={MathUtils.degToRad(sunAnchorDeg + lighting.sun.rakeDeg)}
       />
       {bounds && <FloorContactShadow bounds={bounds} />}
-      <Walls solids={solids} posts={posts} lighting={lighting} />
+      <Walls
+        solids={solids}
+        posts={posts}
+        lighting={lighting}
+        selectedEdgeId={selectedEdgeId}
+        onSelectWall={onSelectWall}
+      />
       <RoomOpenings
         solids={solids}
         selectedId={selectedOpeningId}

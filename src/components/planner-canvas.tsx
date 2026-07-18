@@ -598,6 +598,10 @@ export interface PlannerCanvasProps {
    * bar can label a portal ("connects Living ↔ Kitchen"). */
   selectedOpeningId: string | null;
   onSelectedOpeningIdChange: (id: string | null) => void;
+  /** Wall selection (either lens) — a graph edge picked by clicking its
+   * body; the inspector edits its thickness. */
+  selectedEdgeId: string | null;
+  onSelectedEdgeIdChange: (id: string | null) => void;
   cameraApiRef: RefObject<CameraApi | null>;
   readoutStore: CameraReadoutStore;
   /** Display unit for draw-mode labels. */
@@ -642,6 +646,8 @@ export function PlannerCanvas({
   onSelectedIdChange: setSelectedId,
   selectedOpeningId,
   onSelectedOpeningIdChange: setSelectedOpeningId,
+  selectedEdgeId,
+  onSelectedEdgeIdChange: setSelectedEdgeId,
   cameraApiRef,
   readoutStore,
   unit,
@@ -705,15 +711,25 @@ export function PlannerCanvas({
     (id: string) => {
       setSelectedId(id);
       setSelectedOpeningId(null);
+      setSelectedEdgeId(null);
     },
-    [setSelectedId, setSelectedOpeningId],
+    [setSelectedId, setSelectedOpeningId, setSelectedEdgeId],
   );
   const selectOpening = useCallback(
     (id: string) => {
       setSelectedOpeningId(id);
       setSelectedId(null);
+      setSelectedEdgeId(null);
     },
-    [setSelectedId, setSelectedOpeningId],
+    [setSelectedId, setSelectedOpeningId, setSelectedEdgeId],
+  );
+  const selectWall = useCallback(
+    (edgeId: string) => {
+      setSelectedEdgeId(edgeId);
+      setSelectedId(null);
+      setSelectedOpeningId(null);
+    },
+    [setSelectedId, setSelectedOpeningId, setSelectedEdgeId],
   );
 
   const moveItem = useCallback(
@@ -810,7 +826,8 @@ export function PlannerCanvas({
     if (!placingItem) return;
     setSelectedId(null);
     setSelectedOpeningId(null);
-  }, [placingItem, setSelectedId, setSelectedOpeningId]);
+    setSelectedEdgeId(null);
+  }, [placingItem, setSelectedId, setSelectedOpeningId, setSelectedEdgeId]);
 
   const placeDraggedItem = useCallback(
     // Furniture is floor-level: the drop lands on `floor.furniture` wherever
@@ -910,6 +927,7 @@ export function PlannerCanvas({
           }
           setSelectedId(null);
           setSelectedOpeningId(null);
+          setSelectedEdgeId(null);
         }}
       >
         <CameraRig
@@ -966,6 +984,7 @@ export function PlannerCanvas({
               floor={floor}
               selectedId={selectedId}
               selectedOpeningId={selectedOpeningId}
+              selectedEdgeId={selectedEdgeId}
               unit={unit}
               snapEnabled={snapEnabled}
               onSelectItem={selectItem}
@@ -977,6 +996,7 @@ export function PlannerCanvas({
               onFlipOpeningSide={flipSide}
               onDeleteOpening={deleteOpening}
               onResizeOpening={resizeOpeningTo}
+              onSelectWall={selectWall}
             />
           )
         ) : (
@@ -986,6 +1006,7 @@ export function PlannerCanvas({
             floor={floor}
             selectedId={selectedId}
             selectedOpeningId={selectedOpeningId}
+            selectedEdgeId={selectedEdgeId}
             unit={unit}
             snapEnabled={snapEnabled}
             timeOfDay={timeOfDay}
@@ -995,6 +1016,7 @@ export function PlannerCanvas({
             onMoveActiveChange={handleRoomDragActive}
             onSelectOpening={selectOpening}
             onDragOpening={dragOpening3D}
+            onSelectWall={selectWall}
           />
         )}
         {/* The placement ghost raycasts the active camera onto the floor
