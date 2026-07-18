@@ -720,16 +720,8 @@ function WallLayer({
     const shapes = solids.flatMap((solid) =>
       solidSpans(solid).map((span) => shapeFromPoints(bandRect(solid, span))),
     );
-    const half = WALL_THICKNESS / 2;
     for (const post of posts) {
-      shapes.push(
-        shapeFromPoints([
-          { x: post.center.x - half, y: post.center.y - half },
-          { x: post.center.x + half, y: post.center.y - half },
-          { x: post.center.x + half, y: post.center.y + half },
-          { x: post.center.x - half, y: post.center.y + half },
-        ]),
-      );
+      shapes.push(shapeFromPoints(post.corners));
     }
     return shapes;
   }, [solids, posts]);

@@ -60,7 +60,6 @@ import {
   STUB_WALL_HEIGHT,
   sillBox,
   stubSpans,
-  WALL_THICKNESS,
   type WallSolid,
   wallZOffset,
   windowUnitDepth,
@@ -676,6 +675,25 @@ function Walls({
     () => new Map(solids.map((solid, i) => [solid.index, i])),
     [solids],
   );
+  // Each post's polygon extruded to its own height and to the cutaway stub
+  // height — shared between the shadow proxy and the display mesh below.
+  const postGeometries = useMemo(
+    () =>
+      posts.map((post) => {
+        const shape = planShape(post.corners);
+        return {
+          full: new ExtrudeGeometry(shape, {
+            depth: post.height,
+            bevelEnabled: false,
+          }),
+          stub: new ExtrudeGeometry(shape, {
+            depth: STUB_WALL_HEIGHT,
+            bevelEnabled: false,
+          }),
+        };
+      }),
+    [posts],
+  );
   const postFullRefs = useRef<(Mesh | null)[]>([]);
   const postStubRefs = useRef<(Mesh | null)[]>([]);
   const tallRef = useRef<boolean[]>([]);
@@ -724,45 +742,45 @@ function Walls({
           lighting={lighting}
         />
       ))}
-      {posts.map((post, i) => (
-        <group key={post.nodeId} position={[post.center.x, 0, post.center.y]}>
-          {/* Shadow proxy, like the walls' — a cut-down post must not open a
-              slit of sunlight at the corner. */}
-          <mesh
-            material={shadowOnlyMaterial}
-            position-y={post.height / 2}
-            raycast={noRaycast}
-            castShadow
-          >
-            <boxGeometry args={[WALL_THICKNESS, post.height, WALL_THICKNESS]} />
-          </mesh>
-          <mesh
-            ref={(mesh) => {
-              postFullRefs.current[i] = mesh;
-            }}
-            position-y={post.height / 2}
-            raycast={noRaycast}
-            receiveShadow
-          >
-            <boxGeometry args={[WALL_THICKNESS, post.height, WALL_THICKNESS]} />
-            <meshLambertMaterial color={WALL_EDGE_COLOR} />
-          </mesh>
-          <mesh
-            ref={(mesh) => {
-              postStubRefs.current[i] = mesh;
-            }}
-            position-y={STUB_WALL_HEIGHT / 2}
-            raycast={noRaycast}
-            visible={false}
-            receiveShadow
-          >
-            <boxGeometry
-              args={[WALL_THICKNESS, STUB_WALL_HEIGHT, WALL_THICKNESS]}
+      {posts.map((post, i) => {
+        const geom = postGeometries[i];
+        return (
+          <group key={post.nodeId}>
+            {/* Shadow proxy, like the walls' — a cut-down post must not open
+                a slit of sunlight at the corner. */}
+            <mesh
+              geometry={geom.full}
+              material={shadowOnlyMaterial}
+              rotation-x={-Math.PI / 2}
+              raycast={noRaycast}
+              castShadow
             />
-            <meshLambertMaterial color={WALL_EDGE_COLOR} />
-          </mesh>
-        </group>
-      ))}
+            <mesh
+              ref={(mesh) => {
+                postFullRefs.current[i] = mesh;
+              }}
+              geometry={geom.full}
+              rotation-x={-Math.PI / 2}
+              raycast={noRaycast}
+              receiveShadow
+            >
+              <meshLambertMaterial color={WALL_EDGE_COLOR} />
+            </mesh>
+            <mesh
+              ref={(mesh) => {
+                postStubRefs.current[i] = mesh;
+              }}
+              geometry={geom.stub}
+              rotation-x={-Math.PI / 2}
+              raycast={noRaycast}
+              visible={false}
+              receiveShadow
+            >
+              <meshLambertMaterial color={WALL_EDGE_COLOR} />
+            </mesh>
+          </group>
+        );
+      })}
     </group>
   );
 }

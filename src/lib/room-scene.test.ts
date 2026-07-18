@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveFloor,
   type Floor,
+  type Point,
   setEdgeThickness,
   setOpeningSillMaterial,
   setOpeningSillOverhang,
@@ -231,6 +232,42 @@ describe("nodePosts", () => {
     const posts = nodePosts(floor, solidsOf(floor));
     // Node B touches the shared wall (kitchen-tall) → tall post.
     expect(posts.find((p) => p.nodeId === "B")?.height).toBe(3.4);
+  });
+});
+
+describe("nodePosts corners", () => {
+  const postsOf = (floor: Floor) => {
+    const solids = buildEdgeSolids(floor, deriveFloor(floor).rooms);
+    return nodePosts(floor, solids);
+  };
+  const sortedCorners = (post: { corners: Point[] }) =>
+    [...post.corners].sort((a, b) => a.x - b.x || a.y - b.y);
+
+  it("default corner: the old 10 cm square", () => {
+    const post = postsOf(makeFloor()).find((p) => p.nodeId === "A");
+    if (!post) throw new Error("post at A missing");
+    expect(sortedCorners(post)).toEqual([
+      { x: -0.1, y: -0.1 },
+      { x: -0.1, y: 0 },
+      { x: 0, y: -0.1 },
+      { x: 0, y: 0 },
+    ]);
+  });
+
+  it("thickened wall widens its axis of the corner post", () => {
+    // AB (horizontal, outward −y) thickened to 0.3: the post at A spans
+    // y from the pinned interior face (0) to the bulked exterior (−0.3),
+    // while FA's axis (x) keeps the default 0.1 span.
+    const post = postsOf(setEdgeThickness(makeFloor(), "AB", 0.3)).find(
+      (p) => p.nodeId === "A",
+    );
+    if (!post) throw new Error("post at A missing");
+    expect(sortedCorners(post)).toEqual([
+      { x: -0.1, y: -0.3 },
+      { x: -0.1, y: 0 },
+      { x: 0, y: -0.3 },
+      { x: 0, y: 0 },
+    ]);
   });
 });
 

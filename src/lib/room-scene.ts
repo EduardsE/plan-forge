@@ -123,6 +123,10 @@ export interface NodePost {
   nodeId: string;
   /** Plan position of the node (post center). */
   center: Point;
+  /** Plan-coordinate polygon (4 corners) the post fills: the span of each
+   * principal incident wall's band (interior face → exterior face), so a
+   * thickened wall's corner is covered; exterior overshoot is acceptable. */
+  corners: Point[];
   /** Solid indices of the edges meeting here (for the cutaway tall-check). */
   edgeIndices: number[];
   /** Post height: the tallest incident wall. */
@@ -373,22 +377,29 @@ export function nodePosts(floor: Floor, solids: WallSolid[]): NodePost[] {
   const nodeById = new Map(floor.nodes.map((n) => [n.id, n]));
   const incident = new Map<
     string,
-    Array<{ dir: Point; index: number; height: number }>
+    Array<{ dir: Point; index: number; height: number; solid: WallSolid }>
   >();
-  const add = (nodeId: string, dir: Point, index: number, height: number) => {
+  const add = (
+    nodeId: string,
+    dir: Point,
+    index: number,
+    height: number,
+    solid: WallSolid,
+  ) => {
     const list = incident.get(nodeId);
-    if (list) list.push({ dir, index, height });
-    else incident.set(nodeId, [{ dir, index, height }]);
+    if (list) list.push({ dir, index, height, solid });
+    else incident.set(nodeId, [{ dir, index, height, solid }]);
   };
   for (const edge of floor.edges) {
     const solid = solidByEdge.get(edge.id);
     if (!solid) continue;
-    add(edge.a, solid.dir, solid.index, solid.height);
+    add(edge.a, solid.dir, solid.index, solid.height, solid);
     add(
       edge.b,
       { x: -solid.dir.x, y: -solid.dir.y },
       solid.index,
       solid.height,
+      solid,
     );
   }
 
@@ -401,9 +412,51 @@ export function nodePosts(floor: Floor, solids: WallSolid[]): NodePost[] {
       const dot = list[0].dir.x * list[1].dir.x + list[0].dir.y * list[1].dir.y;
       if (dot < -1 + 1e-6) continue; // collinear straight run — no post
     }
+    // Principal axes: the first incident wall, and the first whose outward
+    // is not parallel to it. Ranges start as each wall's own band and are
+    // widened by any further incident wall on the nearer axis.
+    const a = list[0].solid;
+    const b =
+      list.find(
+        (entry) =>
+          Math.abs(
+            entry.solid.outward.x * a.outward.y -
+              entry.solid.outward.y * a.outward.x,
+          ) > 1e-6,
+      )?.solid ?? null;
+    const axisA = a.outward;
+    const axisB = b ? b.outward : { x: -a.outward.y, y: a.outward.x };
+    const bandA = wallBandRange(a);
+    const rangeA = { lo: bandA.inner, hi: bandA.outer };
+    const rangeB = b
+      ? { lo: wallBandRange(b).inner, hi: wallBandRange(b).outer }
+      : { lo: -WALL_THICKNESS / 2, hi: WALL_THICKNESS / 2 };
+    for (const entry of list) {
+      if (entry.solid === a || entry.solid === b) continue;
+      const band = wallBandRange(entry.solid);
+      const dotA =
+        entry.solid.outward.x * axisA.x + entry.solid.outward.y * axisA.y;
+      const dotB =
+        entry.solid.outward.x * axisB.x + entry.solid.outward.y * axisB.y;
+      const [axisDot, range] =
+        Math.abs(dotA) >= Math.abs(dotB) ? [dotA, rangeA] : [dotB, rangeB];
+      const mapped = [band.inner * axisDot, band.outer * axisDot];
+      range.lo = Math.min(range.lo, ...mapped);
+      range.hi = Math.max(range.hi, ...mapped);
+    }
+    const corner = (u: number, v: number): Point => ({
+      x: node.x + axisA.x * u + axisB.x * v,
+      y: node.y + axisA.y * u + axisB.y * v,
+    });
     posts.push({
       nodeId,
       center: { x: node.x, y: node.y },
+      corners: [
+        corner(rangeA.lo, rangeB.lo),
+        corner(rangeA.hi, rangeB.lo),
+        corner(rangeA.hi, rangeB.hi),
+        corner(rangeA.lo, rangeB.hi),
+      ],
       edgeIndices: list.map((entry) => entry.index),
       height: Math.max(...list.map((entry) => entry.height)),
     });
