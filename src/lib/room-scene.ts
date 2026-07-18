@@ -4,6 +4,7 @@ import {
   DOOR_HEIGHT,
   type Floor,
   type Opening,
+  openingSill,
   openingVerticals,
   type Point,
   WALL_THICKNESS,
@@ -69,6 +70,10 @@ export interface WallHole {
    * pick targets orient by it; both faces of the one solid get the cut.
    */
   side: 1 | -1;
+  /** Windows only: resolved sill overhang past the interior face, meters. */
+  sillOverhang?: number;
+  /** Windows only: resolved sill board material. */
+  sillMaterial?: "white" | "wood";
 }
 
 /** One wall ready to extrude: an edge's centerline with holes cut into it. */
@@ -90,6 +95,18 @@ export interface WallSolid {
   length: number;
   /** Wall/ceiling height: max of the adjacent rooms, DEFAULT for none. */
   height: number;
+  /** Effective wall thickness (per-edge override; shared walls stay default). */
+  thickness: number;
+  /**
+   * How far the body's mid-plane sits from the edge centerline along
+   * `outward`, meters (≥ 0). Non-zero only for a thickened 1-face wall,
+   * whose interior face stays pinned at WALL_THICKNESS / 2.
+   */
+  outwardShift: number;
+  /** +1 when `outward` is the leftNormal of `dir`, −1 for the rightNormal.
+   * Converts outward-coordinates to the 3D wall-local z axis (which is the
+   * leftNormal): localZ = outwardSign * outwardCoordinate. */
+  outwardSign: 1 | -1;
   holes: WallHole[];
   /**
    * Number of adjacent room faces (0, 1 or 2). Two → the wall always occludes
@@ -130,6 +147,7 @@ function cutHole(
   const bottom = Math.max(verticals.bottom, 0);
   const top = Math.min(verticals.top, height);
   if (end - start < MIN_HOLE_SIZE || top - bottom < MIN_HOLE_SIZE) return;
+  const sill = opening.kind === "window" ? openingSill(opening) : null;
   holes.push({
     id: opening.id,
     kind: opening.kind,
@@ -139,6 +157,9 @@ function cutHole(
     top,
     ...(opening.hinge ? { hinge: opening.hinge } : {}),
     side: opening.side,
+    ...(sill
+      ? { sillOverhang: sill.overhang, sillMaterial: sill.material }
+      : {}),
   });
 }
 
@@ -200,6 +221,16 @@ export function buildEdgeSolids(
     }
     holes.sort((x, y) => x.start - y.start);
 
+    // Effective thickness: the override counts only while the edge borders
+    // at most one room face (dormant on shared walls). A 1-face wall grows
+    // outward — interior face pinned at WALL_THICKNESS / 2 — while a
+    // dangling edge grows symmetrically (no defined interior side).
+    const thickness =
+      adj.length <= 1 ? (edge.thickness ?? WALL_THICKNESS) : WALL_THICKNESS;
+    const outwardShift =
+      adj.length === 1 ? (thickness - WALL_THICKNESS) / 2 : 0;
+    const outwardSign: 1 | -1 = adj.length === 1 && faceSides[0] === 1 ? -1 : 1;
+
     solids.push({
       index,
       edgeId: edge.id,
@@ -208,12 +239,60 @@ export function buildEdgeSolids(
       outward,
       length,
       height,
+      thickness,
+      outwardShift,
+      outwardSign,
       holes,
       faces: adj.length,
       faceSides,
     });
   });
   return solids;
+}
+
+/** Outward-coordinate extents of a wall body (use with `wallPoint`). */
+export function wallBandRange(solid: WallSolid): {
+  inner: number;
+  outer: number;
+} {
+  return {
+    inner: solid.outwardShift - solid.thickness / 2,
+    outer: solid.outwardShift + solid.thickness / 2,
+  };
+}
+
+/** Outward-coordinate of the wall face on leftNormal-signed `side`. */
+export function faceOutwardOffset(solid: WallSolid, side: 1 | -1): number {
+  return solid.outwardShift + solid.outwardSign * side * (solid.thickness / 2);
+}
+
+/** 3D wall-local z where the extrusion (local 0..thickness) starts. */
+export function wallZOffset(solid: WallSolid): number {
+  return solid.outwardSign * solid.outwardShift - solid.thickness / 2;
+}
+
+/** 3D wall-local z of the body's mid-plane. */
+export function wallZCenter(solid: WallSolid): number {
+  return solid.outwardSign * solid.outwardShift;
+}
+
+/** Depth of the window unit (frame + glass) within the wall. */
+export function windowUnitDepth(solid: WallSolid): number {
+  return Math.min(WALL_THICKNESS, solid.thickness);
+}
+
+/**
+ * 3D wall-local z of the window unit's center plane: the unit occupies the
+ * outer `windowUnitDepth` of the wall — flush against the face opposite the
+ * hole's room side — leaving the interior reveal for the sill. On a default
+ * 10 cm wall this is the wall center (today's placement, unchanged).
+ */
+export function windowUnitZ(
+  solid: WallSolid,
+  hole: Pick<WallHole, "side">,
+): number {
+  const farFace = wallZCenter(solid) - hole.side * (solid.thickness / 2);
+  return farFace + hole.side * (windowUnitDepth(solid) / 2);
 }
 
 /**

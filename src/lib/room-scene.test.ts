@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { deriveFloor, type Floor } from "#/lib/model";
+import {
+  deriveFloor,
+  type Floor,
+  setEdgeThickness,
+  setOpeningSillMaterial,
+  setOpeningSillOverhang,
+  WALL_THICKNESS,
+} from "#/lib/model";
 import { makeFloor, makeLRoom } from "#/lib/model/test-fixtures";
 import {
   buildEdgeSolids,
   DOOR_HEIGHT,
+  faceOutwardOffset,
   nodePosts,
   STUB_WALL_HEIGHT,
   stubSpans,
@@ -12,6 +20,8 @@ import {
   type WallSolid,
   WINDOW_HEAD,
   WINDOW_SILL,
+  wallZOffset,
+  windowUnitZ,
 } from "./room-scene";
 
 const solidsOf = (floor: Floor) =>
@@ -62,6 +72,8 @@ describe("buildEdgeSolids", () => {
         bottom: WINDOW_SILL,
         top: WINDOW_HEAD,
         side: 1,
+        sillOverhang: expect.any(Number),
+        sillMaterial: expect.any(String),
       },
     ]);
   });
@@ -143,6 +155,9 @@ describe("stubSpans", () => {
     outward: { x: 0, y: -1 },
     length,
     height: WALL_HEIGHT,
+    thickness: WALL_THICKNESS,
+    outwardShift: 0,
+    outwardSign: 1,
     holes,
     faces: 1,
     faceSides: [1],
@@ -252,5 +267,67 @@ describe("sunAnchorAzimuth", () => {
       (232 * Math.PI) / 180,
       10,
     );
+  });
+});
+
+describe("per-edge wall thickness", () => {
+  it("defaults every solid to WALL_THICKNESS, centered", () => {
+    for (const solid of solidsOf(makeFloor())) {
+      expect(solid.thickness).toBe(WALL_THICKNESS);
+      expect(solid.outwardShift).toBe(0);
+    }
+  });
+
+  it("grows a 1-face wall outward, interior face pinned", () => {
+    const floor = setEdgeThickness(makeFloor(), "AB", 0.3);
+    const ab = solidsOf(floor).find((s) => s.edgeId === "AB");
+    expect(ab?.thickness).toBe(0.3);
+    expect(ab?.outwardShift).toBeCloseTo(0.1, 9);
+    // AB's single face is the living room on side +1, so outward is the
+    // rightNormal → outwardSign −1, and the interior face stays at 5 cm:
+    expect(ab?.outwardSign).toBe(-1);
+    if (!ab) throw new Error("AB solid missing");
+    expect(faceOutwardOffset(ab, 1)).toBeCloseTo(-0.05, 9);
+    expect(faceOutwardOffset(ab, -1)).toBeCloseTo(0.25, 9);
+    expect(wallZOffset(ab)).toBeCloseTo(-0.25, 9);
+  });
+
+  it("keeps a shared (2-face) wall at the default — override dormant", () => {
+    const floor = setEdgeThickness(makeFloor(), "BE", 0.3);
+    const be = solidsOf(floor).find((s) => s.edgeId === "BE");
+    expect(be?.thickness).toBe(WALL_THICKNESS);
+    expect(be?.outwardShift).toBe(0);
+  });
+
+  it("grows a dangling (0-face) edge symmetrically", () => {
+    const base = makeFloor();
+    const floor = setEdgeThickness(
+      {
+        ...base,
+        nodes: [
+          ...base.nodes,
+          { id: "X", x: 20, y: 0 },
+          { id: "Y", x: 22, y: 0 },
+        ],
+        edges: [...base.edges, { id: "XY", a: "X", b: "Y" }],
+      },
+      "XY",
+      0.3,
+    );
+    const xy = solidsOf(floor).find((s) => s.edgeId === "XY");
+    expect(xy?.thickness).toBe(0.3);
+    expect(xy?.outwardShift).toBe(0);
+  });
+
+  it("resolves window sill fields onto the hole", () => {
+    let floor = setOpeningSillOverhang(makeFloor(), "window-AB", 0.18);
+    floor = setOpeningSillMaterial(floor, "window-AB", "wood");
+    const ab = solidsOf(floor).find((s) => s.edgeId === "AB");
+    const hole = ab?.holes.find((h) => h.id === "window-AB");
+    expect(hole?.sillOverhang).toBe(0.18);
+    expect(hole?.sillMaterial).toBe("wood");
+    // Unit sits in the outer 10 cm; on a default wall that is centered:
+    if (!ab || !hole) throw new Error("window hole missing");
+    expect(windowUnitZ(ab, hole)).toBeCloseTo(0, 9);
   });
 });
