@@ -473,10 +473,16 @@ function WindowDressing({
         return (
           <mesh position={[sill.x, sill.y, sill.z]} raycast={noRaycast}>
             <boxGeometry args={[sill.width, sill.height, sill.depth]} />
+            {/* The board's top face is coplanar with the hole's reveal ledge
+                (and, at overhang 0, its front face with the wall face); bias
+                the depth so the board wins those ties instead of shimmering. */}
             <meshLambertMaterial
               color={
                 sill.material === "wood" ? SILL_WOOD_COLOR : WINDOW_FRAME_COLOR
               }
+              polygonOffset
+              polygonOffsetFactor={-1}
+              polygonOffsetUnits={-1}
             />
           </mesh>
         );
