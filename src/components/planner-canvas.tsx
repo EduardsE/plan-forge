@@ -214,6 +214,7 @@ function CameraRig({
   readoutStore,
 }: CameraRigProps) {
   const size = useThree((state) => state.size);
+  const gl = useThree((state) => state.gl);
   const controlsRef = useRef<OrbitControlsRef | null>(null);
   const perspectiveRef = useRef<ThreePerspectiveCamera | null>(null);
   const orthoRef = useRef<ThreeOrthographicCamera | null>(null);
@@ -284,6 +285,53 @@ function CameraRig({
     if (controls) target.copy(controls.target);
     publish();
   }, [target, publish]);
+
+  // Click-slop rotate gate: OrbitControls rotates from the very first
+  // pointermove, so the few px of hand drift inside a click nudged the camera
+  // on every pick (windows especially). Zero the rotate speed for the first
+  // CLICK_SLOP_PX of a left press and restore it once the gesture proves to be
+  // a drag — the controls track the pointer the whole time (rotateStart
+  // advances even at speed 0), so a real orbit continues seamlessly from the
+  // handoff point. Native listeners, since picks stopPropagation on the R3F
+  // side and the controls listen natively anyway.
+  useEffect(() => {
+    // The plan lens never rotates on left-drag; nothing to gate.
+    if (renderPlan) return;
+    const canvas = gl.domElement;
+    let gate: { x: number; y: number; pointerId: number } | null = null;
+    const restore = () => {
+      gate = null;
+      const controls = controlsRef.current;
+      if (controls) controls.rotateSpeed = 1;
+    };
+    const handleDown = (event: PointerEvent) => {
+      // A second pointer joining is a touch dolly/pan — stand the gate down.
+      if (gate) return restore();
+      if (event.button !== 0) return;
+      gate = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+      const controls = controlsRef.current;
+      if (controls) controls.rotateSpeed = 0;
+    };
+    const handleMove = (event: PointerEvent) => {
+      if (!gate || event.pointerId !== gate.pointerId) return;
+      const travel = Math.hypot(event.clientX - gate.x, event.clientY - gate.y);
+      if (travel > CLICK_SLOP_PX) restore();
+    };
+    const handleUp = (event: PointerEvent) => {
+      if (gate && event.pointerId === gate.pointerId) restore();
+    };
+    canvas.addEventListener("pointerdown", handleDown);
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
+    return () => {
+      canvas.removeEventListener("pointerdown", handleDown);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+      restore();
+    };
+  }, [renderPlan, gl]);
 
   const fitPerspective = useCallback(() => {
     const camera = perspectiveRef.current;
