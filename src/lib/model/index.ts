@@ -12,6 +12,7 @@ export * from "./room";
 export * from "./room-match";
 export * from "./sample-room";
 export * from "./stack";
+export * from "./stairs";
 export * from "./types";
 export * from "./wall-mount";
 export * from "./walls";

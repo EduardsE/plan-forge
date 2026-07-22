@@ -9,8 +9,10 @@ import type {
 } from "#/lib/model";
 import {
   MAX_SILL_OVERHANG,
+  MAX_STAIR_WIDTH,
   MAX_WALL_HEIGHT,
   MAX_WALL_THICKNESS,
+  MIN_STAIR_WIDTH,
   MIN_WALL_HEIGHT,
   MIN_WALL_THICKNESS,
   reconcileFloor,
@@ -249,12 +251,6 @@ function areRooms(value: unknown): boolean {
   }
   return ids.size === value.length;
 }
-
-/** A stair's footprint width is clamped to this range everywhere in the app
- * (the `lib/stairs.ts` constants land in a later task; V1 only persists the
- * shape, so the bound is inlined here rather than imported). */
-const MIN_STAIR_WIDTH = 0.7;
-const MAX_STAIR_WIDTH = 2.0;
 
 function areStairs(value: unknown): value is Stair[] {
   if (!Array.isArray(value)) return false;
