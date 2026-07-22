@@ -34,6 +34,11 @@ interface StatusBarProps {
   /** The selected opening is a portal — "Door connects Living ↔ Kitchen"
    * (derived from wall abutment, never stored); takes over the context. */
   portalStatus?: string | null;
+  /** The active floor's display name ("Ground floor" / "Floor 2"…) on a
+   * multi-floor building; null/absent on a one-floor building, where the
+   * floor is never worth naming out loud. Rendered leading, ahead of the
+   * area. */
+  floorName?: string | null;
 }
 
 const noStore: Pick<CameraReadoutStore, "subscribe" | "getSnapshot"> = {
@@ -77,6 +82,7 @@ export function StatusBar({
   nodeCount = 0,
   placingName = null,
   portalStatus = null,
+  floorName = null,
 }: StatusBarProps) {
   const live = useSyncExternalStore(
     (cameraReadout ?? noStore).subscribe,
@@ -124,6 +130,14 @@ export function StatusBar({
       style={{ gridArea: "status" }}
     >
       <div className="flex min-w-0 items-center gap-3 text-[var(--ink-500)]">
+        {floorName != null && (
+          <>
+            <span className="text-[var(--ink-700)]">{floorName}</span>
+            <span aria-hidden="true" className="text-[var(--ink-200)]">
+              ·
+            </span>
+          </>
+        )}
         {area !== null && (
           <>
             <span className="font-mono text-[var(--ink-700)]">

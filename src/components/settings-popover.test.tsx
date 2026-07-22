@@ -8,10 +8,20 @@ function renderPopover(
 ) {
   return render(
     <SettingsPopover
-      rooms={[createSampleRoom()]}
+      floors={[
+        {
+          id: "floor-1",
+          name: "",
+          defaultName: "Ground floor",
+          rooms: [createSampleRoom()],
+        },
+      ]}
       unit="m"
-      onRename={() => {}}
-      onWallHeightChange={() => {}}
+      onRenameRoom={() => {}}
+      onRoomWallHeight={() => {}}
+      onRenameFloor={() => {}}
+      onDeleteFloor={() => {}}
+      canDeleteFloor={false}
       onClose={() => {}}
       {...props}
     />,
@@ -20,7 +30,16 @@ function renderPopover(
 
 describe("SettingsPopover", () => {
   it("shows the room name and the effective ceiling height", () => {
-    renderPopover({ rooms: [{ ...createSampleRoom(), wallHeight: 3.1 }] });
+    renderPopover({
+      floors: [
+        {
+          id: "floor-1",
+          name: "",
+          defaultName: "Ground floor",
+          rooms: [{ ...createSampleRoom(), wallHeight: 3.1 }],
+        },
+      ],
+    });
 
     expect((screen.getByLabelText("Room name") as HTMLInputElement).value).toBe(
       "Living room",
@@ -30,15 +49,25 @@ describe("SettingsPopover", () => {
     ).toBe("3.10");
   });
 
-  it("renders a section per room and commits against the edited room's id", () => {
-    const onRename = vi.fn();
+  it("renders a section per room and commits against the edited room's and floor's ids", () => {
+    const onRenameRoom = vi.fn();
     const kitchen = {
       ...createSampleRoom(),
       id: "kitchen",
       name: "Kitchen",
       wallHeight: 2.8,
     };
-    renderPopover({ rooms: [createSampleRoom(), kitchen], onRename });
+    renderPopover({
+      floors: [
+        {
+          id: "floor-1",
+          name: "",
+          defaultName: "Ground floor",
+          rooms: [createSampleRoom(), kitchen],
+        },
+      ],
+      onRenameRoom,
+    });
 
     expect(
       (screen.getByLabelText("Room 1 name") as HTMLInputElement).value,
@@ -54,7 +83,7 @@ describe("SettingsPopover", () => {
 
     fireEvent.change(kitchenName, { target: { value: "Pantry" } });
     fireEvent.blur(kitchenName);
-    expect(onRename).toHaveBeenCalledWith("kitchen", "Pantry");
+    expect(onRenameRoom).toHaveBeenCalledWith("floor-1", "kitchen", "Pantry");
   });
 
   it("falls back to the default ceiling height and honors the unit", () => {
@@ -65,49 +94,57 @@ describe("SettingsPopover", () => {
     ).toBe("250");
   });
 
-  it("commits a rename on blur, trimmed; empty input never commits", () => {
-    const onRename = vi.fn();
-    renderPopover({ onRename });
+  it("commits a room rename on blur, trimmed; empty input never commits", () => {
+    const onRenameRoom = vi.fn();
+    renderPopover({ onRenameRoom });
 
     const name = screen.getByLabelText("Room name") as HTMLInputElement;
     fireEvent.change(name, { target: { value: "  Studio " } });
     fireEvent.blur(name);
-    expect(onRename).toHaveBeenCalledWith("living-room", "Studio");
+    expect(onRenameRoom).toHaveBeenCalledWith(
+      "floor-1",
+      "living-room",
+      "Studio",
+    );
 
     fireEvent.change(name, { target: { value: "   " } });
     fireEvent.blur(name);
-    expect(onRename).toHaveBeenCalledOnce();
+    expect(onRenameRoom).toHaveBeenCalledOnce();
     // The field snaps back to the canonical name.
     expect(name.value).toBe("Living room");
   });
 
   it("commits a ceiling height in the active unit, in meters", () => {
-    const onWallHeightChange = vi.fn();
-    renderPopover({ unit: "cm", onWallHeightChange });
+    const onRoomWallHeight = vi.fn();
+    renderPopover({ unit: "cm", onRoomWallHeight });
 
     const height = screen.getByLabelText("Ceiling height") as HTMLInputElement;
     fireEvent.change(height, { target: { value: "310" } });
     fireEvent.blur(height);
 
-    expect(onWallHeightChange).toHaveBeenCalledWith("living-room", 3.1);
+    expect(onRoomWallHeight).toHaveBeenCalledWith(
+      "floor-1",
+      "living-room",
+      3.1,
+    );
   });
 
   it("drops unparsable height input and snaps the field back", () => {
-    const onWallHeightChange = vi.fn();
-    renderPopover({ onWallHeightChange });
+    const onRoomWallHeight = vi.fn();
+    renderPopover({ onRoomWallHeight });
 
     const height = screen.getByLabelText("Ceiling height") as HTMLInputElement;
     fireEvent.change(height, { target: { value: "tall" } });
     fireEvent.blur(height);
 
-    expect(onWallHeightChange).not.toHaveBeenCalled();
+    expect(onRoomWallHeight).not.toHaveBeenCalled();
     expect(height.value).toBe("2.50");
   });
 
   it("esc in a field reverts it without committing or closing", () => {
-    const onRename = vi.fn();
+    const onRenameRoom = vi.fn();
     const onClose = vi.fn();
-    renderPopover({ onRename, onClose });
+    renderPopover({ onRenameRoom, onClose });
 
     const name = screen.getByLabelText("Room name") as HTMLInputElement;
     fireEvent.change(name, { target: { value: "Studio" } });
@@ -115,7 +152,7 @@ describe("SettingsPopover", () => {
     fireEvent.blur(name);
 
     expect(name.value).toBe("Living room");
-    expect(onRename).not.toHaveBeenCalled();
+    expect(onRenameRoom).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -142,5 +179,85 @@ describe("SettingsPopover", () => {
     fireEvent.pointerDown(document.body);
     expect(onClose).toHaveBeenCalledOnce();
     anchor.remove();
+  });
+
+  it("renders a floor NAME field and a Delete floor button per floor", () => {
+    renderPopover({
+      floors: [
+        {
+          id: "floor-1",
+          name: "",
+          defaultName: "Ground floor",
+          rooms: [createSampleRoom()],
+        },
+        {
+          id: "floor-2",
+          name: "Studio",
+          defaultName: "Floor 2",
+          rooms: [],
+        },
+      ],
+      canDeleteFloor: true,
+    });
+
+    expect(
+      (screen.getByLabelText("Ground floor name") as HTMLInputElement).value,
+    ).toBe("Ground floor");
+    expect(
+      (screen.getByLabelText("Floor 2 name") as HTMLInputElement).value,
+    ).toBe("Studio");
+    expect(
+      screen.getAllByRole("button", { name: "Delete floor" }),
+    ).toHaveLength(2);
+  });
+
+  it("disables Delete floor when canDeleteFloor is false", () => {
+    renderPopover({ canDeleteFloor: false });
+
+    expect(
+      screen
+        .getByRole("button", { name: "Delete floor" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("commits a floor rename on blur, keyed by floor id", () => {
+    const onRenameFloor = vi.fn();
+    renderPopover({ onRenameFloor });
+
+    const name = screen.getByLabelText("Ground floor name") as HTMLInputElement;
+    fireEvent.change(name, { target: { value: "Studio" } });
+    fireEvent.blur(name);
+
+    expect(onRenameFloor).toHaveBeenCalledWith("floor-1", "Studio");
+  });
+
+  it("confirms before deleting a floor, with the removal copy, and calls onDeleteFloor", () => {
+    const onDeleteFloor = vi.fn();
+    const confirmSpy = vi
+      .spyOn(window, "confirm")
+      .mockImplementation(() => true);
+    renderPopover({ onDeleteFloor, canDeleteFloor: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete floor" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Delete Ground floor? Its rooms and furniture are removed; stairs rising to it from below are removed too.",
+    );
+    expect(onDeleteFloor).toHaveBeenCalledWith("floor-1");
+    confirmSpy.mockRestore();
+  });
+
+  it("does not delete when the confirm is dismissed", () => {
+    const onDeleteFloor = vi.fn();
+    const confirmSpy = vi
+      .spyOn(window, "confirm")
+      .mockImplementation(() => false);
+    renderPopover({ onDeleteFloor, canDeleteFloor: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete floor" }));
+
+    expect(onDeleteFloor).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 });

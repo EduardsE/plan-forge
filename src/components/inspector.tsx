@@ -696,6 +696,18 @@ export interface InspectorProps {
   /** The selected wall (either lens): its own SELECTION view with a
    * read-only length readout and an editable thickness field. */
   selectedWall?: WallSelection | null;
+  /** Every floor in the building, ground-first. When there is more than one
+   * floor and nothing is selected, this replaces the room list/overview with
+   * a per-floor breakdown, and the footer's FLOOR stat becomes the building
+   * total with a FLOORS count alongside it. Absent or single-entry on a
+   * one-floor building — nothing changes there. */
+  floorSummaries?: Array<{
+    id: string;
+    name: string;
+    area: number;
+    roomCount: number;
+    active: boolean;
+  }>;
   onResize: (footprint: Footprint) => void;
   onRotateTo: (deg: number) => void;
   onElevate: (elevation: number) => void;
@@ -729,6 +741,7 @@ export function Inspector({
   openingCount = 0,
   selectedOpening = null,
   selectedWall = null,
+  floorSummaries = [],
   onResize,
   onRotateTo,
   onElevate,
@@ -753,18 +766,30 @@ export function Inspector({
   const showWall =
     !showSelection && !showOpening && selectedWall !== null && !drawing;
   const multiRoom = rooms.length > 1;
+  // More than one floor on the building: the overview (no selection) and the
+  // footer both switch from the active floor's own facts to the whole
+  // building's.
+  const buildingMode = floorSummaries.length > 1;
+  const showBuilding =
+    !showSelection && !showOpening && !showWall && !drawing && buildingMode;
   const header = drawing
     ? "OUTLINE"
     : showSelection || showOpening || showWall
       ? "SELECTION"
-      : multiRoom
-        ? "FLOOR"
-        : "ROOM";
+      : showBuilding
+        ? "BUILDING"
+        : multiRoom
+          ? "FLOOR"
+          : "ROOM";
 
   // Footer facts are floor totals (equal to the room's own on a one-room
-  // floor, so nothing changes until a second room exists).
+  // floor, so nothing changes until a second room exists) — or, with more
+  // than one floor, the whole building's summed area and floor count.
   const hasOutline = rooms.some((room) => room.outline.length >= 3);
-  const area = hasOutline ? totalFloorArea(rooms) : null;
+  const activeFloorArea = hasOutline ? totalFloorArea(rooms) : null;
+  const area = buildingMode
+    ? floorSummaries.reduce((sum, f) => sum + f.area, 0)
+    : activeFloorArea;
   const perimeter = hasOutline ? totalPerimeter(rooms) : null;
   const firstRoom = rooms[0];
 
@@ -830,6 +855,38 @@ export function Inspector({
             unit={unit}
             onThickness={onWallThickness}
           />
+        ) : showBuilding ? (
+          <div className="flex flex-col gap-2.5">
+            <div
+              className="font-semibold text-[15px] text-[var(--ink-900)]"
+              data-testid="inspector-room-name"
+            >
+              {`${floorSummaries.length} floors`}
+            </div>
+            <div className="flex flex-col gap-1">
+              {floorSummaries.map((f) => (
+                <div
+                  key={f.id}
+                  data-testid="inspector-floor-row"
+                  className={cn(
+                    "flex items-baseline justify-between rounded-[6px] px-2 py-1 text-[12.5px]",
+                    f.active && "bg-[var(--blue-tint)]",
+                  )}
+                >
+                  <span className="truncate text-[var(--ink-500)]">
+                    {f.name}
+                  </span>
+                  <span className="ml-2 shrink-0 font-mono text-[var(--ink-400)]">
+                    {f.area.toFixed(2)} m² · {f.roomCount} room
+                    {f.roomCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
+              Switch floors from the chips on the canvas edge.
+            </div>
+          </div>
         ) : multiRoom ? (
           <div className="flex flex-col gap-2.5">
             <div
@@ -883,14 +940,19 @@ export function Inspector({
         {[
           ["FLOOR", area === null ? "—" : `${area.toFixed(2)} m²`],
           ["PERIMETER", perimeter === null ? "—" : `${perimeter.toFixed(1)} m`],
-          // On a one-room floor the ceiling is unambiguous; with several
-          // rooms (each its own height) the slot shows the room count.
-          multiRoom
-            ? ["ROOMS", `${rooms.length}`]
-            : [
-                "CEILING",
-                firstRoom ? `${wallHeightOf(firstRoom).toFixed(2)} m` : "—",
-              ],
+          // On a one-floor building: a one-room floor's ceiling is
+          // unambiguous, several rooms (each its own height) show the room
+          // count instead. With more than one floor, the slot always shows
+          // the floor count — no single ceiling or room count speaks for the
+          // whole building.
+          buildingMode
+            ? ["FLOORS", `${floorSummaries.length}`]
+            : multiRoom
+              ? ["ROOMS", `${rooms.length}`]
+              : [
+                  "CEILING",
+                  firstRoom ? `${wallHeightOf(firstRoom).toFixed(2)} m` : "—",
+                ],
         ].map(([label, value]) => (
           <div key={label} className="flex flex-col gap-[3px]">
             <span

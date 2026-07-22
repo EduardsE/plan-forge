@@ -143,4 +143,16 @@ describe("StatusBar", () => {
 
     expect(screen.getByText("orbit 43° / 43°")).toBeTruthy();
   });
+
+  it("leads with the floor name when given one", () => {
+    renderBar({ floorName: "Ground floor" });
+
+    expect(screen.getByText("Ground floor")).toBeTruthy();
+  });
+
+  it("renders no floor name segment when absent", () => {
+    renderBar({});
+
+    expect(screen.queryByText("Ground floor")).toBeNull();
+  });
 });

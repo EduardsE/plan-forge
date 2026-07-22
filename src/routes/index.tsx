@@ -10,6 +10,7 @@ import {
 } from "react";
 import { DrawHintBar } from "#/components/draw-hint-bar";
 import { type DrawTool, DrawToolStack } from "#/components/draw-tool-stack";
+import { FloorChips } from "#/components/floor-chips";
 import { Inspector } from "#/components/inspector";
 import { NavRail } from "#/components/nav-rail";
 import { ObjectsPanel } from "#/components/objects-panel";
@@ -41,12 +42,14 @@ import {
 } from "#/lib/history";
 import { DEFAULT_TIME_OF_DAY, LIGHTING, type TimeOfDay } from "#/lib/lighting";
 import {
+  addFloorAbove,
   allFurnitureOf,
   type Building,
   type CatalogItem,
   createFloor,
   createSampleFloor,
   DEFAULT_WALL_HEIGHT,
+  type DerivedFloor,
   deriveFloor,
   duplicateFurniture,
   edgeCeiling,
@@ -56,6 +59,7 @@ import {
   flipFloorOpeningSide,
   floorBounds,
   floorById,
+  floorDisplayName,
   floorIndexOf,
   floorOfEdge,
   floorOfItem,
@@ -67,8 +71,10 @@ import {
   portalLabel,
   type Room,
   reconcileFloor,
+  removeFloor,
   removeFloorOpening,
   removeFurniture,
+  renameFloor,
   resizeFloorOpening,
   roomOfFurniture,
   rotateFurniture,
@@ -84,6 +90,7 @@ import {
   setRoomName,
   setRoomWallHeight,
   shiftOpeningVertical,
+  totalFloorArea,
   updateDerivedRoom,
   updateFloorFurniture,
   updateFloorIn,
@@ -167,8 +174,16 @@ function Planner() {
   floorRef.current = floor;
   // Rooms are *derived* from the graph (`deriveFloor`): scenes, readouts, and
   // every per-room edit speak this `Room[]` view; the graph `Floor` is what
-  // history/persistence hold. Recomputed on each floor change.
-  const derived = useMemo(() => deriveFloor(floor), [floor]);
+  // history/persistence hold. Derived over every storey (not just the active
+  // one) so the floor chips/settings/inspector can summarize the whole
+  // building without re-deriving per read; the active floor's entry is what
+  // the canvas and every per-room edit still see.
+  const derivedByFloor = useMemo(() => {
+    const map = new Map<string, DerivedFloor>();
+    for (const f of building.floors) map.set(f.id, deriveFloor(f));
+    return map;
+  }, [building]);
+  const derived = derivedByFloor.get(floor.id) ?? deriveFloor(floor);
   // The first derived room anchors the header breadcrumb; everything
   // selection-shaped resolves its owning room from the item id instead.
   const room = derived.rooms[0] as Room | undefined;
@@ -211,19 +226,17 @@ function Planner() {
     (next: Floor) => previewFloorIn(activeFloorIdRef.current, () => next),
     [previewFloorIn],
   );
-  // One derived room's discrete mutation, addressed by id — one undo step.
-  // `updateDerivedRoom` runs the edit back through the graph and keeps the
-  // pure setters' no-op contract at floor level (a same-reference room yields
-  // the same floor, which must not become an empty undo step). Rooms belong
-  // to the active floor (the settings popover only lists `derived.rooms`).
+  // One derived room's discrete mutation, addressed by floor + room id — one
+  // undo step. `updateDerivedRoom` runs the edit back through the graph and
+  // keeps the pure setters' no-op contract at floor level (a same-reference
+  // room yields the same floor, which must not become an empty undo step).
+  // Rooms can belong to any floor now — the settings popover lists every
+  // floor's rooms, not just the active one's.
   const commitToRoom = useCallback(
-    (targetId: string, update: (room: Room) => Room) => {
+    (floorId: string, targetId: string, update: (room: Room) => Room) => {
       setBuildingHistory((history) => {
-        const next = updateFloorIn(
-          history.current,
-          activeFloorIdRef.current,
-          (floor) =>
-            updateDerivedRoom(floor, deriveFloor(floor), targetId, update),
+        const next = updateFloorIn(history.current, floorId, (floor) =>
+          updateDerivedRoom(floor, deriveFloor(floor), targetId, update),
         );
         return next === history.current
           ? history
@@ -601,15 +614,62 @@ function Planner() {
   const toggleSettings = useCallback(() => setSettingsOpen((on) => !on), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const renameRoom = useCallback(
-    (targetId: string, name: string) =>
-      commitToRoom(targetId, (current) => setRoomName(current, name)),
+    (floorId: string, targetId: string, name: string) =>
+      commitToRoom(floorId, targetId, (current) => setRoomName(current, name)),
     [commitToRoom],
   );
   const setCeilingHeight = useCallback(
-    (targetId: string, meters: number) =>
-      commitToRoom(targetId, (current) => setRoomWallHeight(current, meters)),
+    (floorId: string, targetId: string, meters: number) =>
+      commitToRoom(floorId, targetId, (current) =>
+        setRoomWallHeight(current, meters),
+      ),
     [commitToRoom],
   );
+  // Floor management: add a new empty storey on top (its id known up front so
+  // the active floor can jump straight to it), rename one, or remove one.
+  // `addFloorAbove`/`removeFloor` are pure Building→Building setters (V1);
+  // wiring them here is the only new history-touching surface.
+  const addFloor = useCallback(() => {
+    const newId = crypto.randomUUID();
+    setBuildingHistory((history) =>
+      commitHistory(
+        history,
+        addFloorAbove(history.current, () => newId),
+      ),
+    );
+    setActiveFloorId(newId);
+  }, []);
+  const renameFloorCmd = useCallback((floorId: string, name: string) => {
+    setBuildingHistory((history) => {
+      const next = renameFloor(history.current, floorId, name);
+      return next === history.current ? history : commitHistory(history, next);
+    });
+  }, []);
+  // Deleting the active floor moves `activeFloorId` to the nearest surviving
+  // index in the *same* tick as the commit (both land in one React batch) so
+  // the undo-clamp effect never observes a building whose active id just
+  // vanished. Deleting any other floor leaves the active id untouched (it's
+  // still there).
+  const deleteFloor = useCallback((floorId: string) => {
+    const current = buildingRef.current;
+    const next = removeFloor(current, floorId);
+    if (next === current) return; // last-floor no-op
+    if (activeFloorIdRef.current === floorId) {
+      const removedIndex = floorIndexOf(current, floorId);
+      const newIndex = Math.min(removedIndex, next.floors.length - 1);
+      setActiveFloorId(next.floors[newIndex].id);
+    }
+    setBuildingHistory((history) => commitHistory(history, next));
+  }, []);
+  // A floor-chip click: the target floor may hide content the current
+  // selections point at (a different storey's furniture/opening/wall), so a
+  // switch always resets focus rather than carrying a selection across.
+  const selectFloor = useCallback((floorId: string) => {
+    setActiveFloorId(floorId);
+    setSelectedId(null);
+    setSelectedOpeningId(null);
+    setSelectedEdgeId(null);
+  }, []);
   // Bottom-left view toggles. Grid shows the in-scene reference grid; snap
   // gates draw/placement quantize + flush snapping. Both default on, matching
   // the lit state the mockups show.
@@ -1047,6 +1107,56 @@ function Planner() {
   // place → tweak → place loop never has to swap panels.
   const objectsOpen = libraryOpen && viewMode !== "draw";
 
+  // Floor chips (canvas overlay): ground-first data, labeled "G"/"2"/"3"…;
+  // the component itself reverses the order so the tallest storey renders on
+  // top.
+  const floorChips = useMemo(
+    () =>
+      building.floors.map((f, index) => ({
+        id: f.id,
+        label: index === 0 ? "G" : String(index + 1),
+        name: floorDisplayName(building, index),
+      })),
+    [building],
+  );
+  const activeFloorIndex = floorIndexOf(building, activeFloorId);
+  // Status bar prefix: only worth naming the floor out loud once there's more
+  // than one.
+  const activeFloorName =
+    building.floors.length > 1
+      ? floorDisplayName(building, activeFloorIndex)
+      : null;
+  // Inspector's per-floor breakdown, ground-first — reuses `derivedByFloor`
+  // so no floor gets re-derived just to summarize it.
+  const floorSummaries = useMemo(
+    () =>
+      building.floors.map((f, index) => {
+        const rooms = derivedByFloor.get(f.id)?.rooms ?? [];
+        const hasOutline = rooms.some((room) => room.outline.length >= 3);
+        return {
+          id: f.id,
+          name: floorDisplayName(building, index),
+          area: hasOutline ? totalFloorArea(rooms) : 0,
+          roomCount: rooms.length,
+          active: f.id === activeFloorId,
+        };
+      }),
+    [building, derivedByFloor, activeFloorId],
+  );
+  // Settings popover's per-floor rooms (every floor, not just the active
+  // one) plus the raw/display name split `SettingsPopover` renders the NAME
+  // field from.
+  const settingsFloors = useMemo(
+    () =>
+      building.floors.map((f, index) => ({
+        id: f.id,
+        name: f.name ?? "",
+        defaultName: floorDisplayName(building, index),
+        rooms: (derivedByFloor.get(f.id)?.rooms ?? []) as Room[],
+      })),
+    [building, derivedByFloor],
+  );
+
   // Studio pool sized to the whole-floor bbox: at fit zoom the model's
   // on-screen extent scales with each plan axis over the diagonal, so the
   // 3D lens's pool ellipse follows the same ratios (a wide flat gets a
@@ -1096,10 +1206,13 @@ function Planner() {
       />
       {settingsOpen && (
         <SettingsPopover
-          rooms={derived.rooms}
+          floors={settingsFloors}
           unit={unit}
-          onRename={renameRoom}
-          onWallHeightChange={setCeilingHeight}
+          onRenameRoom={renameRoom}
+          onRoomWallHeight={setCeilingHeight}
+          onRenameFloor={renameFloorCmd}
+          onDeleteFloor={deleteFloor}
+          canDeleteFloor={building.floors.length > 1}
           onClose={closeSettings}
         />
       )}
@@ -1177,6 +1290,12 @@ function Planner() {
           onZoomOut={() => cameraApiRef.current?.zoomOut()}
           onZoomToFit={() => cameraApiRef.current?.zoomToFit()}
         />
+        <FloorChips
+          floors={floorChips}
+          activeFloorId={activeFloorId}
+          onSelect={selectFloor}
+          onAdd={addFloor}
+        />
         {viewMode === "3d" && (
           <TimeOfDayControl
             value={timeOfDay}
@@ -1199,6 +1318,7 @@ function Planner() {
       <StatusBar
         mode={viewMode}
         libraryOpen={objectsOpen}
+        floorName={activeFloorName}
         rooms={derived.rooms}
         objectCount={floor.furniture.length}
         selectedRoomName={selectedRoomName}
@@ -1233,6 +1353,7 @@ function Planner() {
       </div>
       <Inspector
         rooms={derived.rooms}
+        floorSummaries={floorSummaries}
         unit={unit}
         mode={viewMode}
         selectedItem={selectedItem}

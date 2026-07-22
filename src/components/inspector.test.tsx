@@ -199,4 +199,65 @@ describe("Inspector", () => {
     expect(screen.getByText("OUTLINE")).toBeTruthy();
     expect(screen.getByText(/4 corners/)).toBeTruthy();
   });
+
+  it("renders the building summary instead of the room list when there are multiple floors", () => {
+    renderInspector({
+      floorSummaries: [
+        {
+          id: "f0",
+          name: "Ground floor",
+          area: 33.28,
+          roomCount: 1,
+          active: true,
+        },
+        { id: "f1", name: "Studio", area: 12.5, roomCount: 2, active: false },
+      ],
+    });
+
+    const rows = screen.getAllByTestId("inspector-floor-row");
+    expect(rows).toHaveLength(2);
+    expect(screen.getByText("Ground floor")).toBeTruthy();
+    expect(screen.getByText("Studio")).toBeTruthy();
+    expect(screen.getByText(/33\.28 m²/)).toBeTruthy();
+    expect(screen.getByText(/12\.50 m²/)).toBeTruthy();
+    // Footer totals sum across floors and count them.
+    expect(screen.getByText("45.78 m²")).toBeTruthy();
+    expect(screen.getByText("FLOORS")).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+  });
+
+  it("does not show the building summary with a single floor", () => {
+    renderInspector({
+      floorSummaries: [
+        {
+          id: "f0",
+          name: "Ground floor",
+          area: 33.28,
+          roomCount: 1,
+          active: true,
+        },
+      ],
+    });
+
+    expect(screen.queryByTestId("inspector-floor-row")).toBeNull();
+  });
+
+  it("keeps the selection view even with multiple floors", () => {
+    renderInspector({
+      selectedItem: item,
+      floorSummaries: [
+        {
+          id: "f0",
+          name: "Ground floor",
+          area: 33.28,
+          roomCount: 1,
+          active: true,
+        },
+        { id: "f1", name: "Studio", area: 12.5, roomCount: 2, active: false },
+      ],
+    });
+
+    expect(screen.getByText("SELECTION")).toBeTruthy();
+    expect(screen.queryByTestId("inspector-floor-row")).toBeNull();
+  });
 });

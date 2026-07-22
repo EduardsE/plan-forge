@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
   MAX_WALL_HEIGHT,
@@ -91,21 +92,42 @@ function SettingField({
 }
 
 export interface SettingsPopoverProps {
-  /** Every room on the floor — each gets its own name + ceiling fields. */
-  rooms: Room[];
+  /** Every floor in the building, ground-first — each gets its own NAME +
+   * Delete floor row, then a section per room on that floor. */
+  floors: Array<{
+    id: string;
+    /** Raw stored name; empty when the floor has never been renamed. */
+    name: string;
+    /** The derived display name ("Ground floor" / "Floor 2"…), shown when
+     * `name` is empty. */
+    defaultName: string;
+    rooms: Room[];
+  }>;
   unit: Unit;
-  /** A committed rename; empty input never arrives (the field snaps back). */
-  onRename: (roomId: string, name: string) => void;
+  /** A committed room rename; empty input never arrives (the field snaps
+   * back). */
+  onRenameRoom: (floorId: string, roomId: string, name: string) => void;
   /** A committed wall/ceiling height, meters (the setter clamps it). */
-  onWallHeightChange: (roomId: string, meters: number) => void;
+  onRoomWallHeight: (floorId: string, roomId: string, meters: number) => void;
+  /** A committed floor rename; empty input never arrives. */
+  onRenameFloor: (floorId: string, name: string) => void;
+  /** Confirmed (the popover owns the `window.confirm` gate — it has the
+   * floor's display name to word the copy). */
+  onDeleteFloor: (floorId: string) => void;
+  /** False when the building has just one floor — a building always keeps
+   * at least one. */
+  canDeleteFloor: boolean;
   onClose: () => void;
 }
 
 export function SettingsPopover({
-  rooms,
+  floors,
   unit,
-  onRename,
-  onWallHeightChange,
+  onRenameRoom,
+  onRoomWallHeight,
+  onRenameFloor,
+  onDeleteFloor,
+  canDeleteFloor,
   onClose,
 }: SettingsPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -149,15 +171,32 @@ export function SettingsPopover({
     return () => window.removeEventListener("pointerdown", handlePointerDown);
   }, [onClose]);
 
-  const commitName = (roomId: string) => (text: string) => {
+  const commitRoomName =
+    (floorId: string, roomId: string) => (text: string) => {
+      const trimmed = text.trim();
+      if (trimmed !== "") onRenameRoom(floorId, roomId, trimmed);
+    };
+  const commitRoomWallHeight =
+    (floorId: string, roomId: string) => (text: string) => {
+      const meters = parseLength(text, unit);
+      if (meters !== null) onRoomWallHeight(floorId, roomId, meters);
+    };
+  const commitFloorName = (floorId: string) => (text: string) => {
     const trimmed = text.trim();
-    if (trimmed !== "") onRename(roomId, trimmed);
+    if (trimmed !== "") onRenameFloor(floorId, trimmed);
   };
-  const commitWallHeight = (roomId: string) => (text: string) => {
-    const meters = parseLength(text, unit);
-    if (meters !== null) onWallHeightChange(roomId, meters);
+  // The popover owns the confirm gate: it has the floor's effective display
+  // name in hand for the copy, and `onDeleteFloor` only ever fires once the
+  // user has confirmed.
+  const handleDeleteFloor = (floorId: string, displayName: string) => {
+    if (
+      window.confirm(
+        `Delete ${displayName}? Its rooms and furniture are removed; stairs rising to it from below are removed too.`,
+      )
+    ) {
+      onDeleteFloor(floorId);
+    }
   };
-  const single = rooms.length === 1;
 
   return (
     <div
@@ -170,28 +209,61 @@ export function SettingsPopover({
       <div className="font-semibold text-[11px] text-[var(--ink-400)] tracking-[0.11em]">
         ROOM SETTINGS
       </div>
-      {rooms.map((room, index) => (
-        <div key={room.id} className="flex flex-col gap-2.5">
-          {index > 0 && <div className="h-px bg-[var(--hairline)]" />}
-          <SettingField
-            label="NAME"
-            ariaLabel={single ? "Room name" : `Room ${index + 1} name`}
-            suffix=""
-            value={room.name ?? "Untitled room"}
-            onCommit={commitName(room.id)}
-          />
-          <SettingField
-            label="CEILING HEIGHT"
-            ariaLabel={
-              single ? "Ceiling height" : `Room ${index + 1} ceiling height`
-            }
-            suffix={unit}
-            mono
-            value={formatLengthValue(wallHeightOf(room), unit)}
-            onCommit={commitWallHeight(room.id)}
-          />
-        </div>
-      ))}
+      {floors.map((floor, floorIndex) => {
+        const displayName = floor.name || floor.defaultName;
+        const single = floor.rooms.length === 1;
+        return (
+          <div key={floor.id} className="flex flex-col gap-2.5">
+            {floorIndex > 0 && <div className="h-px bg-[var(--hairline)]" />}
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <SettingField
+                  label="FLOOR NAME"
+                  ariaLabel={`${floor.defaultName} name`}
+                  suffix=""
+                  value={displayName}
+                  onCommit={commitFloorName(floor.id)}
+                />
+              </div>
+              <button
+                type="button"
+                aria-label="Delete floor"
+                disabled={!canDeleteFloor}
+                onClick={() => handleDeleteFloor(floor.id, displayName)}
+                className="flex shrink-0 items-center gap-1.5 rounded-[8px] border border-[rgba(214,69,69,0.22)] bg-[rgba(214,69,69,0.05)] px-2.5 py-[9px] text-[12px] text-[var(--danger)] hover:bg-[rgba(214,69,69,0.1)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[rgba(214,69,69,0.05)]"
+              >
+                <Trash2 width={14} height={14} strokeWidth={1.6} />
+                Delete floor
+              </button>
+            </div>
+            {floor.rooms.map((room, roomIndex) => (
+              <div key={room.id} className="flex flex-col gap-2.5">
+                <SettingField
+                  label="NAME"
+                  ariaLabel={
+                    single ? "Room name" : `Room ${roomIndex + 1} name`
+                  }
+                  suffix=""
+                  value={room.name ?? "Untitled room"}
+                  onCommit={commitRoomName(floor.id, room.id)}
+                />
+                <SettingField
+                  label="CEILING HEIGHT"
+                  ariaLabel={
+                    single
+                      ? "Ceiling height"
+                      : `Room ${roomIndex + 1} ceiling height`
+                  }
+                  suffix={unit}
+                  mono
+                  value={formatLengthValue(wallHeightOf(room), unit)}
+                  onCommit={commitRoomWallHeight(floor.id, room.id)}
+                />
+              </div>
+            ))}
+          </div>
+        );
+      })}
       <div className="text-[11.5px] text-[var(--ink-400)] leading-relaxed">
         {formatLengthValue(MIN_WALL_HEIGHT, unit)}–
         {formatLengthValue(MAX_WALL_HEIGHT, unit)} {unit} — door and window
