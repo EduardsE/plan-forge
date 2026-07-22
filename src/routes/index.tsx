@@ -723,6 +723,10 @@ function Planner() {
   // the lit state the mockups show.
   const [gridVisible, setGridVisible] = useState(true);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  // Ghost underlay (V6): the storey directly below the active floor, traced
+  // in the 2D and draw lenses. Session-only, like the toggles above — not
+  // persisted.
+  const [underlayVisible, setUnderlayVisible] = useState(true);
   // Time-of-day lighting for the 3D lens (ephemeral, like the toggles above).
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(DEFAULT_TIME_OF_DAY);
   // Manual sun-anchor azimuth from the dial (degrees, world atan2(z,x));
@@ -1182,6 +1186,18 @@ function Planner() {
     building.floors.length > 1
       ? floorDisplayName(building, activeFloorIndex)
       : null;
+  // V6 ghost underlay: the storey directly below the active one, traced in
+  // the 2D/draw lenses — null with the toggle off or on the ground floor
+  // (nothing below it). `underlayAvailable` gates the status-bar toggle
+  // itself, independent of whether it's currently switched on.
+  const underlayAvailable = activeFloorIndex > 0;
+  const underlayFloor =
+    underlayVisible && underlayAvailable
+      ? building.floors[activeFloorIndex - 1]
+      : null;
+  const underlayRooms = underlayFloor
+    ? (derivedByFloor.get(underlayFloor.id)?.rooms ?? [])
+    : [];
   // Inspector's per-floor breakdown, ground-first — reuses `derivedByFloor`
   // so no floor gets re-derived just to summarize it.
   const floorSummaries = useMemo(
@@ -1314,6 +1330,8 @@ function Planner() {
               floor={floor}
               rooms={derived.rooms}
               unassignedFurniture={derived.unassignedFurniture}
+              underlayFloor={underlayFloor}
+              underlayRooms={underlayRooms}
               onFloorChange={setFloor}
               onFloorPreview={previewFloor}
               onRoomDragActiveChange={handleRoomDragActive}
@@ -1403,6 +1421,9 @@ function Planner() {
         onToggleGrid={() => setGridVisible((on) => !on)}
         snapEnabled={snapEnabled}
         onToggleSnap={() => setSnapEnabled((on) => !on)}
+        underlayVisible={underlayVisible}
+        onToggleUnderlay={() => setUnderlayVisible((on) => !on)}
+        underlayAvailable={underlayAvailable}
         nodeCount={floor.nodes.length}
         placingName={placing?.item.name ?? null}
       />

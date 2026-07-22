@@ -93,6 +93,9 @@ const DIMENSION_TICK = 0.065;
 /** Stacked heights above the ground grid; the plan is only ever seen from
  * straight above, so tiny offsets are all the layering needed. */
 const SHADOW_Y = 0.002;
+/** The storey below's ghost underlay — above the shadow, under the active
+ * floor's own floor sheet, so it reads as a backdrop the floor sits on. */
+const UNDERLAY_Y = 0.003;
 const FLOOR_Y = 0.004;
 const WALL_Y = 0.006;
 const OPENING_Y = 0.008;
@@ -210,15 +213,23 @@ function FlatShape({
   y,
   color,
   opacity = 1,
+  raycast,
 }: {
   shapes: Shape | Shape[];
   y: number;
   color: string;
   opacity?: number;
+  /** Opt out of picking (e.g. the underlay backdrop) — `noRaycast`. */
+  raycast?: () => null;
 }) {
   const geometry = useMemo(() => new ShapeGeometry(shapes), [shapes]);
   return (
-    <mesh geometry={geometry} rotation-x={-Math.PI / 2} position-y={y}>
+    <mesh
+      geometry={geometry}
+      rotation-x={-Math.PI / 2}
+      position-y={y}
+      raycast={raycast}
+    >
       <meshBasicMaterial
         color={color}
         transparent={opacity < 1}
@@ -775,6 +786,38 @@ function WallLayer({
   );
 }
 
+/** Ghost underlay grey (mockup: a muted stone tone, distinct from the navy
+ * wall fill so it never reads as an editable wall on this storey). */
+const UNDERLAY_COLOR = "#D4D4CC";
+
+/**
+ * The storey directly below the active floor, traced as flat grey wall bands
+ * — a non-interactive backdrop shared by the 2D and draw lenses, tracing
+ * where the floor below's walls fall so drawing/arranging above it can line
+ * up. Reuses `WallLayer`'s own span geometry: door gaps come free because
+ * `solid.holes` already split the spans (`solidSpans`), and window slabs
+ * stay whole (no opening symbols, no picking — this is scenery, not a wall
+ * on *this* floor).
+ */
+export function UnderlayLayer({ solids }: { solids: WallSolid[] }) {
+  const shapes = useMemo(
+    () =>
+      solids.flatMap((solid) =>
+        solidSpans(solid).map((span) => shapeFromPoints(bandRect(solid, span))),
+      ),
+    [solids],
+  );
+  if (shapes.length === 0) return null;
+  return (
+    <FlatShape
+      shapes={shapes}
+      y={UNDERLAY_Y}
+      color={UNDERLAY_COLOR}
+      raycast={noRaycast}
+    />
+  );
+}
+
 /** Invisible pick area over a wall's solid spans (openings keep their own
  * nearer targets), with the accent outline while hovered/selected. */
 function WallPickTarget({
@@ -982,6 +1025,12 @@ export interface PlanSceneProps {
   unassignedFurniture: FurnitureItem[];
   /** The graph floor — walls are one solid per edge; mounts re-anchor to it. */
   floor: Floor;
+  /** The storey directly below the active floor, shown as a non-interactive
+   * ghost backdrop — null when there is none or the toggle is off. */
+  underlayFloor: Floor | null;
+  /** `underlayFloor`'s derived rooms, for `buildEdgeSolids`; ignored when
+   * `underlayFloor` is null. */
+  underlayRooms: DerivedRoom[];
   selectedId: string | null;
   /** Selected opening id — never set together with `selectedId`. */
   selectedOpeningId: string | null;
@@ -1013,6 +1062,8 @@ export function PlanScene({
   rooms,
   unassignedFurniture,
   floor,
+  underlayFloor,
+  underlayRooms,
   selectedId,
   selectedOpeningId,
   selectedEdgeId,
@@ -1035,6 +1086,14 @@ export function PlanScene({
   // graph's edge face-adjacency.
   const solids = useMemo(() => buildEdgeSolids(floor, rooms), [floor, rooms]);
   const posts = useMemo(() => nodePosts(floor, solids), [floor, solids]);
+  // Ghost underlay: the storey below's wall solids, built the same way as
+  // the active floor's own — null when there's no floor below or the toggle
+  // is off (the route passes `underlayFloor` as null either way).
+  const underlaySolids = useMemo(
+    () =>
+      underlayFloor ? buildEdgeSolids(underlayFloor, underlayRooms) : null,
+    [underlayFloor, underlayRooms],
+  );
   // Wall slabs for the rotate handle's re-containment (same policy as nudge).
   const wallObstacles = useMemo(() => edgeWallObstacles(floor), [floor]);
   const portalLabels = useMemo(
@@ -1070,6 +1129,7 @@ export function PlanScene({
     DIMENSION_GAP;
   return (
     <group>
+      {underlaySolids && <UnderlayLayer solids={underlaySolids} />}
       {rooms.map((room) => (
         <PlanRoomLayer
           key={room.id}

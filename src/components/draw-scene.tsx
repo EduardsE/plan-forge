@@ -11,6 +11,7 @@ import {
   floorProjector,
   useControlsPause,
 } from "#/components/move-drag";
+import { UnderlayLayer } from "#/components/plan-scene";
 import {
   type DraftSnap,
   type FloorSnap,
@@ -21,6 +22,7 @@ import {
 } from "#/lib/draw";
 import { type NodeGuide, snapNodeDrag } from "#/lib/graph-edit";
 import {
+  type DerivedRoom,
   type Floor,
   faceLabelPoint,
   floorArea,
@@ -28,6 +30,7 @@ import {
   type Room,
 } from "#/lib/model";
 import { dashedPolyline } from "#/lib/plan-scene";
+import { buildEdgeSolids } from "#/lib/room-scene";
 import {
   formatLength,
   formatLengthValue,
@@ -506,6 +509,12 @@ export interface DrawSceneProps {
   floor: Floor;
   /** Derived rooms (graph faces) for the area labels. */
   rooms: Room[];
+  /** The storey directly below the active floor, traced as a ghost backdrop
+   * and joined into wall/corner snapping — null when there's none or the
+   * toggle is off. */
+  underlayFloor: Floor | null;
+  /** `underlayFloor`'s derived rooms, for `buildEdgeSolids`. */
+  underlayRooms: DerivedRoom[];
   unit: Unit;
   /** Snap toggle: off means free-hand (no axis lock / quantize / weld line). */
   snapEnabled: boolean;
@@ -537,6 +546,8 @@ export interface DrawSceneProps {
 export function DrawScene({
   floor,
   rooms,
+  underlayFloor,
+  underlayRooms,
   unit,
   snapEnabled,
   tool,
@@ -558,7 +569,17 @@ export function DrawScene({
     [floor.nodes],
   );
   const centroid = useMemo(() => centroidOf(floor.nodes), [floor.nodes]);
-  const targets = useMemo(() => snapTargetsOfGraph(floor), [floor]);
+  const targets = useMemo(
+    () => snapTargetsOfGraph(floor, underlayFloor),
+    [floor, underlayFloor],
+  );
+  // Ghost underlay: same wall-solid build as the 2D lens's own, from the
+  // storey directly below (null when there's none, or the toggle is off).
+  const underlaySolids = useMemo(
+    () =>
+      underlayFloor ? buildEdgeSolids(underlayFloor, underlayRooms) : null,
+    [underlayFloor, underlayRooms],
+  );
 
   const wallTool = tool === "wall";
   const rectMode = tool === "rect";
@@ -796,6 +817,7 @@ export function DrawScene({
 
   return (
     <group>
+      {underlaySolids && <UnderlayLayer solids={underlaySolids} />}
       {/* Invisible pick plane: the "grid plane" clicks land on. */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element. */}
       <mesh

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Floor } from "#/lib/model";
+import { createFloor } from "#/lib/model/building";
+import { makeFloor } from "#/lib/model/test-fixtures";
 import {
   rectangleOutline,
   snapDraftPoint,
@@ -71,6 +73,27 @@ describe("snapTargetsOfGraph", () => {
     expect(TARGETS.walls).toHaveLength(4);
     expect(TARGETS.walls[1].start).toEqual({ x: 6.4, y: 0 });
     expect(TARGETS.walls[1].end).toEqual({ x: 6.4, y: 5.2 });
+  });
+
+  it("underlay walls and corners attract like own-floor targets", () => {
+    const below = makeFloor(); // wall at y = -0.05…, corners at x = -0.05 etc.
+    const empty = { ...createFloor("up") };
+    const targets = snapTargetsOfGraph(empty, below);
+    // A cursor near a below-floor node snaps to its exact coordinate.
+    const snap = snapDraftPoint(
+      [],
+      { x: -0.02, y: -0.02 },
+      0.08,
+      true,
+      targets,
+    );
+    expect(snap.point.x).toBeCloseTo(-0.05);
+    expect(snap.point.y).toBeCloseTo(-0.05);
+  });
+
+  it("no underlay → targets unchanged", () => {
+    const f = makeFloor();
+    expect(snapTargetsOfGraph(f, null)).toEqual(snapTargetsOfGraph(f));
   });
 });
 

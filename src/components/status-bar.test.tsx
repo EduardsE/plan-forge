@@ -155,4 +155,33 @@ describe("StatusBar", () => {
 
     expect(screen.queryByText("Ground floor")).toBeNull();
   });
+
+  it("renders the underlay toggle only when available, reflecting its state", () => {
+    const onToggleUnderlay = vi.fn();
+    const { rerender } = renderBar({ underlayAvailable: false });
+    expect(
+      screen.queryByRole("button", { name: "Toggle underlay" }),
+    ).toBeNull();
+
+    rerender(
+      <StatusBar
+        mode="3d"
+        rooms={oneRoom()}
+        cameraReadout={createCameraReadoutStore()}
+        unit="m"
+        onUnitChange={() => {}}
+        gridVisible
+        onToggleGrid={() => {}}
+        snapEnabled
+        onToggleSnap={() => {}}
+        underlayAvailable
+        underlayVisible
+        onToggleUnderlay={onToggleUnderlay}
+      />,
+    );
+    const toggle = screen.getByRole("button", { name: "Toggle underlay" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(toggle);
+    expect(onToggleUnderlay).toHaveBeenCalledOnce();
+  });
 });

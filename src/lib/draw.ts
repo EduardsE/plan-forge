@@ -35,12 +35,9 @@ export interface SnapTargets {
 
 export const NO_SNAP_TARGETS: SnapTargets = { corners: [], walls: [] };
 
-/**
- * Snap targets from the graph floor: every node is a corner, every edge a wall
- * centerline. Replaces the per-room `snapTargetsOf(rooms)` — the graph is one
- * shared space, so there are no "other rooms" to exclude.
- */
-export function snapTargetsOfGraph(floor: Floor): SnapTargets {
+/** Every node as a corner, every edge as a wall centerline — the walk shared
+ * by a floor's own targets and (when given one) its underlay's. */
+function walkGraph(floor: Floor): SnapTargets {
   const nodeById = new Map(floor.nodes.map((n) => [n.id, n]));
   const corners: Point[] = floor.nodes.map((n) => ({ x: n.x, y: n.y }));
   const walls: SnapWall[] = [];
@@ -51,6 +48,27 @@ export function snapTargetsOfGraph(floor: Floor): SnapTargets {
     walls.push({ index, start: { x: a.x, y: a.y }, end: { x: b.x, y: b.y } });
   });
   return { corners, walls };
+}
+
+/**
+ * Snap targets from the graph floor: every node is a corner, every edge a wall
+ * centerline. Replaces the per-room `snapTargetsOf(rooms)` — the graph is one
+ * shared space, so there are no "other rooms" to exclude. When `underlay` is
+ * given (the storey directly below, shown as a ghost backdrop), its nodes and
+ * edges join the same targets — a new corner welds onto the floor below
+ * exactly like it would onto its own floor's graph.
+ */
+export function snapTargetsOfGraph(
+  floor: Floor,
+  underlay?: Floor | null,
+): SnapTargets {
+  const primary = walkGraph(floor);
+  if (!underlay) return primary;
+  const below = walkGraph(underlay);
+  return {
+    corners: [...primary.corners, ...below.corners],
+    walls: [...primary.walls, ...below.walls],
+  };
 }
 
 /** How the snapped point locked onto another room, for in-scene feedback. */

@@ -1,4 +1,4 @@
-import { Grid2x2, Magnet } from "lucide-react";
+import { Grid2x2, Layers, Magnet } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import type { CameraReadoutStore } from "#/lib/camera";
 import { scaleDenominator } from "#/lib/camera";
@@ -39,6 +39,14 @@ interface StatusBarProps {
    * floor is never worth naming out loud. Rendered leading, ahead of the
    * area. */
   floorName?: string | null;
+  /** Whether the ghost underlay (storey below) is showing — the toggle only
+   * renders when `underlayAvailable`. */
+  underlayVisible?: boolean;
+  onToggleUnderlay?: () => void;
+  /** There is a floor below the active one to trace — gates the toggle's
+   * very presence, not just its enabled state (a ground floor has nothing to
+   * show, so no toggle at all). */
+  underlayAvailable?: boolean;
 }
 
 const noStore: Pick<CameraReadoutStore, "subscribe" | "getSnapshot"> = {
@@ -83,6 +91,9 @@ export function StatusBar({
   placingName = null,
   portalStatus = null,
   floorName = null,
+  underlayVisible = false,
+  onToggleUnderlay,
+  underlayAvailable = false,
 }: StatusBarProps) {
   const live = useSyncExternalStore(
     (cameraReadout ?? noStore).subscribe,
@@ -196,6 +207,30 @@ export function StatusBar({
           />
           Grid {gridStep}
         </button>
+        {underlayAvailable && (
+          <button
+            type="button"
+            aria-pressed={underlayVisible}
+            aria-label="Toggle underlay"
+            onClick={onToggleUnderlay}
+            className={cn(
+              "flex items-center gap-1.5",
+              underlayVisible
+                ? "text-[var(--ink-500)]"
+                : "text-[var(--ink-300)] line-through",
+            )}
+          >
+            <Layers
+              width={14}
+              height={14}
+              strokeWidth={1.6}
+              style={{
+                color: underlayVisible ? "var(--blue)" : "var(--ink-300)",
+              }}
+            />
+            Underlay
+          </button>
+        )}
         <div className="flex items-center gap-px">
           {(["cm", "m"] as const).map((option) => (
             <button

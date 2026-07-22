@@ -688,6 +688,13 @@ export interface PlannerCanvasProps {
   /** Furniture that lands in no room (dangling / open-canvas) — rendered and
    * editable like any other; its membership readout is "—". */
   unassignedFurniture: FurnitureItem[];
+  /** The storey directly below the active floor, shown as a ghost backdrop
+   * in the 2D and draw lenses and joined into draw snapping — null when
+   * there's none or the underlay toggle is off. Ignored by the 3D lens,
+   * which already stacks every floor below the active one. */
+  underlayFloor: Floor | null;
+  /** `underlayFloor`'s derived rooms, for `buildEdgeSolids`. */
+  underlayRooms: DerivedRoom[];
   /** A discrete whole-floor mutation (opening edits, drops) — one undo step. */
   onFloorChange: (floor: Floor) => void;
   /** A mid-drag whole-floor state (opening slide, furniture move) — not its
@@ -748,6 +755,8 @@ export function PlannerCanvas({
   floor,
   rooms,
   unassignedFurniture,
+  underlayFloor,
+  underlayRooms,
   onFloorChange,
   onFloorPreview,
   onRoomDragActiveChange,
@@ -1106,6 +1115,8 @@ export function PlannerCanvas({
             <DrawScene
               floor={floor}
               rooms={rooms}
+              underlayFloor={underlayFloor}
+              underlayRooms={underlayRooms}
               unit={unit}
               snapEnabled={snapEnabled}
               tool={drawTool}
@@ -1127,6 +1138,8 @@ export function PlannerCanvas({
               rooms={rooms}
               unassignedFurniture={unassignedFurniture}
               floor={floor}
+              underlayFloor={underlayFloor}
+              underlayRooms={underlayRooms}
               selectedId={selectedId}
               selectedOpeningId={selectedOpeningId}
               selectedEdgeId={selectedEdgeId}
