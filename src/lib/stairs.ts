@@ -103,11 +103,35 @@ function project(points: Point[], axis: Point): [number, number] {
 }
 
 /**
- * Separating-axis test between the stair polygon and one obstacle: the
- * candidate axes are world x, world y, and — for an oriented (angled) wall
- * slab — its own tangent/normal. The obstacle is shrunk inward by
- * `CONTACT_EPS` on every axis first, so a stair sitting flush against a wall
- * (touching, not overlapping) reads as clear rather than colliding.
+ * The two unit edge normals of a rectangular polygon (the stair footprint is
+ * always a rectangle, so its first two edges already span both directions):
+ * one axis per pair of parallel sides. Skips a degenerate zero-length edge
+ * rather than dividing by zero.
+ */
+function rectAxes(poly: Point[]): Point[] {
+  const axes: Point[] = [];
+  for (let i = 0; i < 2; i++) {
+    const a = poly[i];
+    const b = poly[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-9) continue;
+    axes.push({ x: -dy / len, y: dx / len });
+  }
+  return axes;
+}
+
+/**
+ * Separating-axis test between the stair polygon and one obstacle. Candidate
+ * axes: world x, world y, the obstacle's own tangent/normal when it's an
+ * oriented (angled) wall slab, *and* the stair polygon's own two edge
+ * normals — without the polygon's axes, a rotated stair placed diagonally
+ * next to an axis-aligned wall corner can share an overlapping AABB on x/y
+ * with no real intersection, and the only axis that actually separates them
+ * is the polygon's own. The obstacle is shrunk inward by `CONTACT_EPS` on
+ * every axis first, so a stair sitting flush against a wall (touching, not
+ * overlapping) reads as clear rather than colliding.
  */
 export function polygonIntersectsObstacle(
   poly: Point[],
@@ -119,6 +143,7 @@ export function polygonIntersectsObstacle(
     { x: 0, y: 1 },
   ];
   if (ob.oriented) axes.push(ob.oriented.t, ob.oriented.n);
+  axes.push(...rectAxes(poly));
   for (const axis of axes) {
     const [polyMin, polyMax] = project(poly, axis);
     const [rawMin, rawMax] = project(corners, axis);
