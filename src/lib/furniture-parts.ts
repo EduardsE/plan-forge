@@ -51,6 +51,7 @@ export const FURNITURE_COLORS: Record<string, string> = {
   "coffee-table": "#b98a5f",
   "side-table": "#b98a5f",
   "dining-table": "#c8996b",
+  "spider-table": "#8c6b48",
   wardrobe: "#b4824e",
   "bed-double": "#c9805f",
   "bed-single": "#c9805f",

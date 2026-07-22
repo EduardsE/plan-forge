@@ -108,4 +108,21 @@ export const RECIPES = [
       metal: "neutral",
     },
   },
+  {
+    // Authored in Blender for this project (session 2026-07-22): walnut slab
+    // on a black steel spider base. Wood grain is a Poly Haven CC0 texture
+    // (dark_wood), so it stays "neutral" like the credenza's veneer; the
+    // powder-coated base keeps its authored near-black too.
+    catalogId: "spider-table",
+    input: "assets/raw-models/spider-table.glb",
+    source: "authored in Blender (Poly Haven dark_wood, CC0)",
+    realWidth: 2.4,
+    rotateYDeg: 0,
+    maxTexture: 1024,
+    textureQuality: 85,
+    slots: {
+      wood: "neutral",
+      metal: "neutral",
+    },
+  },
 ];

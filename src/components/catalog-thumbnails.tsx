@@ -99,6 +99,12 @@ const GLYPHS: Record<string, GlyphLayer[]> = {
     layer("-34px", 16, 5, 22, WOOD_DARK),
     layer("29px", 16, 5, 22, WOOD_DARK),
   ],
+  // Walnut slab on a black steel spider base — crossed legs, front view.
+  "spider-table": [
+    layer("-50%", 40, 80, 9, "#8c6b48", "4px"),
+    layer("-50%", 14, 5, 27, "#2b2b28", "1px", 24),
+    layer("-50%", 14, 5, 27, "#2b2b28", "1px", -24),
+  ],
   // Storage.
   credenza: [
     layer("-50%", 24, 70, 34, "#b4824e", "6px"),

@@ -42,4 +42,9 @@ export const MODEL_MANIFEST = {
     natural: { width: 0.38, depth: 0.439, height: 2.149 },
     slots: { lamp: "body", metal: "neutral" },
   },
+  "spider-table": {
+    file: "/models/spider-table.glb",
+    natural: { width: 2.4, depth: 1.1, height: 0.75 },
+    slots: { wood: "neutral", metal: "neutral" },
+  },
 } as const;

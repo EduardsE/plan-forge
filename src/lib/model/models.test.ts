@@ -14,6 +14,7 @@ describe("model manifest", () => {
       "dining-table",
       "floor-lamp",
       "sofa-2",
+      "spider-table",
       "wardrobe",
     ]);
   });
