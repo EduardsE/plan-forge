@@ -15,6 +15,7 @@ import { edgeWallObstacles } from "./place";
  */
 function rectFloor(openings: Opening[] = []): Floor {
   return {
+    id: "fixture",
     nodes: [
       { id: "n0", x: 0, y: 0 },
       { id: "n1", x: 6.4, y: 0 },
@@ -30,6 +31,7 @@ function rectFloor(openings: Opening[] = []): Floor {
     openings,
     furniture: [],
     rooms: [],
+    stairs: [],
   };
 }
 

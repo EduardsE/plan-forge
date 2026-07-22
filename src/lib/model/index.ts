@@ -1,3 +1,4 @@
+export * from "./building";
 export * from "./catalog";
 export * from "./derived";
 export * from "./faces";

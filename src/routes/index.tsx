@@ -43,6 +43,7 @@ import { DEFAULT_TIME_OF_DAY, LIGHTING, type TimeOfDay } from "#/lib/lighting";
 import {
   allFurnitureOf,
   type CatalogItem,
+  createFloor,
   createSampleFloor,
   DEFAULT_WALL_HEIGHT,
   deriveFloor,
@@ -98,7 +99,7 @@ const FINE_NUDGE_STEP = 0.01;
 
 /** A fresh, empty graph floor — the "New room" reset target. */
 function emptyFloor(): Floor {
-  return { nodes: [], edges: [], openings: [], furniture: [], rooms: [] };
+  return createFloor();
 }
 
 // Loaded lazily after mount: the three.js scene is client-only, so keep it

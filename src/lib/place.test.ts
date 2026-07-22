@@ -15,6 +15,7 @@ const SOFA = { width: 1.68, depth: 0.88 };
 /** A rectangular graph floor (6.40 × 5.20 m) with optional openings. */
 function rectFloor(openings: Opening[] = []): Floor {
   return {
+    id: "fixture",
     nodes: [
       { id: "n0", x: 0, y: 0 },
       { id: "n1", x: 6.4, y: 0 },
@@ -30,6 +31,7 @@ function rectFloor(openings: Opening[] = []): Floor {
     openings,
     furniture: [],
     rooms: [],
+    stairs: [],
   };
 }
 
@@ -75,6 +77,7 @@ describe("snapPlacement", () => {
   it("ignores walls whose span does not face the ghost", () => {
     // L-shaped graph: the notch wall at x=3 spans y 3..5 only.
     const ell: Floor = {
+      id: "fixture-ell",
       nodes: [
         { id: "a", x: 0, y: 0 },
         { id: "b", x: 6, y: 0 },
@@ -94,6 +97,7 @@ describe("snapPlacement", () => {
       openings: [],
       furniture: [],
       rooms: [],
+      stairs: [],
     };
     const snap = snapPlacement(
       { width: 0.4, depth: 0.4 },
@@ -186,6 +190,7 @@ describe("snapPlacement — object-to-object", () => {
 /** A single 45° wall: centerline on x + y = 6, from (6,0) to (0,6). */
 function diagWallFloor(): Floor {
   return {
+    id: "fixture-diag",
     nodes: [
       { id: "p", x: 6, y: 0 },
       { id: "q", x: 0, y: 6 },
@@ -194,6 +199,7 @@ function diagWallFloor(): Floor {
     openings: [],
     furniture: [],
     rooms: [],
+    stairs: [],
   };
 }
 
@@ -316,6 +322,7 @@ describe("edgeWallObstacles", () => {
 
   it("carries non-axis edges as oriented slabs (blocks angled walls)", () => {
     const diagonal: Floor = {
+      id: "fixture-diagonal",
       nodes: [
         { id: "a", x: 0, y: 0 },
         { id: "b", x: 6.4, y: 0 },
@@ -329,6 +336,7 @@ describe("edgeWallObstacles", () => {
       openings: [],
       furniture: [],
       rooms: [],
+      stairs: [],
     };
     const obstacles = edgeWallObstacles(diagonal);
     expect(obstacles).toHaveLength(3);

@@ -103,6 +103,23 @@ export interface Footprint {
   height: number;
 }
 
+/** A straight-run stair rising from its floor to the one above. Run length
+ * and void are derived (`lib/stairs.ts`), never stored. */
+export interface Stair {
+  id: string;
+  /** Footprint center, plan coords. */
+  position: Point;
+  /** Degrees CCW, footprint convention (local +y under rotation = climb). */
+  rotation: number;
+  /** Across-the-run width, clamped [0.7, 2.0]. */
+  width: number;
+}
+
+/** Ordered ground-up; index 0 is the ground floor. Elevation is derived. */
+export interface Building {
+  floors: Floor[];
+}
+
 /**
  * A wall-mounted item's anchor (picture frames, clocks), anchored to a graph
  * **edge**: a near-edge `offset` along the edge's a→b direction, the `side`
@@ -223,6 +240,7 @@ export interface Room {
  * `Floor`; `deriveFloor` turns it into renderable rooms.
  */
 export interface Floor {
+  id: string;
   /** Display name, e.g. "Loft apartment". */
   name?: string;
   nodes: WallNode[];
@@ -230,6 +248,7 @@ export interface Floor {
   openings: Opening[];
   furniture: FurnitureItem[];
   rooms: RoomRecord[];
+  stairs: Stair[];
 }
 
 /** Axis-aligned bounding box of an outline. */

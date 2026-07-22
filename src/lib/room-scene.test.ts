@@ -95,6 +95,7 @@ describe("buildEdgeSolids", () => {
 
   it("renders a dangling edge (no adjacent room) as a plain full-height wall", () => {
     const floor: Floor = {
+      id: "fixture",
       nodes: [
         { id: "p", x: 0, y: 0 },
         { id: "q", x: 3, y: 0 },
@@ -103,6 +104,7 @@ describe("buildEdgeSolids", () => {
       openings: [],
       furniture: [],
       rooms: [],
+      stairs: [],
     };
     const solid = byEdge(solidsOf(floor), "PQ");
     expect(solid.faces).toBe(0);
@@ -207,6 +209,7 @@ describe("nodePosts", () => {
 
   it("skips a collinear pass-through node and dangling ends", () => {
     const floor: Floor = {
+      id: "fixture",
       nodes: [
         { id: "p", x: 0, y: 0 },
         { id: "m", x: 3, y: 0 },
@@ -219,6 +222,7 @@ describe("nodePosts", () => {
       openings: [],
       furniture: [],
       rooms: [],
+      stairs: [],
     };
     // m is a straight run (collinear), p and q are dangling ends.
     expect(nodePosts(floor, solidsOf(floor))).toEqual([]);

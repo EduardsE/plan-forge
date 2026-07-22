@@ -145,7 +145,7 @@ Tasks, in order (each one session; verify headless against the production build;
 
 Tasks, in order:
 
-- [ ] **V1 — Building & floor-identity model core.** `Stair`/`Building` types; `Floor` gains required `id` + `stairs`; `model/building.ts` (elevation/height derivations, `updateFloorIn`, add/remove/rename, owner finders); every `Floor` creation site updated; persistence fills the new fields on read (still v6). Behavior-neutral.
+- [x] **V1 — Building & floor-identity model core.** `Stair`/`Building` types; `Floor` gains required `id` + `stairs`; `model/building.ts` (elevation/height derivations, `updateFloorIn`, add/remove/rename, owner finders); every `Floor` creation site updated; persistence fills the new fields on read (still v6). Behavior-neutral.
 - [ ] **V2 — Stair geometry + setters (pure).** `lib/stairs.ts` (run derivation, rotated polygon, climb dir, void obstacles, `stairValid` against both floors' wall slabs) + `model/stairs.ts` (`addStair`/`updateStair`/`removeStair`, same-ref no-ops).
 - [ ] **V3 — The flip.** Route to `History<Building>` + `activeFloorId` (UI state, undo-clamped); selection mutations resolve the owning floor; persistence v7 (`{ building, unit, savedAt }`), v6 migrates on read; "New room" resets to a one-floor building. Pixel-identical single-floor app.
 - [ ] **V4 — Floor chips + management UI.** Canvas-edge chip stack (G/2/3… + add); settings popover per-floor sections (rename, confirm-gated delete naming the stair cascade); status bar floor prefix; inspector building summary with totals.

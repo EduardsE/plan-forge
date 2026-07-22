@@ -12,6 +12,7 @@ import { buildEdgeSolids } from "#/lib/room-scene";
 /** A single rectangular room, 6.4 × 5.2, wound positively. */
 function rectFloor(): Floor {
   return {
+    id: "fixture",
     nodes: [
       { id: "a", x: 0, y: 0 },
       { id: "b", x: 6.4, y: 0 },
@@ -27,6 +28,7 @@ function rectFloor(): Floor {
     openings: [],
     furniture: [],
     rooms: [{ id: "r", anchor: { x: 3, y: 2.5 } }],
+    stairs: [],
   };
 }
 const solids = buildEdgeSolids(rectFloor(), deriveFloor(rectFloor()).rooms);
@@ -215,6 +217,7 @@ describe("openingAt", () => {
   it("falls through to the next-nearest edge when the nearest can't fit", () => {
     // A short 0.6 m top edge can't fit a 0.9 m door.
     const lShaped: Floor = {
+      id: "fixture-l",
       nodes: [
         { id: "a", x: 0, y: 0 },
         { id: "b", x: 0.6, y: 0 },
@@ -234,6 +237,7 @@ describe("openingAt", () => {
       openings: [],
       furniture: [],
       rooms: [{ id: "r", anchor: { x: 2, y: 3 } }],
+      stairs: [],
     };
     const lSolids = buildEdgeSolids(lShaped, deriveFloor(lShaped).rooms);
     const placed = openingAt(lSolids, { x: 0.3, y: 0.1 }, 0.9, doorBand);

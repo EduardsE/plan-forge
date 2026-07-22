@@ -5,6 +5,7 @@ import { mountAt } from "#/lib/mount-place";
 /** A rectangular single-face graph floor from its interior corners. */
 function rectFloor(w: number, h: number): Floor {
   return {
+    id: "fixture",
     nodes: [
       { id: "a", x: 0, y: 0 },
       { id: "b", x: w, y: 0 },
@@ -20,6 +21,7 @@ function rectFloor(w: number, h: number): Floor {
     openings: [],
     furniture: [],
     rooms: [],
+    stairs: [],
   };
 }
 
@@ -71,7 +73,15 @@ describe("mountAt", () => {
   it("returns null for a floor with no edges", () => {
     expect(
       mountAt(
-        { nodes: [], edges: [], openings: [], furniture: [], rooms: [] },
+        {
+          id: "empty",
+          nodes: [],
+          edges: [],
+          openings: [],
+          furniture: [],
+          rooms: [],
+          stairs: [],
+        },
         { x: 1, y: 1 },
         FOOTPRINT,
         1.5,

@@ -20,6 +20,7 @@ import type { Floor } from "./types";
  */
 export function createSampleFloor(): Floor {
   return {
+    id: crypto.randomUUID(),
     nodes: [
       { id: "n-A", x: -0.05, y: -0.05 },
       { id: "n-B", x: 6.4, y: -0.05 },
@@ -171,5 +172,6 @@ export function createSampleFloor(): Floor {
       { id: "living-room", name: "Living room", anchor: { x: 3, y: 2.5 } },
       { id: "kitchen", name: "Kitchen", anchor: { x: 8, y: 2.5 } },
     ],
+    stairs: [],
   };
 }

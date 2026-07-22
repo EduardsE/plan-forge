@@ -16,6 +16,7 @@ import type { Floor, Room } from "./types";
  */
 export function makeFloor(): Floor {
   return {
+    id: "fixture-floor",
     nodes: [
       { id: "A", x: -0.05, y: -0.05 },
       { id: "B", x: 6.4, y: -0.05 },
@@ -79,6 +80,7 @@ export function makeFloor(): Floor {
       { id: "living", name: "Living room", anchor: { x: 3, y: 2.5 } },
       { id: "kitchen", name: "Kitchen", anchor: { x: 8, y: 2.5 } },
     ],
+    stairs: [],
   };
 }
 
@@ -93,6 +95,7 @@ export function makeFloor(): Floor {
  */
 export function makeLRoom(): Floor {
   return {
+    id: "fixture-l",
     nodes: [
       { id: "a", x: 0, y: 0 },
       { id: "b", x: 6, y: 0 },
@@ -112,6 +115,7 @@ export function makeLRoom(): Floor {
     openings: [],
     furniture: [],
     rooms: [{ id: "ell", name: "L room", anchor: { x: 1, y: 1 } }],
+    stairs: [],
   };
 }
 

@@ -7,6 +7,7 @@ import {
   openingSill,
   openingVerticals,
   type Point,
+  SLAB_THICKNESS,
   WALL_THICKNESS,
   WINDOW_HEAD,
   WINDOW_SILL,
@@ -32,9 +33,13 @@ import {
 
 /** Default wall height; rooms can override it (`Room.wallHeight`). */
 export const WALL_HEIGHT = DEFAULT_WALL_HEIGHT;
-export { DOOR_HEIGHT, WALL_THICKNESS, WINDOW_HEAD, WINDOW_SILL };
-/** Thickness of the dollhouse floor platform (mockup slab edge: 18 px). */
-export const SLAB_THICKNESS = 0.18;
+export {
+  DOOR_HEIGHT,
+  SLAB_THICKNESS,
+  WALL_THICKNESS,
+  WINDOW_HEAD,
+  WINDOW_SILL,
+};
 /**
  * Height of a cut-down wall in the dollhouse cutaway (Sims-style): occluding
  * walls drop to this stub instead of hiding, tall enough to read as a wall

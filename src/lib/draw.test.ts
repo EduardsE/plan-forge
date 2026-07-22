@@ -13,6 +13,7 @@ const TOL = 0.1;
 /** An existing 6.4 × 5.2 room as a wall graph the draft snaps against
  * (plan coords, y down). */
 const NEIGHBOR: Floor = {
+  id: "fixture",
   nodes: [
     { id: "n0", x: 0, y: 0 },
     { id: "n1", x: 6.4, y: 0 },
@@ -28,6 +29,7 @@ const NEIGHBOR: Floor = {
   openings: [],
   furniture: [],
   rooms: [],
+  stairs: [],
 };
 const TARGETS = snapTargetsOfGraph(NEIGHBOR);
 

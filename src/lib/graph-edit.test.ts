@@ -164,6 +164,7 @@ describe("deleteEdge", () => {
 describe("deleteNode", () => {
   it("merges two collinear edges, re-projecting a window's world position", () => {
     const floor: Floor = {
+      id: "fixture",
       nodes: [
         { id: "P", x: 0, y: 0 },
         { id: "M", x: 3, y: 0 },
@@ -185,6 +186,7 @@ describe("deleteNode", () => {
       ],
       furniture: [],
       rooms: [],
+      stairs: [],
     };
     // Window world center before: M(3,0) + 1.5 along +x = (4.5, 0).
     const merged = deleteNode(floor, "M", idFactory());
@@ -197,6 +199,7 @@ describe("deleteNode", () => {
 
   it("keeps a stacked pair in place through a merge (no sideways shove)", () => {
     const floor: Floor = {
+      id: "fixture",
       nodes: [
         { id: "P", x: 0, y: 0 },
         { id: "M", x: 3, y: 0 },
@@ -229,6 +232,7 @@ describe("deleteNode", () => {
       ],
       furniture: [],
       rooms: [],
+      stairs: [],
     };
     const merged = deleteNode(floor, "M", idFactory());
     // Both survive at the same world spot: (4.5, 0) center each.

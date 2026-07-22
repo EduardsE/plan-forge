@@ -3,6 +3,7 @@ import type {
   FurnitureItem,
   Opening,
   Point,
+  Stair,
   WallEdge,
   WallNode,
 } from "#/lib/model";
@@ -249,9 +250,52 @@ function areRooms(value: unknown): boolean {
   return ids.size === value.length;
 }
 
-function isFloor(value: unknown): value is Floor {
+/** A stair's footprint width is clamped to this range everywhere in the app
+ * (the `lib/stairs.ts` constants land in a later task; V1 only persists the
+ * shape, so the bound is inlined here rather than imported). */
+const MIN_STAIR_WIDTH = 0.7;
+const MAX_STAIR_WIDTH = 2.0;
+
+function areStairs(value: unknown): value is Stair[] {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) return false;
+    const stair = raw as Record<string, unknown>;
+    if (typeof stair.id !== "string" || stair.id.length === 0) return false;
+    if (!isPoint(stair.position)) return false;
+    if (!isFiniteNumber(stair.rotation)) return false;
+    if (
+      !isFiniteNumber(stair.width) ||
+      stair.width < MIN_STAIR_WIDTH ||
+      stair.width > MAX_STAIR_WIDTH
+    ) {
+      return false;
+    }
+    ids.add(stair.id);
+  }
+  return ids.size === value.length;
+}
+
+/**
+ * `Floor` minus the fields a v6 save may omit — the wall-graph payload
+ * predates floor identity and stairs, so a v6 read fills them in
+ * (`deserializeSavedState`) rather than requiring them here.
+ */
+type StoredFloor = Omit<Floor, "id" | "stairs"> & {
+  id?: string;
+  stairs?: Stair[];
+};
+
+function isFloor(value: unknown): value is StoredFloor {
   if (typeof value !== "object" || value === null) return false;
   const floor = value as Record<string, unknown>;
+  if (
+    floor.id !== undefined &&
+    (typeof floor.id !== "string" || floor.id.length === 0)
+  ) {
+    return false;
+  }
   if (floor.name !== undefined && typeof floor.name !== "string") return false;
   if (!areNodes(floor.nodes)) return false;
   const nodeIds = new Set(floor.nodes.map((n) => n.id));
@@ -264,7 +308,9 @@ function isFloor(value: unknown): value is Floor {
     return false;
   }
   if (!stacksResolve(floor.furniture as FurnitureItem[])) return false;
-  return areRooms(floor.rooms);
+  if (!areRooms(floor.rooms)) return false;
+  if (floor.stairs !== undefined && !areStairs(floor.stairs)) return false;
+  return true;
 }
 
 /**
@@ -294,8 +340,13 @@ export function deserializeSavedState(json: string | null): SavedState | null {
   if (state.sunAzimuthDeg !== undefined && !isFiniteNumber(state.sunAzimuthDeg))
     return null;
   if (!isFloor(state.floor)) return null;
+  const floor: Floor = {
+    ...state.floor,
+    id: state.floor.id ?? crypto.randomUUID(),
+    stairs: state.floor.stairs ?? [],
+  };
   return {
-    floor: reconcileFloor(state.floor),
+    floor: reconcileFloor(floor),
     unit: state.unit,
     savedAt: state.savedAt,
     ...(state.sunAzimuthDeg !== undefined

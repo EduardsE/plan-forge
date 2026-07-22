@@ -15,8 +15,16 @@ import {
   serializeSavedState,
 } from "./persistence";
 
-/** A normalized v6 floor — reconcile is idempotent, so a read round-trips it. */
-const sampleFloor = (): Floor => reconcileFloor(createSampleFloor());
+/**
+ * A normalized v6 floor — reconcile is idempotent, so a read round-trips it.
+ * Pinned to a fixed id (`createSampleFloor` otherwise mints a fresh
+ * `crypto.randomUUID()` per call) so two independent calls in the same test
+ * compare equal.
+ */
+const sampleFloor = (): Floor => ({
+  ...reconcileFloor(createSampleFloor()),
+  id: "sample-floor",
+});
 
 const sampleState = () => ({
   floor: sampleFloor(),
@@ -61,11 +69,13 @@ describe("serialize / deserialize round trip", () => {
   it("accepts an empty graph (a new room awaiting its first draw)", () => {
     const state = withFloor(
       reconcileFloor({
+        id: "empty",
         nodes: [],
         edges: [],
         openings: [],
         furniture: [],
         rooms: [],
+        stairs: [],
       }),
     );
     expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
