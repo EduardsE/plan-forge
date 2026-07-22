@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  type Building,
+  createFloor,
   createSampleFloor,
   type Floor,
   reconcileFloor,
@@ -27,19 +29,35 @@ const sampleFloor = (): Floor => ({
   id: "sample-floor",
 });
 
+const sampleBuilding = (): Building => ({ floors: [sampleFloor()] });
+
 const sampleState = () => ({
-  floor: sampleFloor(),
+  building: sampleBuilding(),
   unit: "cm" as const,
   savedAt: 1_750_000_000_000,
 });
 
-/** `sampleState` with a patched floor. */
-const withFloor = (floor: Floor) => ({ ...sampleState(), floor });
+/** `sampleState` with a patched, single-floor building. */
+const withFloor = (floor: Floor) => ({
+  ...sampleState(),
+  building: { floors: [floor] },
+});
 
 describe("serialize / deserialize round trip", () => {
-  it("restores the floor, unit, and savedAt exactly", () => {
+  it("restores the building, unit, and savedAt exactly", () => {
     const state = sampleState();
     expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
+  });
+
+  it("round-trips a v7 two-floor building", () => {
+    const building = {
+      floors: [createSampleFloor(), { ...createFloor("f2"), name: "Upstairs" }],
+    };
+    const json = serializeSavedState({ building, unit: "m", savedAt: 123 });
+    expect(JSON.parse(json).version).toBe(7);
+    const back = deserializeSavedState(json);
+    expect(back?.building.floors).toHaveLength(2);
+    expect(back?.building.floors[1].name).toBe("Upstairs");
   });
 
   it("round-trips a material colorway override", () => {
@@ -48,7 +66,7 @@ describe("serialize / deserialize round trip", () => {
     const restored = deserializeSavedState(
       serializeSavedState(withFloor(floor)),
     );
-    expect(restored?.floor.furniture[0].colorway).toBe("#6f7d6a");
+    expect(restored?.building.floors[0].furniture[0].colorway).toBe("#6f7d6a");
   });
 
   it("round-trips a custom wall height and rejects out-of-range ones", () => {
@@ -90,7 +108,7 @@ describe("serialize / deserialize round trip", () => {
   it("round-trips a sun-azimuth override, and its absence", () => {
     const aimed = { ...sampleState(), sunAzimuthDeg: -117.5 };
     expect(deserializeSavedState(serializeSavedState(aimed))).toEqual(aimed);
-    // Auto mode (and every pre-dial v6 save) simply omits the field.
+    // Auto mode (and every pre-dial save) simply omits the field.
     const auto = deserializeSavedState(serializeSavedState(sampleState()));
     expect(auto).toEqual(sampleState());
     expect(auto && "sunAzimuthDeg" in auto).toBe(false);
@@ -132,7 +150,7 @@ describe("deserializeSavedState rejection", () => {
 
   it("rejects an unreadable version (including a pre-v6 payload)", () => {
     const json = serializeSavedState(sampleState()).replace(
-      '"version":6',
+      '"version":7',
       '"version":99',
     );
     expect(deserializeSavedState(json)).toBeNull();
@@ -318,7 +336,11 @@ describe("formatSavedStatus", () => {
 
 describe("wall thickness + sill persistence", () => {
   const save = (floor: Floor): string =>
-    serializeSavedState({ floor, unit: "m", savedAt: 1 });
+    serializeSavedState({
+      building: { floors: [floor] },
+      unit: "m",
+      savedAt: 1,
+    });
 
   it("round-trips edge thickness and sill fields", () => {
     let floor = reconcileFloor(makeFloor());
@@ -327,10 +349,12 @@ describe("wall thickness + sill persistence", () => {
     floor = setOpeningSillMaterial(floor, "window-AB", "wood");
     const restored = deserializeSavedState(save(floor));
     expect(restored).not.toBeNull();
-    expect(restored?.floor.edges.find((e) => e.id === "AB")?.thickness).toBe(
-      0.3,
+    expect(
+      restored?.building.floors[0].edges.find((e) => e.id === "AB")?.thickness,
+    ).toBe(0.3);
+    const window = restored?.building.floors[0].openings.find(
+      (o) => o.id === "window-AB",
     );
-    const window = restored?.floor.openings.find((o) => o.id === "window-AB");
     expect(window?.sillOverhang).toBe(0.18);
     expect(window?.sillMaterial).toBe("wood");
   });
@@ -344,10 +368,15 @@ describe("wall thickness + sill persistence", () => {
       mutate(parsed);
       return JSON.stringify(parsed);
     };
+    const floorAt = (p: Record<string, unknown>): Record<string, unknown> => {
+      const building = p.building as Record<string, unknown>;
+      const floors = building.floors as Record<string, unknown>[];
+      return floors[0];
+    };
     expect(
       deserializeSavedState(
         tamper((p) => {
-          const floor = p.floor as Record<string, unknown>;
+          const floor = floorAt(p);
           const edges = floor.edges as Record<string, unknown>[];
           edges[0] = { ...edges[0], thickness: 3 };
         }),
@@ -356,7 +385,7 @@ describe("wall thickness + sill persistence", () => {
     expect(
       deserializeSavedState(
         tamper((p) => {
-          const floor = p.floor as Record<string, unknown>;
+          const floor = floorAt(p);
           const openings = floor.openings as Record<string, unknown>[];
           openings[0] = { ...openings[0], sillOverhang: 0.1 };
         }),
@@ -365,7 +394,7 @@ describe("wall thickness + sill persistence", () => {
     expect(
       deserializeSavedState(
         tamper((p) => {
-          const floor = p.floor as Record<string, unknown>;
+          const floor = floorAt(p);
           const openings = floor.openings as Record<string, unknown>[];
           openings[1] = { ...openings[1], sillMaterial: "granite" };
         }),
@@ -374,9 +403,13 @@ describe("wall thickness + sill persistence", () => {
   });
 });
 
-describe("floor id / stairs (V1 fill-on-read + validation)", () => {
+describe("floor id / stairs (fill-on-read + validation)", () => {
   const save = (floor: Floor): string =>
-    serializeSavedState({ floor, unit: "m", savedAt: 1 });
+    serializeSavedState({
+      building: { floors: [floor] },
+      unit: "m",
+      savedAt: 1,
+    });
   const tamper = (
     floor: Floor,
     mutate: (parsed: Record<string, unknown>) => void,
@@ -384,6 +417,11 @@ describe("floor id / stairs (V1 fill-on-read + validation)", () => {
     const parsed = JSON.parse(save(floor)) as Record<string, unknown>;
     mutate(parsed);
     return JSON.stringify(parsed);
+  };
+  const floorAt = (p: Record<string, unknown>): Record<string, unknown> => {
+    const building = p.building as Record<string, unknown>;
+    const floors = building.floors as Record<string, unknown>[];
+    return floors[0];
   };
   const validStair: Stair = {
     id: "stair-1",
@@ -393,22 +431,22 @@ describe("floor id / stairs (V1 fill-on-read + validation)", () => {
   };
   const base = (): Floor => reconcileFloor(makeFloor());
 
-  it("fills a v6 floor's missing id and stairs with generated defaults", () => {
+  it("fills a floor's missing id and stairs with generated defaults", () => {
     const json = tamper(base(), (p) => {
-      const floor = p.floor as Record<string, unknown>;
+      const floor = floorAt(p);
       delete floor.id;
       delete floor.stairs;
     });
     const restored = deserializeSavedState(json);
     expect(restored).not.toBeNull();
-    expect(typeof restored?.floor.id).toBe("string");
-    expect(restored?.floor.id.length).toBeGreaterThan(0);
-    expect(restored?.floor.stairs).toEqual([]);
+    expect(typeof restored?.building.floors[0].id).toBe("string");
+    expect(restored?.building.floors[0].id.length).toBeGreaterThan(0);
+    expect(restored?.building.floors[0].stairs).toEqual([]);
   });
 
   it("rejects an empty-string floor id", () => {
     const json = tamper(base(), (p) => {
-      const floor = p.floor as Record<string, unknown>;
+      const floor = floorAt(p);
       floor.id = "";
     });
     expect(deserializeSavedState(json)).toBeNull();
@@ -416,7 +454,7 @@ describe("floor id / stairs (V1 fill-on-read + validation)", () => {
 
   it("rejects a stairs array whose member isn't stair-shaped", () => {
     const json = tamper({ ...base(), stairs: [validStair] }, (p) => {
-      const floor = p.floor as Record<string, unknown>;
+      const floor = floorAt(p);
       floor.stairs = ["not-a-stair"];
     });
     expect(deserializeSavedState(json)).toBeNull();
@@ -424,14 +462,14 @@ describe("floor id / stairs (V1 fill-on-read + validation)", () => {
 
   it("rejects a stair width outside [0.7, 2.0]", () => {
     const tooNarrow = tamper({ ...base(), stairs: [validStair] }, (p) => {
-      const floor = p.floor as Record<string, unknown>;
+      const floor = floorAt(p);
       const stairs = floor.stairs as Record<string, unknown>[];
       stairs[0] = { ...stairs[0], width: 0.5 };
     });
     expect(deserializeSavedState(tooNarrow)).toBeNull();
 
     const tooWide = tamper({ ...base(), stairs: [validStair] }, (p) => {
-      const floor = p.floor as Record<string, unknown>;
+      const floor = floorAt(p);
       const stairs = floor.stairs as Record<string, unknown>[];
       stairs[0] = { ...stairs[0], width: 2.5 };
     });
@@ -440,27 +478,27 @@ describe("floor id / stairs (V1 fill-on-read + validation)", () => {
 
   it("rejects a stair with a non-finite rotation", () => {
     const json = tamper({ ...base(), stairs: [validStair] }, (p) => {
-      const floor = p.floor as Record<string, unknown>;
+      const floor = floorAt(p);
       const stairs = floor.stairs as Record<string, unknown>[];
       stairs[0] = { ...stairs[0], rotation: "north" };
     });
     expect(deserializeSavedState(json)).toBeNull();
   });
 
-  it("rejects duplicate stair ids", () => {
+  it("rejects duplicate stair ids on the same floor", () => {
     const twoStairs: Floor = {
       ...base(),
       stairs: [validStair, { ...validStair, id: "stair-2" }],
     };
     const json = tamper(twoStairs, (p) => {
-      const floor = p.floor as Record<string, unknown>;
+      const floor = floorAt(p);
       const stairs = floor.stairs as Record<string, unknown>[];
       stairs[1] = { ...stairs[1], id: stairs[0].id };
     });
     expect(deserializeSavedState(json)).toBeNull();
   });
 
-  it("round-trips a valid stairs array intact", () => {
+  it("round-trips a valid stairs array intact when it isn't the top floor", () => {
     const floor: Floor = {
       ...base(),
       stairs: [
@@ -468,7 +506,79 @@ describe("floor id / stairs (V1 fill-on-read + validation)", () => {
         { ...validStair, id: "stair-2", position: { x: 4, y: 1 } },
       ],
     };
-    const state = { floor, unit: "m" as const, savedAt: 1 };
+    const building = { floors: [floor, createFloor("upstairs")] };
+    const state = { building, unit: "m" as const, savedAt: 1 };
     expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
+  });
+});
+
+describe("v7 building validation", () => {
+  const f = () => ({ ...createSampleFloor(), id: "ground" });
+  const bad = (building: unknown) =>
+    deserializeSavedState(
+      JSON.stringify({ version: 7, building, unit: "m", savedAt: 1 }),
+    );
+
+  it("reads a v6 single-floor payload as a one-floor building", () => {
+    const floor = createSampleFloor();
+    const v6 = JSON.stringify({ version: 6, floor, unit: "m", savedAt: 5 });
+    const back = deserializeSavedState(v6);
+    expect(back?.building.floors).toHaveLength(1);
+    expect(back?.building.floors[0].furniture.length).toBe(
+      floor.furniture.length,
+    );
+    expect(back?.savedAt).toBe(5);
+  });
+
+  it("rejects: zero floors, duplicate floor ids, stairs on the top floor", () => {
+    expect(bad({ floors: [] })).toBeNull();
+    expect(bad({ floors: [f(), { ...createFloor(), id: f().id }] })).toBeNull();
+    expect(
+      bad({
+        floors: [
+          {
+            ...f(),
+            stairs: [
+              { id: "s", position: { x: 1, y: 1 }, rotation: 0, width: 0.9 },
+            ],
+          },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects a stair id shared across two different floors", () => {
+    const stair = {
+      id: "shared-stair",
+      position: { x: 1, y: 1 },
+      rotation: 0,
+      width: 0.9,
+    };
+    expect(
+      bad({
+        floors: [
+          { ...f(), stairs: [stair] },
+          { ...createFloor("f2"), stairs: [stair] },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("accepts a valid multi-floor building where only a lower floor has stairs", () => {
+    const stair = {
+      id: "stair-1",
+      position: { x: 1, y: 1 },
+      rotation: 0,
+      width: 0.9,
+    };
+    const json = JSON.stringify({
+      version: 7,
+      building: { floors: [{ ...f(), stairs: [stair] }, createFloor("f2")] },
+      unit: "m",
+      savedAt: 1,
+    });
+    const back = deserializeSavedState(json);
+    expect(back?.building.floors).toHaveLength(2);
+    expect(back?.building.floors[0].stairs).toHaveLength(1);
   });
 });

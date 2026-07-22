@@ -42,6 +42,7 @@ import {
 import { DEFAULT_TIME_OF_DAY, LIGHTING, type TimeOfDay } from "#/lib/lighting";
 import {
   allFurnitureOf,
+  type Building,
   type CatalogItem,
   createFloor,
   createSampleFloor,
@@ -54,6 +55,11 @@ import {
   flipFloorOpeningHinge,
   flipFloorOpeningSide,
   floorBounds,
+  floorById,
+  floorIndexOf,
+  floorOfEdge,
+  floorOfItem,
+  floorOfOpening,
   furnitureDisplayName,
   openingSill,
   openingVerticals,
@@ -80,6 +86,7 @@ import {
   shiftOpeningVertical,
   updateDerivedRoom,
   updateFloorFurniture,
+  updateFloorIn,
   updateFurniture,
   WALL_THICKNESS,
   wallHeightOf,
@@ -96,11 +103,6 @@ import type { ViewMode } from "#/lib/view-mode";
 
 /** Shift-arrow nudge step, meters — the "fine" 1 cm move. */
 const FINE_NUDGE_STEP = 0.01;
-
-/** A fresh, empty graph floor — the "New room" reset target. */
-function emptyFloor(): Floor {
-  return createFloor();
-}
 
 // Loaded lazily after mount: the three.js scene is client-only, so keep it
 // out of the SSR pass entirely.
@@ -133,15 +135,31 @@ function Planner() {
       setLibraryOpen((open) => !open);
     }
   }, [viewMode]);
-  // The floor lives inside a bounded undo/redo history. Discrete mutations
-  // (add/rotate/duplicate/delete, opening edits, outline close) go through
-  // `setRoom` = one undo step each; the continuous drags stream through
-  // `previewRoom` and fold into a single step when `settleRoom` fires at
-  // gesture end — an esc-cancelled drag leaves no step at all.
-  const [floorHistory, setFloorHistory] = useState(() =>
-    createHistory(createSampleFloor()),
+  // The building lives inside a bounded undo/redo history; the active floor
+  // id is separate UI state (undo-clamped below), not part of the history
+  // itself — undo/redo travel the whole building, never just one storey.
+  // Discrete mutations (add/rotate/duplicate/delete, opening edits, outline
+  // close) go through `commitFloor` = one undo step each; the continuous
+  // drags stream through `previewFloorIn` and fold into a single step when
+  // `settleRoom` fires at gesture end — an esc-cancelled drag leaves no step
+  // at all.
+  const [buildingHistory, setBuildingHistory] = useState(() =>
+    createHistory<Building>({ floors: [createSampleFloor()] }),
   );
-  const floor = floorHistory.current;
+  const building = buildingHistory.current;
+  // Live building for handlers that must compute an edit *and* read its
+  // result synchronously, mirroring `floorRef` below.
+  const buildingRef = useRef(building);
+  buildingRef.current = building;
+  const [activeFloorId, setActiveFloorId] = useState(
+    () => buildingHistory.current.floors[0].id,
+  );
+  // Read inside history updaters instead of closing over `activeFloorId`
+  // directly — closures captured by a `useCallback(fn, [])` (stable-identity)
+  // handler would otherwise go stale the moment the active floor changes.
+  const activeFloorIdRef = useRef(activeFloorId);
+  activeFloorIdRef.current = activeFloorId;
+  const floor = floorById(building, activeFloorId) ?? building.floors[0];
   // Live floor for handlers that must compute a graph edit *and* read its
   // result synchronously (chain extend / split-then-drag both need the id the
   // reconcile minted before the state update flushes).
@@ -154,47 +172,85 @@ function Planner() {
   // The first derived room anchors the header breadcrumb; everything
   // selection-shaped resolves its owning room from the item id instead.
   const room = derived.rooms[0] as Room | undefined;
-  // Whole-floor commits ("New room", draw mode's edits, opening edits). One
-  // undo step; a same-reference no-op lands nowhere.
-  const setFloor = useCallback((next: Floor) => {
-    setFloorHistory((history) =>
-      next === history.current ? history : commitHistory(history, next),
-    );
-  }, []);
-  // A mid-drag whole-floor state (an opening slide): a preview like a
-  // furniture drag's, folded into one step when the drag settles.
-  const previewFloor = useCallback(
-    (next: Floor) =>
-      setFloorHistory((history) => previewHistory(history, next)),
-    [],
-  );
-  // One derived room's discrete mutation, addressed by id — one undo step.
-  // `updateDerivedRoom` runs the edit back through the graph and keeps the
-  // pure setters' no-op contract at floor level (a same-reference room yields
-  // the same floor, which must not become an empty undo step).
-  const commitToRoom = useCallback(
-    (targetId: string, update: (room: Room) => Room) => {
-      setFloorHistory((history) => {
-        const value = updateDerivedRoom(
-          history.current,
-          deriveFloor(history.current),
-          targetId,
-          update,
-        );
-        return value === history.current
+  // One floor's discrete mutation, addressed by floor id — one undo step at
+  // the building level. Same-reference no-op (either `fn` itself, or the
+  // building not knowing `floorId`) lands nowhere.
+  const commitFloor = useCallback(
+    (floorId: string, fn: (floor: Floor) => Floor) => {
+      setBuildingHistory((history) => {
+        const next = updateFloorIn(history.current, floorId, fn);
+        return next === history.current
           ? history
-          : commitHistory(history, value);
+          : commitHistory(history, next);
       });
     },
     [],
   );
-  const settleRoom = useCallback(() => setFloorHistory(settleHistory), []);
-  const undoRoom = useCallback(() => setFloorHistory(undoHistory), []);
-  const redoRoom = useCallback(() => setFloorHistory(redoHistory), []);
+  // A mid-drag single-floor state (an opening slide, a node drag): a preview
+  // like a furniture drag's, folded into one step when the drag settles.
+  const previewFloorIn = useCallback(
+    (floorId: string, fn: (floor: Floor) => Floor) => {
+      setBuildingHistory((history) =>
+        previewHistory(history, updateFloorIn(history.current, floorId, fn)),
+      );
+    },
+    [],
+  );
+  // Whole-active-floor commits/previews (draw mode's edits, opening edits,
+  // the `PlannerCanvas` wiring) keep these exact names so their prop types
+  // don't change — they resolve the target floor id from the ref at call
+  // time (see `activeFloorIdRef` above), never from a closed-over value.
+  const setFloor = useCallback(
+    (next: Floor) => commitFloor(activeFloorIdRef.current, () => next),
+    [commitFloor],
+  );
+  const previewFloor = useCallback(
+    (next: Floor) => previewFloorIn(activeFloorIdRef.current, () => next),
+    [previewFloorIn],
+  );
+  // One derived room's discrete mutation, addressed by id — one undo step.
+  // `updateDerivedRoom` runs the edit back through the graph and keeps the
+  // pure setters' no-op contract at floor level (a same-reference room yields
+  // the same floor, which must not become an empty undo step). Rooms belong
+  // to the active floor (the settings popover only lists `derived.rooms`).
+  const commitToRoom = useCallback(
+    (targetId: string, update: (room: Room) => Room) => {
+      setBuildingHistory((history) => {
+        const next = updateFloorIn(
+          history.current,
+          activeFloorIdRef.current,
+          (floor) =>
+            updateDerivedRoom(floor, deriveFloor(floor), targetId, update),
+        );
+        return next === history.current
+          ? history
+          : commitHistory(history, next);
+      });
+    },
+    [],
+  );
+  const settleRoom = useCallback(() => setBuildingHistory(settleHistory), []);
+  const undoRoom = useCallback(() => setBuildingHistory(undoHistory), []);
+  const redoRoom = useCallback(() => setBuildingHistory(redoHistory), []);
   // Draw edits the graph live (Phase 9) — undo/redo stay active in draw mode,
   // like every other lens.
-  const canUndo = floorHistory.past.length > 0;
-  const canRedo = floorHistory.future.length > 0;
+  const canUndo = buildingHistory.past.length > 0;
+  const canRedo = buildingHistory.future.length > 0;
+  // Undo/redo can land the active floor id on a since-removed floor (a future
+  // floor-delete's undo/redo, not reachable yet in a one-floor building):
+  // clamp back to the nearest surviving index instead of falling over.
+  const prevFloorIndexRef = useRef(0);
+  useEffect(() => {
+    if (!floorById(building, activeFloorId)) {
+      setActiveFloorId(
+        building.floors[
+          Math.min(prevFloorIndexRef.current, building.floors.length - 1)
+        ].id,
+      );
+    } else {
+      prevFloorIndexRef.current = floorIndexOf(building, activeFloorId);
+    }
+  }, [building, activeFloorId]);
   const [unit, setUnit] = useState<Unit>("m");
   // The furniture selection is route state so the inspector (outside the
   // canvas) and the in-scene picking/label share one selection. The canvas
@@ -263,9 +319,13 @@ function Planner() {
   const setWallThickness = useCallback(
     (meters: number) => {
       if (!selectedEdgeId) return;
-      setFloor(setEdgeThickness(floorRef.current, selectedEdgeId, meters));
+      const owner = floorOfEdge(buildingRef.current, selectedEdgeId);
+      if (!owner) return;
+      commitFloor(owner.id, (floor) =>
+        setEdgeThickness(floor, selectedEdgeId, meters),
+      );
     },
-    [selectedEdgeId, setFloor],
+    [selectedEdgeId, commitFloor],
   );
   // Everything the inspector's opening view needs, resolved once: effective
   // verticals, the host edge's ceiling, the portal label, whether the wall
@@ -301,23 +361,32 @@ function Planner() {
   const resizeSelectedOpening = useCallback(
     (width: number) => {
       if (!selectedOpeningId) return;
-      setFloor(resizeFloorOpening(floorRef.current, selectedOpeningId, width));
+      const owner = floorOfOpening(buildingRef.current, selectedOpeningId);
+      if (!owner) return;
+      commitFloor(owner.id, (floor) =>
+        resizeFloorOpening(floor, selectedOpeningId, width),
+      );
     },
-    [selectedOpeningId, setFloor],
+    [selectedOpeningId, commitFloor],
   );
   const setSelectedOpeningVerticals = useCallback(
     (verticals: { bottom?: number; top?: number }) => {
       if (!selectedOpening) return;
-      setFloor(
+      const owner = floorOfOpening(
+        buildingRef.current,
+        selectedOpening.opening.id,
+      );
+      if (!owner) return;
+      commitFloor(owner.id, (floor) =>
         setOpeningVerticals(
-          floorRef.current,
+          floor,
           selectedOpening.opening.id,
           verticals,
           selectedOpening.ceiling,
         ),
       );
     },
-    [selectedOpening, setFloor],
+    [selectedOpening, commitFloor],
   );
   const shiftSelectedOpening = useCallback(
     // ELEVATION moves the whole hole, height preserved — the model slides it
@@ -325,65 +394,87 @@ function Planner() {
     // squishes).
     (bottom: number) => {
       if (!selectedOpening) return;
-      setFloor(
+      const owner = floorOfOpening(
+        buildingRef.current,
+        selectedOpening.opening.id,
+      );
+      if (!owner) return;
+      commitFloor(owner.id, (floor) =>
         shiftOpeningVertical(
-          floorRef.current,
+          floor,
           selectedOpening.opening.id,
           bottom,
           selectedOpening.ceiling,
         ),
       );
     },
-    [selectedOpening, setFloor],
+    [selectedOpening, commitFloor],
   );
   const setSelectedOpeningSillOverhang = useCallback(
     (meters: number) => {
       if (!selectedOpeningId) return;
-      setFloor(
-        setOpeningSillOverhang(floorRef.current, selectedOpeningId, meters),
+      const owner = floorOfOpening(buildingRef.current, selectedOpeningId);
+      if (!owner) return;
+      commitFloor(owner.id, (floor) =>
+        setOpeningSillOverhang(floor, selectedOpeningId, meters),
       );
     },
-    [selectedOpeningId, setFloor],
+    [selectedOpeningId, commitFloor],
   );
   const setSelectedOpeningSillMaterial = useCallback(
     (material: SillMaterial) => {
       if (!selectedOpeningId) return;
-      setFloor(
-        setOpeningSillMaterial(floorRef.current, selectedOpeningId, material),
+      const owner = floorOfOpening(buildingRef.current, selectedOpeningId);
+      if (!owner) return;
+      commitFloor(owner.id, (floor) =>
+        setOpeningSillMaterial(floor, selectedOpeningId, material),
       );
     },
-    [selectedOpeningId, setFloor],
+    [selectedOpeningId, commitFloor],
   );
   const flipSelectedOpeningHinge = useCallback(() => {
     if (!selectedOpeningId) return;
-    setFloor(flipFloorOpeningHinge(floorRef.current, selectedOpeningId));
-  }, [selectedOpeningId, setFloor]);
+    const owner = floorOfOpening(buildingRef.current, selectedOpeningId);
+    if (!owner) return;
+    commitFloor(owner.id, (floor) =>
+      flipFloorOpeningHinge(floor, selectedOpeningId),
+    );
+  }, [selectedOpeningId, commitFloor]);
   const flipSelectedOpeningSide = useCallback(() => {
     if (!selectedOpeningId) return;
-    setFloor(flipFloorOpeningSide(floorRef.current, selectedOpeningId));
-  }, [selectedOpeningId, setFloor]);
+    const owner = floorOfOpening(buildingRef.current, selectedOpeningId);
+    if (!owner) return;
+    commitFloor(owner.id, (floor) =>
+      flipFloorOpeningSide(floor, selectedOpeningId),
+    );
+  }, [selectedOpeningId, commitFloor]);
   const deleteSelectedOpening = useCallback(() => {
     if (!selectedOpeningId) return;
-    setFloor(removeFloorOpening(floorRef.current, selectedOpeningId));
+    const owner = floorOfOpening(buildingRef.current, selectedOpeningId);
+    if (owner) {
+      commitFloor(owner.id, (floor) =>
+        removeFloorOpening(floor, selectedOpeningId),
+      );
+    }
     setSelectedOpeningId(null);
-  }, [selectedOpeningId, setFloor]);
-  // One floor-level furniture commit: the pure setter runs over the whole
-  // floor's furniture (`updateFloorFurniture`), re-contained against the wall
-  // slabs — furniture is floor-level now, so an item may sit in any room, the
-  // dead band at a shared wall, or the open canvas, bounded only by the walls.
-  // One history step; a same-reference no-op lands nowhere.
+  }, [selectedOpeningId, commitFloor]);
+  // One floor-level furniture commit, targeting the selected item's owning
+  // floor: the pure setter runs over that floor's whole furniture
+  // (`updateFloorFurniture`), re-contained against the wall slabs — furniture
+  // is floor-level, so an item may sit in any room, the dead band at a shared
+  // wall, or the open canvas, bounded only by the walls. One history step; a
+  // same-reference no-op lands nowhere.
   const mutateFurniture = useCallback(
     (fn: (room: Room, wallObstacles: Obstacle[]) => Room) => {
-      setFloorHistory((history) => {
-        const floor = history.current;
+      if (!selectedId) return;
+      const owner = floorOfItem(buildingRef.current, selectedId);
+      if (!owner) return;
+      commitFloor(owner.id, (floor) => {
         const wallObstacles = edgeWallObstacles(floor);
-        const value = updateFloorFurniture(floor, (room) =>
-          fn(room, wallObstacles),
-        );
-        return value === floor ? history : commitHistory(history, value);
+        return updateFloorFurniture(floor, (room) => fn(room, wallObstacles));
       });
     },
-    [],
+    [selectedId, commitFloor],
   );
   // Inspector commits: one history step each. The pure setters return the
   // room unchanged (same reference) for no-ops, which must not become empty
@@ -489,16 +580,16 @@ function Planner() {
   const nudgeSelected = useCallback(
     (dx: number, dy: number) => {
       if (!selectedId) return;
-      setFloorHistory((history) => {
-        const floor = history.current;
+      const owner = floorOfItem(buildingRef.current, selectedId);
+      if (!owner) return;
+      previewFloorIn(owner.id, (floor) => {
         const wallObstacles = edgeWallObstacles(floor);
-        const next = updateFloorFurniture(floor, (room) =>
+        return updateFloorFurniture(floor, (room) =>
           nudgeFurniture(wallObstacles, room, selectedId, dx, dy),
         );
-        return next === floor ? history : previewHistory(history, next);
       });
     },
-    [selectedId],
+    [selectedId, previewFloorIn],
   );
   // The Settings rail button's popover: per-room name + ceiling height, each
   // commit one history step through the pure room setters (no-ops return the
@@ -560,26 +651,28 @@ function Planner() {
   }, []);
 
   // Autosave: hydrate once after mount (SSR renders the sample floor —
-  // localStorage only exists on the client), then write back on every floor
-  // or unit change. `lastSavedRef` holds the last payload written or loaded,
-  // so hydration itself doesn't count as a save and reloads keep the honest
-  // saved-at time instead of resetting the clock to "just now". Older payload
-  // versions can't be reconstructed as a wall graph, so a stale or malformed
-  // save is discarded (hydrates as the sample floor) — no migration.
+  // localStorage only exists on the client), then write back on every
+  // building or unit change. `lastSavedRef` holds the last payload written or
+  // loaded, so hydration itself doesn't count as a save and reloads keep the
+  // honest saved-at time instead of resetting the clock to "just now". Older
+  // payload versions can't be reconstructed as a wall graph, so a stale or
+  // malformed save is discarded (hydrates as the sample floor) — no
+  // migration.
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [storageReady, setStorageReady] = useState(false);
   const lastSavedRef = useRef<string | null>(null);
   useEffect(() => {
     const saved = deserializeSavedState(localStorage.getItem(STORAGE_KEY));
     if (saved) {
-      // Hydration replaces the pre-mount sample floor outright — resetting
-      // history keeps it out of the undo stack.
-      setFloorHistory(createHistory(saved.floor));
+      // Hydration replaces the pre-mount sample building outright —
+      // resetting history keeps it out of the undo stack.
+      setBuildingHistory(createHistory(saved.building));
+      setActiveFloorId(saved.building.floors[0].id);
       setUnit(saved.unit);
       setSunAzimuthDeg(saved.sunAzimuthDeg ?? null);
       setSavedAt(saved.savedAt);
       lastSavedRef.current = JSON.stringify({
-        floor: saved.floor,
+        building: saved.building,
         unit: saved.unit,
         sunAzimuthDeg: saved.sunAzimuthDeg ?? null,
       });
@@ -588,21 +681,21 @@ function Planner() {
   }, []);
   useEffect(() => {
     if (!storageReady) return;
-    const payload = JSON.stringify({ floor, unit, sunAzimuthDeg });
+    const payload = JSON.stringify({ building, unit, sunAzimuthDeg });
     if (payload === lastSavedRef.current) return;
     lastSavedRef.current = payload;
     const now = Date.now();
     localStorage.setItem(
       STORAGE_KEY,
       serializeSavedState({
-        floor,
+        building,
         unit,
         savedAt: now,
         sunAzimuthDeg: sunAzimuthDeg ?? undefined,
       }),
     );
     setSavedAt(now);
-  }, [storageReady, floor, unit, sunAzimuthDeg]);
+  }, [storageReady, building, unit, sunAzimuthDeg]);
 
   // Draw mode edits the wall graph live (Phase 9). Session state is just the
   // active tool plus the chain's last node id (wall tool; null = no chain);
@@ -642,76 +735,79 @@ function Planner() {
   // Wall tool: extend the chain by one wall (`from` → `to`). One undo step
   // each; the chain's next node is the reconciled node nearest the landed
   // point (welding onto an existing corner returns that corner's id).
-  const extendChain = useCallback((from: Point, to: Point) => {
-    const current = floorRef.current;
-    const next = addWallSegment(current, from, to);
-    if (next === current) return;
-    let landed: string | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const node of next.nodes) {
-      const d = Math.hypot(node.x - to.x, node.y - to.y);
-      if (d < bestDistance) {
-        bestDistance = d;
-        landed = node.id;
+  const extendChain = useCallback(
+    (from: Point, to: Point) => {
+      const current = floorRef.current;
+      const next = addWallSegment(current, from, to);
+      if (next === current) return;
+      let landed: string | null = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (const node of next.nodes) {
+        const d = Math.hypot(node.x - to.x, node.y - to.y);
+        if (d < bestDistance) {
+          bestDistance = d;
+          landed = node.id;
+        }
       }
-    }
-    setFloorHistory((history) =>
-      next === history.current ? history : commitHistory(history, next),
-    );
-    setChainNode(landed);
-  }, []);
+      commitFloor(activeFloorIdRef.current, () => next);
+      setChainNode(landed);
+    },
+    [commitFloor],
+  );
   const endChain = useCallback(() => setChainNode(null), []);
   // Rect tool: compose the four walls into ONE floor value → one undo step,
   // then hand off to Select (drag corners / edit lengths like any wall).
-  const placeRect = useCallback((a: Point, b: Point) => {
-    const corners = rectangleOutline(a, b);
-    if (!corners) return;
-    setFloorHistory((history) => {
-      let f = history.current;
-      for (let i = 0; i < 4; i++) {
-        f = addWallSegment(f, corners[i], corners[(i + 1) % 4]);
-      }
-      return f === history.current ? history : commitHistory(history, f);
-    });
-    setDrawTool("select");
-  }, []);
+  const placeRect = useCallback(
+    (a: Point, b: Point) => {
+      const corners = rectangleOutline(a, b);
+      if (!corners) return;
+      commitFloor(activeFloorIdRef.current, (floor) => {
+        let f = floor;
+        for (let i = 0; i < 4; i++) {
+          f = addWallSegment(f, corners[i], corners[(i + 1) % 4]);
+        }
+        return f;
+      });
+      setDrawTool("select");
+    },
+    [commitFloor],
+  );
   // A node drag: previews stream (raw, no weld mid-gesture), the release
   // settles into one step (welds fire in `settleNodeMove`), esc restores the
   // node to where the drag began (no step at all).
   const nodeMovePreview = useCallback(
     (nodeId: string, point: Point) =>
-      setFloorHistory((history) =>
+      previewFloorIn(activeFloorIdRef.current, (floor) =>
+        moveNodePreview(floor, nodeId, point),
+      ),
+    [previewFloorIn],
+  );
+  const nodeMoveSettle = useCallback((nodeId: string, point: Point) => {
+    const floorId = activeFloorIdRef.current;
+    setBuildingHistory((history) =>
+      settleHistory(
         previewHistory(
           history,
-          moveNodePreview(history.current, nodeId, point),
-        ),
-      ),
-    [],
-  );
-  const nodeMoveSettle = useCallback(
-    (nodeId: string, point: Point) =>
-      setFloorHistory((history) =>
-        settleHistory(
-          previewHistory(
-            history,
-            settleNodeMove(history.current, nodeId, point),
+          updateFloorIn(history.current, floorId, (floor) =>
+            settleNodeMove(floor, nodeId, point),
           ),
         ),
       ),
-    [],
-  );
-  const nodeMoveCancel = useCallback(
-    (nodeId: string, original: Point) =>
-      setFloorHistory((history) =>
-        settleHistory(
-          previewHistory(
-            history,
-            moveNodePreview(history.current, nodeId, original),
+    );
+  }, []);
+  const nodeMoveCancel = useCallback((nodeId: string, original: Point) => {
+    const floorId = activeFloorIdRef.current;
+    setBuildingHistory((history) =>
+      settleHistory(
+        previewHistory(
+          history,
+          updateFloorIn(history.current, floorId, (floor) =>
+            moveNodePreview(floor, nodeId, original),
           ),
         ),
       ),
-    [],
-  );
+    );
+  }, []);
   // Select tool: drag a wall to split it and drag the new node (a plain click
   // selects the wall instead, in-scene). The split is one undo step; the drag
   // that follows settles into a second. Returns the reconciled new node's id
@@ -724,48 +820,37 @@ function Planner() {
       const newNode = next.nodes.find(
         (n) => !current.nodes.some((o) => o.id === n.id),
       );
-      setFloorHistory((history) =>
-        next === history.current ? history : commitHistory(history, next),
-      );
+      commitFloor(activeFloorIdRef.current, () => next);
       return newNode ? newNode.id : null;
     },
-    [],
+    [commitFloor],
   );
   // A length pill commit: the pill supplies which end stays `fixed` (it knows
   // the wall's rendered orientation), and the far corner — plus every wall
   // sharing it — slides to the new length in one undo step.
   const setEdgeLen = useCallback(
     (edgeId: string, length: number, fixed: "a" | "b") =>
-      setFloorHistory((history) => {
-        const next = setEdgeLength(history.current, edgeId, length, fixed);
-        return next === history.current
-          ? history
-          : commitHistory(history, next);
-      }),
-    [],
+      commitFloor(activeFloorIdRef.current, (floor) =>
+        setEdgeLength(floor, edgeId, length, fixed),
+      ),
+    [commitFloor],
   );
   const deleteNodeCmd = useCallback(
     (nodeId: string) =>
-      setFloorHistory((history) => {
-        const next = deleteNode(history.current, nodeId);
-        return next === history.current
-          ? history
-          : commitHistory(history, next);
-      }),
-    [],
+      commitFloor(activeFloorIdRef.current, (floor) =>
+        deleteNode(floor, nodeId),
+      ),
+    [commitFloor],
   );
   const deleteEdgeCmd = useCallback(
     (edgeId: string) =>
-      setFloorHistory((history) => {
-        const next = deleteEdge(history.current, edgeId);
-        return next === history.current
-          ? history
-          : commitHistory(history, next);
-      }),
-    [],
+      commitFloor(activeFloorIdRef.current, (floor) =>
+        deleteEdge(floor, edgeId),
+      ),
+    [commitFloor],
   );
 
-  // The "new room" escape hatch: clear the floor down to an empty graph
+  // The "new room" escape hatch: clear down to a fresh one-floor building
   // (autosave persists the cleared state, wiping the old save) and drop into
   // draw mode with the wall tool armed to draw from scratch.
   const startNewRoom = useCallback(() => {
@@ -776,11 +861,15 @@ function Planner() {
     ) {
       return;
     }
-    setFloor(reconcileFloor(emptyFloor()));
+    const fresh = reconcileFloor(createFloor());
+    setBuildingHistory((history) =>
+      commitHistory(history, { floors: [fresh] }),
+    );
+    setActiveFloorId(fresh.id);
     setChainNode(null);
     setDrawTool("wall");
     setViewMode("draw");
-  }, [setFloor]);
+  }, []);
 
   // ⌘Z / ⇧⌘Z (ctrl on non-mac) step the floor history in every lens — draw
   // included (Phase 9) — and keystrokes inside inputs keep their native undo.

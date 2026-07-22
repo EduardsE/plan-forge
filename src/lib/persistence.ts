@@ -1,4 +1,5 @@
 import type {
+  Building,
   Floor,
   FurnitureItem,
   Opening,
@@ -29,18 +30,21 @@ import type { Unit } from "#/lib/units";
 export const STORAGE_KEY = "planforge.room";
 
 /** Bumped whenever the payload shape changes; older saves are discarded. */
-const STORAGE_VERSION = 6;
+const STORAGE_VERSION = 7;
 
 /**
- * Versions this build can read. v6 is the wall-graph payload; every earlier
+ * Versions this build can read. v6 is the single-floor wall-graph payload
+ * (`{ floor }`) — read as a one-floor building, wrapped on the fly, and left
+ * on disk as v6 until the first real change writes v7 (keeps the honest
+ * saved-at). v7 is the multifloor `{ building }` payload. Every earlier
  * version stored per-room outlines, which the graph model can't reconstruct,
  * so they're discarded (no migration — the owner's explicit call: no users
  * yet).
  */
-const READABLE_VERSIONS = new Set([STORAGE_VERSION]);
+const READABLE_VERSIONS = new Set([6, STORAGE_VERSION]);
 
 export interface SavedState {
-  floor: Floor;
+  building: Building;
   /** Display unit the user last picked. */
   unit: Unit;
   /** Epoch ms of the write, so a reload reports "saved 5 min ago" honestly. */
@@ -48,7 +52,7 @@ export interface SavedState {
   /**
    * Manual sun-anchor azimuth in degrees (world `atan2(z, x)`), set from the
    * sun dial. Absent = automatic (the most-glazed wall). Optional so pre-dial
-   * v6 saves stay readable — no version bump.
+   * saves stay readable — no version bump.
    */
   sunAzimuthDeg?: number;
 }
@@ -309,11 +313,52 @@ function isFloor(value: unknown): value is StoredFloor {
   return true;
 }
 
+/** Fill in a v6/lenient floor's optional `id`/`stairs` with defaults — the
+ * V1 fill-on-read contract, reused for both the v6 wrap and v7's per-floor
+ * leniency. */
+function fillFloor(floor: StoredFloor): Floor {
+  return {
+    ...floor,
+    id: floor.id ?? crypto.randomUUID(),
+    stairs: floor.stairs ?? [],
+  };
+}
+
+/**
+ * A v7 `building` value: a non-empty array of valid floors, building-wide-
+ * unique floor ids and stair ids, and the "top floor never holds stairs"
+ * invariant (a stair needs a floor above to cut into).
+ */
+function isBuilding(value: unknown): value is { floors: StoredFloor[] } {
+  if (typeof value !== "object" || value === null) return false;
+  const building = value as Record<string, unknown>;
+  if (!Array.isArray(building.floors) || building.floors.length === 0) {
+    return false;
+  }
+  const floorIds = new Set<string>();
+  const stairIds = new Set<string>();
+  for (const raw of building.floors) {
+    if (!isFloor(raw)) return false;
+    if (raw.id !== undefined) {
+      if (floorIds.has(raw.id)) return false;
+      floorIds.add(raw.id);
+    }
+    for (const stair of raw.stairs ?? []) {
+      if (stairIds.has(stair.id)) return false;
+      stairIds.add(stair.id);
+    }
+  }
+  const top = building.floors[building.floors.length - 1] as StoredFloor;
+  if ((top.stairs ?? []).length > 0) return false;
+  return true;
+}
+
 /**
  * Parse a raw localStorage payload back into saved state. Returns null —
  * meaning "start fresh" — for missing, unparsable, wrong-version, or
- * structurally invalid saves. A valid v6 floor is normalized + re-matched on
- * read (`reconcileFloor`) so hydrated state is always well-formed.
+ * structurally invalid saves. A v6 payload's single floor wraps into a
+ * one-floor building; every floor (either version) is normalized + re-
+ * matched on read (`reconcileFloor`) so hydrated state is always well-formed.
  */
 export function deserializeSavedState(json: string | null): SavedState | null {
   if (json === null) return null;
@@ -335,14 +380,22 @@ export function deserializeSavedState(json: string | null): SavedState | null {
   if (!isFiniteNumber(state.savedAt)) return null;
   if (state.sunAzimuthDeg !== undefined && !isFiniteNumber(state.sunAzimuthDeg))
     return null;
-  if (!isFloor(state.floor)) return null;
-  const floor: Floor = {
-    ...state.floor,
-    id: state.floor.id ?? crypto.randomUUID(),
-    stairs: state.floor.stairs ?? [],
-  };
+
+  let building: Building;
+  if (state.version === 6) {
+    if (!isFloor(state.floor)) return null;
+    building = { floors: [reconcileFloor(fillFloor(state.floor))] };
+  } else {
+    if (!isBuilding(state.building)) return null;
+    building = {
+      floors: state.building.floors.map((floor) =>
+        reconcileFloor(fillFloor(floor)),
+      ),
+    };
+  }
+
   return {
-    floor: reconcileFloor(floor),
+    building,
     unit: state.unit,
     savedAt: state.savedAt,
     ...(state.sunAzimuthDeg !== undefined
