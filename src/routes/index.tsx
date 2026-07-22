@@ -190,9 +190,12 @@ function Planner() {
   // like a furniture drag's, folded into one step when the drag settles.
   const previewFloorIn = useCallback(
     (floorId: string, fn: (floor: Floor) => Floor) => {
-      setBuildingHistory((history) =>
-        previewHistory(history, updateFloorIn(history.current, floorId, fn)),
-      );
+      setBuildingHistory((history) => {
+        const next = updateFloorIn(history.current, floorId, fn);
+        return next === history.current
+          ? history
+          : previewHistory(history, next);
+      });
     },
     [],
   );
