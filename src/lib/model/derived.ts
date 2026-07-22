@@ -140,6 +140,30 @@ export function deriveFloor(floor: Floor): DerivedFloor {
 }
 
 /**
+ * `deriveFloor` over every floor of a building, reusing a prior call's result
+ * for any floor whose object reference didn't change. A building edit only
+ * ever replaces the one touched floor's reference (`updateFloorIn` slices a
+ * fresh `floors` array but leaves every other element alone), so on a
+ * multi-floor building this keeps a single-floor edit — including every
+ * pointermove of a drag preview — from re-deriving faces/rooms for the
+ * floors nobody touched. The caller holds `cache` across renders (a ref) and
+ * feeds each call's returned `cache` back in as the next call's input.
+ */
+export function deriveFloorsCached(
+  floors: Floor[],
+  cache: Map<Floor, DerivedFloor>,
+): { byId: Map<string, DerivedFloor>; cache: Map<Floor, DerivedFloor> } {
+  const nextCache = new Map<Floor, DerivedFloor>();
+  const byId = new Map<string, DerivedFloor>();
+  for (const floor of floors) {
+    const derived = cache.get(floor) ?? deriveFloor(floor);
+    nextCache.set(floor, derived);
+    byId.set(floor.id, derived);
+  }
+  return { byId, cache: nextCache };
+}
+
+/**
  * "Living room ↔ Kitchen" for the portal an opening forms, or null for a
  * plain (exterior or unshared) opening — reimplemented from the graph's edge
  * face-adjacency: an opening whose host edge borders two rooms is a portal.

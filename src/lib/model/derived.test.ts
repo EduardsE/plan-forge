@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { deriveFloor, reconcileFloor, updateDerivedRoom } from "./derived";
+import { createFloor } from "./building";
+import {
+  deriveFloor,
+  deriveFloorsCached,
+  reconcileFloor,
+  updateDerivedRoom,
+} from "./derived";
 import { updateFurniture } from "./furniture";
 import { setRoomName, setRoomWallHeight } from "./room";
 import { makeFloor, makeLRoom } from "./test-fixtures";
@@ -136,5 +142,45 @@ describe("reconcileFloor", () => {
 
     // Already reconciled → same reference.
     expect(reconcileFloor(reconciled)).toBe(reconciled);
+  });
+});
+
+describe("deriveFloorsCached", () => {
+  it("reuses the prior DerivedFloor for a floor whose reference is unchanged", () => {
+    const f1 = createFloor("f1");
+    const f2 = createFloor("f2");
+    const first = deriveFloorsCached([f1, f2], new Map());
+    const d1 = first.byId.get("f1");
+    const d2 = first.byId.get("f2");
+    expect(d1).toBeDefined();
+    expect(d2).toBeDefined();
+
+    // f2 is edited (a fresh object, as every pure floor setter produces);
+    // f1's reference is untouched.
+    const f2Edited: Floor = { ...f2, name: "Studio" };
+    const second = deriveFloorsCached([f1, f2Edited], first.cache);
+
+    expect(second.byId.get("f1")).toBe(d1); // reused — same reference
+    expect(second.byId.get("f2")).not.toBe(d2); // re-derived — f2's own id
+    // slot now holds f2Edited's derivation under the same id key.
+    expect(second.byId.size).toBe(2);
+  });
+
+  it("drops cache entries for floors no longer present (no unbounded growth)", () => {
+    const f1 = createFloor("f1");
+    const f2 = createFloor("f2");
+    const first = deriveFloorsCached([f1, f2], new Map());
+
+    const second = deriveFloorsCached([f1], first.cache);
+
+    expect(second.cache.size).toBe(1);
+    expect(second.cache.has(f1)).toBe(true);
+    expect(second.cache.has(f2)).toBe(false);
+  });
+
+  it("matches a plain deriveFloor for a never-before-seen floor", () => {
+    const f1 = createFloor("f1");
+    const { byId } = deriveFloorsCached([f1], new Map());
+    expect(byId.get("f1")).toEqual(deriveFloor(f1));
   });
 });

@@ -51,6 +51,7 @@ import {
   DEFAULT_WALL_HEIGHT,
   type DerivedFloor,
   deriveFloor,
+  deriveFloorsCached,
   duplicateFurniture,
   edgeCeiling,
   type Floor,
@@ -177,11 +178,20 @@ function Planner() {
   // history/persistence hold. Derived over every storey (not just the active
   // one) so the floor chips/settings/inspector can summarize the whole
   // building without re-deriving per read; the active floor's entry is what
-  // the canvas and every per-room edit still see.
+  // the canvas and every per-room edit still see. `deriveFloorsCached` reuses
+  // the prior render's `DerivedFloor` for any floor whose object reference
+  // didn't change — a preview drag on one floor mints a new `Building` on
+  // every pointermove, but every *other* floor keeps its own reference, so
+  // this ref-held cache keeps every untouched floor from re-deriving on
+  // every frame of a drag confined to one other floor.
+  const derivedCacheRef = useRef<Map<Floor, DerivedFloor>>(new Map());
   const derivedByFloor = useMemo(() => {
-    const map = new Map<string, DerivedFloor>();
-    for (const f of building.floors) map.set(f.id, deriveFloor(f));
-    return map;
+    const { byId, cache } = deriveFloorsCached(
+      building.floors,
+      derivedCacheRef.current,
+    );
+    derivedCacheRef.current = cache;
+    return byId;
   }, [building]);
   const derived = derivedByFloor.get(floor.id) ?? deriveFloor(floor);
   // The first derived room anchors the header breadcrumb; everything
@@ -1119,7 +1129,15 @@ function Planner() {
       })),
     [building],
   );
-  const activeFloorIndex = floorIndexOf(building, activeFloorId);
+  // Resolved from `floor` (the same fallback-safe lookup used everywhere
+  // else: `floorById(building, activeFloorId) ?? building.floors[0]`), never
+  // from `activeFloorId` directly — for one render after an undo/redo lands
+  // the active id on a since-removed floor (the clamp effect corrects it a
+  // tick later), `floorIndexOf(building, activeFloorId)` would return -1 and
+  // `floorDisplayName(building, -1)` renders the bogus "Floor 0". Deriving
+  // the index from `floor` instead always resolves to a real floor's real
+  // name for that frame.
+  const activeFloorIndex = building.floors.indexOf(floor);
   // Status bar prefix: only worth naming the floor out loud once there's more
   // than one.
   const activeFloorName =

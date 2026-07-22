@@ -41,11 +41,16 @@ describe("SettingsPopover", () => {
       ],
     });
 
-    expect((screen.getByLabelText("Room name") as HTMLInputElement).value).toBe(
-      "Living room",
-    );
     expect(
-      (screen.getByLabelText("Ceiling height") as HTMLInputElement).value,
+      (screen.getByLabelText("Ground floor room name") as HTMLInputElement)
+        .value,
+    ).toBe("Living room");
+    expect(
+      (
+        screen.getByLabelText(
+          "Ground floor room ceiling height",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("3.10");
   });
 
@@ -70,15 +75,19 @@ describe("SettingsPopover", () => {
     });
 
     expect(
-      (screen.getByLabelText("Room 1 name") as HTMLInputElement).value,
+      (screen.getByLabelText("Ground floor room 1 name") as HTMLInputElement)
+        .value,
     ).toBe("Living room");
     const kitchenName = screen.getByLabelText(
-      "Room 2 name",
+      "Ground floor room 2 name",
     ) as HTMLInputElement;
     expect(kitchenName.value).toBe("Kitchen");
     expect(
-      (screen.getByLabelText("Room 2 ceiling height") as HTMLInputElement)
-        .value,
+      (
+        screen.getByLabelText(
+          "Ground floor room 2 ceiling height",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("2.80");
 
     fireEvent.change(kitchenName, { target: { value: "Pantry" } });
@@ -90,7 +99,11 @@ describe("SettingsPopover", () => {
     renderPopover({ unit: "cm" });
 
     expect(
-      (screen.getByLabelText("Ceiling height") as HTMLInputElement).value,
+      (
+        screen.getByLabelText(
+          "Ground floor room ceiling height",
+        ) as HTMLInputElement
+      ).value,
     ).toBe("250");
   });
 
@@ -98,7 +111,9 @@ describe("SettingsPopover", () => {
     const onRenameRoom = vi.fn();
     renderPopover({ onRenameRoom });
 
-    const name = screen.getByLabelText("Room name") as HTMLInputElement;
+    const name = screen.getByLabelText(
+      "Ground floor room name",
+    ) as HTMLInputElement;
     fireEvent.change(name, { target: { value: "  Studio " } });
     fireEvent.blur(name);
     expect(onRenameRoom).toHaveBeenCalledWith(
@@ -118,7 +133,9 @@ describe("SettingsPopover", () => {
     const onRoomWallHeight = vi.fn();
     renderPopover({ unit: "cm", onRoomWallHeight });
 
-    const height = screen.getByLabelText("Ceiling height") as HTMLInputElement;
+    const height = screen.getByLabelText(
+      "Ground floor room ceiling height",
+    ) as HTMLInputElement;
     fireEvent.change(height, { target: { value: "310" } });
     fireEvent.blur(height);
 
@@ -133,7 +150,9 @@ describe("SettingsPopover", () => {
     const onRoomWallHeight = vi.fn();
     renderPopover({ onRoomWallHeight });
 
-    const height = screen.getByLabelText("Ceiling height") as HTMLInputElement;
+    const height = screen.getByLabelText(
+      "Ground floor room ceiling height",
+    ) as HTMLInputElement;
     fireEvent.change(height, { target: { value: "tall" } });
     fireEvent.blur(height);
 
@@ -146,7 +165,9 @@ describe("SettingsPopover", () => {
     const onClose = vi.fn();
     renderPopover({ onRenameRoom, onClose });
 
-    const name = screen.getByLabelText("Room name") as HTMLInputElement;
+    const name = screen.getByLabelText(
+      "Ground floor room name",
+    ) as HTMLInputElement;
     fireEvent.change(name, { target: { value: "Studio" } });
     fireEvent.keyDown(name, { key: "Escape" });
     fireEvent.blur(name);
@@ -172,7 +193,7 @@ describe("SettingsPopover", () => {
     anchor.setAttribute("data-settings-anchor", "");
     document.body.appendChild(anchor);
 
-    fireEvent.pointerDown(screen.getByLabelText("Room name"));
+    fireEvent.pointerDown(screen.getByLabelText("Ground floor room name"));
     fireEvent.pointerDown(anchor);
     expect(onClose).not.toHaveBeenCalled();
 
@@ -246,6 +267,55 @@ describe("SettingsPopover", () => {
     );
     expect(onDeleteFloor).toHaveBeenCalledWith("floor-1");
     confirmSpy.mockRestore();
+  });
+
+  it("qualifies room field labels with the floor name so two 1-room floors don't collide", () => {
+    const groundRoom = { ...createSampleRoom(), id: "living-room" };
+    const studioRoom = {
+      ...createSampleRoom(),
+      id: "studio-room",
+      name: "Studio room",
+      wallHeight: 3.0,
+    };
+    renderPopover({
+      floors: [
+        {
+          id: "floor-1",
+          name: "",
+          defaultName: "Ground floor",
+          rooms: [groundRoom],
+        },
+        {
+          id: "floor-2",
+          name: "",
+          defaultName: "Floor 2",
+          rooms: [studioRoom],
+        },
+      ],
+    });
+
+    // Both floors have exactly one room, so without floor-qualified labels
+    // these would collide ("Room name" on both) — `getByLabelText` only
+    // resolves when the match is unique, so a collision throws instead of
+    // silently returning the wrong field.
+    const groundName = screen.getByLabelText(
+      "Ground floor room name",
+    ) as HTMLInputElement;
+    const floor2Name = screen.getByLabelText(
+      "Floor 2 room name",
+    ) as HTMLInputElement;
+    expect(groundName.value).toBe("Living room");
+    expect(floor2Name.value).toBe("Studio room");
+    expect(groundName).not.toBe(floor2Name);
+
+    const groundCeiling = screen.getByLabelText(
+      "Ground floor room ceiling height",
+    ) as HTMLInputElement;
+    const floor2Ceiling = screen.getByLabelText(
+      "Floor 2 room ceiling height",
+    ) as HTMLInputElement;
+    expect(groundCeiling.value).toBe("2.50");
+    expect(floor2Ceiling.value).toBe("3.00");
   });
 
   it("does not delete when the confirm is dismissed", () => {

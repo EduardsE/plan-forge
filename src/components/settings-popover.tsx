@@ -230,7 +230,7 @@ export function SettingsPopover({
                 aria-label="Delete floor"
                 disabled={!canDeleteFloor}
                 onClick={() => handleDeleteFloor(floor.id, displayName)}
-                className="flex shrink-0 items-center gap-1.5 rounded-[8px] border border-[rgba(214,69,69,0.22)] bg-[rgba(214,69,69,0.05)] px-2.5 py-[9px] text-[12px] text-[var(--danger)] hover:bg-[rgba(214,69,69,0.1)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[rgba(214,69,69,0.05)]"
+                className="flex shrink-0 items-center gap-1.5 rounded-[8px] border border-[color-mix(in_srgb,var(--danger)_22%,transparent)] bg-[color-mix(in_srgb,var(--danger)_5%,transparent)] px-2.5 py-[9px] text-[12px] text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[color-mix(in_srgb,var(--danger)_5%,transparent)]"
               >
                 <Trash2 width={14} height={14} strokeWidth={1.6} />
                 Delete floor
@@ -241,7 +241,9 @@ export function SettingsPopover({
                 <SettingField
                   label="NAME"
                   ariaLabel={
-                    single ? "Room name" : `Room ${roomIndex + 1} name`
+                    single
+                      ? `${floor.defaultName} room name`
+                      : `${floor.defaultName} room ${roomIndex + 1} name`
                   }
                   suffix=""
                   value={room.name ?? "Untitled room"}
@@ -251,8 +253,8 @@ export function SettingsPopover({
                   label="CEILING HEIGHT"
                   ariaLabel={
                     single
-                      ? "Ceiling height"
-                      : `Room ${roomIndex + 1} ceiling height`
+                      ? `${floor.defaultName} room ceiling height`
+                      : `${floor.defaultName} room ${roomIndex + 1} ceiling height`
                   }
                   suffix={unit}
                   mono

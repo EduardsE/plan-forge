@@ -696,11 +696,15 @@ export interface InspectorProps {
   /** The selected wall (either lens): its own SELECTION view with a
    * read-only length readout and an editable thickness field. */
   selectedWall?: WallSelection | null;
-  /** Every floor in the building, ground-first. When there is more than one
-   * floor and nothing is selected, this replaces the room list/overview with
-   * a per-floor breakdown, and the footer's FLOOR stat becomes the building
-   * total with a FLOORS count alongside it. Absent or single-entry on a
-   * one-floor building — nothing changes there. */
+  /** Every floor in the building, ground-first. With more than one entry, the
+   * footer's FLOOR stat always becomes the building's summed area and a
+   * FLOORS count replaces ROOMS/CEILING — that swap holds regardless of
+   * what's selected (a furniture/opening/wall selection on a multi-floor
+   * building still reports the whole building's totals in the footer, not
+   * just the active floor's). Independently, when nothing is selected, the
+   * main pane's room list/overview is replaced by a per-floor breakdown.
+   * Absent or single-entry on a one-floor building — nothing changes
+   * either way. */
   floorSummaries?: Array<{
     id: string;
     name: string;
