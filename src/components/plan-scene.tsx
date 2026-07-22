@@ -207,6 +207,16 @@ function bandRect(solid: WallSolid, span: Span): [Point, Point, Point, Point] {
   ];
 }
 
+/** Every solid's band spans as plan-coordinate shapes — one rect per span,
+ * straddling the edge line, door gaps already excluded by `solidSpans`.
+ * Shared by `WallLayer` (which adds its own junction posts on top) and
+ * `UnderlayLayer` (which draws exactly this and nothing else). */
+function bandShapesOf(solids: WallSolid[]): Shape[] {
+  return solids.flatMap((solid) =>
+    solidSpans(solid).map((span) => shapeFromPoints(bandRect(solid, span))),
+  );
+}
+
 /** A mesh lying flat on the floor built from plan-coordinate shapes. */
 function FlatShape({
   shapes,
@@ -758,9 +768,7 @@ function WallLayer({
   onSelectWall: (edgeId: string) => void;
 }) {
   const wallShapes = useMemo(() => {
-    const shapes = solids.flatMap((solid) =>
-      solidSpans(solid).map((span) => shapeFromPoints(bandRect(solid, span))),
-    );
+    const shapes = bandShapesOf(solids);
     for (const post of posts) {
       shapes.push(shapeFromPoints(post.corners));
     }
@@ -794,19 +802,13 @@ const UNDERLAY_COLOR = "#D4D4CC";
  * The storey directly below the active floor, traced as flat grey wall bands
  * — a non-interactive backdrop shared by the 2D and draw lenses, tracing
  * where the floor below's walls fall so drawing/arranging above it can line
- * up. Reuses `WallLayer`'s own span geometry: door gaps come free because
- * `solid.holes` already split the spans (`solidSpans`), and window slabs
- * stay whole (no opening symbols, no picking — this is scenery, not a wall
- * on *this* floor).
+ * up. Shares `bandShapesOf` with `WallLayer`'s own span geometry (minus its
+ * junction posts): door gaps come free because `solid.holes` already split
+ * the spans (`solidSpans`), and window slabs stay whole (no opening
+ * symbols, no picking — this is scenery, not a wall on *this* floor).
  */
 export function UnderlayLayer({ solids }: { solids: WallSolid[] }) {
-  const shapes = useMemo(
-    () =>
-      solids.flatMap((solid) =>
-        solidSpans(solid).map((span) => shapeFromPoints(bandRect(solid, span))),
-      ),
-    [solids],
-  );
+  const shapes = useMemo(() => bandShapesOf(solids), [solids]);
   if (shapes.length === 0) return null;
   return (
     <FlatShape
