@@ -31,8 +31,6 @@ import type { Unit } from "#/lib/units";
 
 const GHOST_COLOR = "#3a5bf0";
 
-const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
-
 export interface WallMountGhostProps {
   /** The graph floor; the mount targets the nearest fitting edge. */
   floor: Floor;
@@ -40,6 +38,9 @@ export interface WallMountGhostProps {
   unit: Unit;
   /** Snap toggle: off means free slide along the wall (no quantize/guides). */
   snapEnabled: boolean;
+  /** World-space elevation of the active floor — new placements always
+   * target it, so the raycast plane lifts to it (0 on the ground storey). */
+  planeY?: number;
   /** The landing room falls out of where the mounted position lands. */
   onPlace: (result: WallMountResult) => void;
   onCancel: () => void;
@@ -50,6 +51,7 @@ export function WallMountGhost({
   item,
   unit,
   snapEnabled,
+  planeY = 0,
   onPlace,
   onCancel,
 }: WallMountGhostProps) {
@@ -61,6 +63,7 @@ export function WallMountGhost({
   useEffect(() => {
     const raycaster = new Raycaster();
     const hit = new Vector3();
+    const plane = new Plane(new Vector3(0, 1, 0), -planeY);
     /** Floor point under the pointer, or null off-canvas / past the horizon. */
     const toFloor = (event: PointerEvent): Point | null => {
       if (event.target !== gl.domElement) return null;
@@ -71,7 +74,7 @@ export function WallMountGhost({
         -(((event.clientY - rect.top) / rect.height) * 2 - 1),
       );
       raycaster.setFromCamera(ndc, camera);
-      return raycaster.ray.intersectPlane(FLOOR_PLANE, hit)
+      return raycaster.ray.intersectPlane(plane, hit)
         ? { x: hit.x, y: hit.z }
         : null;
     };
@@ -96,7 +99,17 @@ export function WallMountGhost({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [floor, item, elevation, snapEnabled, camera, gl, onPlace, onCancel]);
+  }, [
+    floor,
+    item,
+    elevation,
+    snapEnabled,
+    planeY,
+    camera,
+    gl,
+    onPlace,
+    onCancel,
+  ]);
 
   if (!result) return null;
   const { width, height } = item.footprint;
@@ -114,7 +127,7 @@ export function WallMountGhost({
   ];
 
   return (
-    <group>
+    <group position-y={planeY}>
       <group
         position={[result.position.x, 0, result.position.y]}
         rotation-y={MathUtils.degToRad(result.rotation)}

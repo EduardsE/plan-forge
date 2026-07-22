@@ -39,7 +39,7 @@ import {
 import { LIGHTING, type LightingPreset, type TimeOfDay } from "#/lib/lighting";
 import type {
   Bounds,
-  DerivedRoom,
+  DerivedFloor,
   Floor,
   FurnitureItem,
   FurnitureUpdate,
@@ -49,11 +49,13 @@ import {
   allFurnitureOf,
   floorBounds,
   stackSurfaceHeight,
+  unionBounds,
   wallHeightOf,
 } from "#/lib/model";
 import { modelForCatalogId } from "#/lib/model/models";
 import {
   buildEdgeSolids,
+  ceilingSlabShape,
   type NodePost,
   nodePosts,
   SLAB_THICKNESS,
@@ -372,6 +374,47 @@ function CeilingShadowProxy({
       raycast={noRaycast}
       castShadow
     />
+  );
+}
+
+/** Plaster-white ceiling slab, for a capped lower storey. */
+const CEILING_COLOR = "#f5f2ea";
+
+/**
+ * A capped lower storey's ceiling: the room's interior outline extruded
+ * `SLAB_THICKNESS` up from the wall top, solid and opaque — unlike the
+ * roofless active floor's shadow-only proxy above, this is what the storey
+ * above actually stands on, and it blocks the world-fixed sun from pouring
+ * into the room below through wherever the storey above's cutaway opens up.
+ */
+function CeilingSlab({
+  outline,
+  wallHeight,
+}: {
+  outline: Point[];
+  wallHeight: number;
+}) {
+  const geometry = useMemo(() => {
+    const slab = ceilingSlabShape(outline, []);
+    if (!slab) return null;
+    return new ExtrudeGeometry(slab.shape, {
+      depth: SLAB_THICKNESS,
+      bevelEnabled: false,
+    });
+  }, [outline]);
+
+  if (!geometry) return null;
+  return (
+    <mesh
+      geometry={geometry}
+      rotation-x={-Math.PI / 2}
+      position-y={wallHeight}
+      raycast={noRaycast}
+      receiveShadow
+      castShadow
+    >
+      <meshStandardMaterial color={CEILING_COLOR} roughness={0.92} />
+    </mesh>
   );
 }
 
@@ -764,12 +807,20 @@ function Walls({
   lighting,
   selectedEdgeId,
   onSelectWall,
+  capped = false,
 }: {
   solids: WallSolid[];
   posts: NodePost[];
   lighting: LightingPreset;
   selectedEdgeId: string | null;
   onSelectWall: (edgeId: string) => void;
+  /** A lower stacked storey: every wall (and post) stays full height, always
+   * — both the camera-facing hide and the two-face always-stub rule stand
+   * down. The JSX below already declares that state by default (the "full"
+   * display group has no `visible` override, the "stub" one is `visible=
+   * {false}`), so this just skips the per-frame loop that would otherwise
+   * flip them for the active storey's cutaway. */
+  capped?: boolean;
 }) {
   const displays = useMemo<WallDisplay[]>(
     () => solids.map(() => ({ full: null, stub: null })),
@@ -804,6 +855,7 @@ function Walls({
   const tallRef = useRef<boolean[]>([]);
 
   useFrame(({ camera }) => {
+    if (capped) return;
     const tall = tallRef.current;
     for (const [i, solid] of solids.entries()) {
       const midX = solid.start.x + (solid.dir.x * solid.length) / 2;
@@ -1217,14 +1269,125 @@ function FurnitureBucket({
   );
 }
 
-export interface RoomSceneProps {
-  /** Every derived room of the floor; walls are built from the graph edges. */
-  rooms: DerivedRoom[];
-  /** Furniture that lands in no room (dangling / open-canvas) — rendered and
-   * editable like any other, its membership just reads "—". */
-  unassignedFurniture: FurnitureItem[];
-  /** The graph floor — walls are one solid per edge; mounts re-anchor to it. */
+/** One rendered storey of the 3D stack: a graph floor at its derived
+ * elevation, with `active` marking the one storey that gets today's full
+ * interactive tree (cutaway walls, roofless ceiling proxy) — every entry
+ * below it renders `capped` (solid ceiling, walls always full height). */
+export interface FloorStackEntry {
   floor: Floor;
+  derived: DerivedFloor;
+  elevation: number;
+  storeyHeight: number;
+  active: boolean;
+}
+
+/** One storey's walls/openings/platform/furniture, positioned by its
+ * elevation. `entry.active` switches between today's roofless cutaway tree
+ * and a capped lower storey (solid ceiling slab, no cutaway). */
+function FloorLayer({
+  entry,
+  lighting,
+  selectedId,
+  selectedOpeningId,
+  selectedEdgeId,
+  unit,
+  snapEnabled,
+  onSelectItem,
+  onDragStart,
+  onSelectOpening,
+  onDragOpening,
+  onMoveActiveChange,
+  onSelectWall,
+}: {
+  entry: FloorStackEntry;
+  lighting: LightingPreset;
+  selectedId: string | null;
+  selectedOpeningId: string | null;
+  selectedEdgeId: string | null;
+  unit: Unit;
+  snapEnabled: boolean;
+  onSelectItem: (id: string) => void;
+  onDragStart: (
+    item: FurnitureItem,
+    grabPoint: Point,
+    screen: { x: number; y: number },
+    grabHeight: number,
+  ) => void;
+  onSelectOpening: (id: string) => void;
+  onDragOpening: (id: string, offset: number, bottom: number | null) => void;
+  onMoveActiveChange: (active: boolean) => void;
+  onSelectWall: (edgeId: string) => void;
+}) {
+  // One wall solid per graph edge (dangling walls included), plus filler
+  // posts at the corner/junction nodes — keyed on this entry's own floor/
+  // derived rooms, so an edit confined to another storey never recomputes
+  // this one's geometry.
+  const solids = useMemo(
+    () => buildEdgeSolids(entry.floor, entry.derived.rooms),
+    [entry.floor, entry.derived],
+  );
+  const posts = useMemo(
+    () => nodePosts(entry.floor, solids),
+    [entry.floor, solids],
+  );
+  return (
+    <group position-y={entry.elevation}>
+      <Walls
+        solids={solids}
+        posts={posts}
+        lighting={lighting}
+        selectedEdgeId={selectedEdgeId}
+        onSelectWall={onSelectWall}
+        capped={!entry.active}
+      />
+      <RoomOpenings
+        solids={solids}
+        selectedId={selectedOpeningId}
+        unit={unit}
+        snapEnabled={snapEnabled}
+        onSelect={onSelectOpening}
+        onDrag={onDragOpening}
+        onDragActiveChange={onMoveActiveChange}
+      />
+      {entry.derived.rooms.map((room) => (
+        <group key={room.id}>
+          <Platform outline={room.outline} />
+          {entry.active ? (
+            <CeilingShadowProxy
+              outline={room.outline}
+              height={wallHeightOf(room)}
+            />
+          ) : (
+            <CeilingSlab
+              outline={room.outline}
+              wallHeight={wallHeightOf(room)}
+            />
+          )}
+          <FurnitureBucket
+            furniture={room.furniture}
+            selectedId={selectedId}
+            onSelectItem={onSelectItem}
+            onDragStart={onDragStart}
+          />
+        </group>
+      ))}
+      {entry.derived.unassignedFurniture.length > 0 && (
+        <FurnitureBucket
+          furniture={entry.derived.unassignedFurniture}
+          selectedId={selectedId}
+          onSelectItem={onSelectItem}
+          onDragStart={onDragStart}
+        />
+      )}
+    </group>
+  );
+}
+
+export interface RoomSceneProps {
+  /** Every visible storey, ground-up through the active floor, at its
+   * derived elevation — replaces the single-floor `rooms`/`unassignedFurniture`/
+   * `floor` this scene used to take (the active entry carries their values). */
+  stack: FloorStackEntry[];
   selectedId: string | null;
   /** Opening selection — doors/windows pick and drag in this lens too. */
   selectedOpeningId: string | null;
@@ -1241,7 +1404,8 @@ export interface RoomSceneProps {
   onSelectItem: (id: string) => void;
   /** Live update during a move drag (already snapped; wall items carry
    * mount). Furniture is floor-level — the write-back re-partitions the item
-   * into whichever room now contains it (or the unassigned bucket). */
+   * into whichever room now contains it (or the unassigned bucket); the
+   * route resolves which floor owns `id`. */
   onMoveItem: (id: string, update: FurnitureUpdate) => void;
   /** A move drag started/ended — the canvas locks orbit while it runs. */
   onMoveActiveChange: (active: boolean) => void;
@@ -1253,9 +1417,7 @@ export interface RoomSceneProps {
 }
 
 export function RoomScene({
-  rooms,
-  unassignedFurniture,
-  floor,
+  stack,
   selectedId,
   selectedOpeningId,
   selectedEdgeId,
@@ -1270,41 +1432,82 @@ export function RoomScene({
   onDragOpening,
   onSelectWall,
 }: RoomSceneProps) {
-  // Lights aim at the whole floor's center, so a two-room flat reads as one
-  // warmly lit model rather than per-room hotspots.
-  const bounds = useMemo(() => floorBounds(rooms), [rooms]);
-  // One wall solid per graph edge (dangling walls included), plus filler
-  // posts at the corner/junction nodes — all floor-level now, drawn once.
-  const solids = useMemo(() => buildEdgeSolids(floor, rooms), [floor, rooms]);
-  const posts = useMemo(() => nodePosts(floor, solids), [floor, solids]);
-  // Per-edge wall heights: the ceiling clamp for free-vertical mount drags.
-  const edgeHeights = useMemo(
-    () => new Map(solids.map((solid) => [solid.edgeId, solid.height])),
-    [solids],
+  const activeEntry =
+    stack.find((entry) => entry.active) ?? stack[stack.length - 1] ?? null;
+  // Lights, the camera/pool framing and the contact shadow all cover every
+  // visible storey together, so a tall stack reads as one warmly lit model
+  // instead of a lit ground floor under dark upper storeys.
+  const bounds = useMemo(
+    () =>
+      stack.reduce<Bounds | null>(
+        (acc, entry) => unionBounds(acc, floorBounds(entry.derived.rooms)),
+        null,
+      ),
+    [stack],
   );
   const center: [number, number, number] = bounds
     ? [(bounds.min.x + bounds.max.x) / 2, 0, (bounds.min.y + bounds.max.y) / 2]
     : [0, 0, 0];
-  // Half the floor's bounding diagonal (+1 m margin) — the square shadow
-  // frustum this sizes wraps the room at any sun azimuth.
+  // Half the union bounding diagonal (+1 m margin) — the square shadow
+  // frustum this sizes wraps every visible storey at any sun azimuth.
   const sunRadius = bounds
     ? Math.hypot(bounds.width, bounds.height) / 2 + 1
     : 6;
-  // Selection and drags are floor-wide; the item is found across every room
-  // plus the unassigned bucket, with mount/stack positions already derived.
-  const allFurniture = useMemo(
-    () => allFurnitureOf(rooms, unassignedFurniture),
-    [rooms, unassignedFurniture],
+  // Selection and drags reach across the whole stack: a lower storey's
+  // furniture picks (and drags) through the doorway-side view exactly like
+  // the active floor's. Keyed by floor id so a pick's owning entry (for the
+  // chip's/drag's elevation) is a cheap lookup.
+  const furnitureByFloor = useMemo(
+    () =>
+      new Map(
+        stack.map((entry) => [
+          entry.floor.id,
+          allFurnitureOf(
+            entry.derived.rooms,
+            entry.derived.unassignedFurniture,
+          ),
+        ]),
+      ),
+    [stack],
   );
-  const selectedItem =
-    allFurniture.find((item) => item.id === selectedId) ?? null;
+  const combinedFurniture = useMemo(
+    () => stack.flatMap((entry) => furnitureByFloor.get(entry.floor.id) ?? []),
+    [stack, furnitureByFloor],
+  );
+  const selectedEntry =
+    stack.find((entry) =>
+      (furnitureByFloor.get(entry.floor.id) ?? []).some(
+        (item) => item.id === selectedId,
+      ),
+    ) ?? null;
+  const selectedItem = selectedEntry
+    ? ((furnitureByFloor.get(selectedEntry.floor.id) ?? []).find(
+        (item) => item.id === selectedId,
+      ) ?? null)
+    : null;
   const selectedStackTop = useMemo(
-    () => stackTopsOf(allFurniture),
-    [allFurniture],
+    () => stackTopsOf(combinedFurniture),
+    [combinedFurniture],
   );
 
   const { drag, beginDrag, endDrag } = useMoveDrag(onMoveActiveChange);
   const lighting = LIGHTING[timeOfDay];
+  // The drag session's data (which floor's furniture/graph it snaps and
+  // contains against) comes from the entry that OWNS `drag.floorId` — the
+  // active floor when the drag started there, a lower one when it started
+  // through a doorway-side pick. Its guides/highlight render in a group at
+  // that entry's elevation so they land on the right storey's platform.
+  const dragEntry = drag
+    ? (stack.find((entry) => entry.floor.id === drag.floorId) ?? activeEntry)
+    : null;
+  const dragFloor = dragEntry?.floor ?? null;
+  const dragDerived = dragEntry?.derived ?? null;
+  const dragEdgeHeights = useMemo(() => {
+    if (!dragFloor || !dragDerived) return undefined;
+    const solids = buildEdgeSolids(dragFloor, dragDerived.rooms);
+    return new Map(solids.map((solid) => [solid.edgeId, solid.height]));
+  }, [dragFloor, dragDerived]);
+
   return (
     <group>
       {/* The time-of-day preset drives all four lights. Ambient + key + fill sit
@@ -1330,85 +1533,73 @@ export function RoomScene({
         elevationDeg={lighting.sun.elevationDeg}
         azimuth={MathUtils.degToRad(sunAnchorDeg + lighting.sun.rakeDeg)}
       />
+      {/* One shadow for the whole stack, grounded at the studio pool (y≈0) —
+          not per storey, which would stack dark seams under a tall model. */}
       {bounds && <FloorContactShadow bounds={bounds} />}
-      <Walls
-        solids={solids}
-        posts={posts}
-        lighting={lighting}
-        selectedEdgeId={selectedEdgeId}
-        onSelectWall={onSelectWall}
-      />
-      <RoomOpenings
-        solids={solids}
-        selectedId={selectedOpeningId}
-        unit={unit}
-        snapEnabled={snapEnabled}
-        onSelect={onSelectOpening}
-        onDrag={onDragOpening}
-        onDragActiveChange={onMoveActiveChange}
-      />
-      {rooms.map((room) => (
-        <group key={room.id}>
-          <Platform outline={room.outline} />
-          <CeilingShadowProxy
-            outline={room.outline}
-            height={wallHeightOf(room)}
-          />
-          <FurnitureBucket
-            furniture={room.furniture}
-            selectedId={selectedId}
-            onSelectItem={onSelectItem}
-            onDragStart={beginDrag}
-          />
-        </group>
-      ))}
-      {unassignedFurniture.length > 0 && (
-        <FurnitureBucket
-          furniture={unassignedFurniture}
+      {stack.map((entry) => (
+        <FloorLayer
+          key={entry.floor.id}
+          entry={entry}
+          lighting={lighting}
           selectedId={selectedId}
+          selectedOpeningId={selectedOpeningId}
+          selectedEdgeId={selectedEdgeId}
+          unit={unit}
+          snapEnabled={snapEnabled}
           onSelectItem={onSelectItem}
-          onDragStart={beginDrag}
+          onDragStart={(item, grabPoint, screen, grabHeight) =>
+            beginDrag(
+              item,
+              grabPoint,
+              screen,
+              grabHeight,
+              entry.floor.id,
+              entry.elevation,
+            )
+          }
+          onSelectOpening={onSelectOpening}
+          onDragOpening={onDragOpening}
+          onMoveActiveChange={onMoveActiveChange}
+          onSelectWall={onSelectWall}
         />
-      )}
-      {selectedItem && (
+      ))}
+      {selectedItem && selectedEntry && (
         <SelectionChip
           item={selectedItem}
           // Mounted items hang up the wall and riders stand on furniture;
           // anchor the chip above the elevated body instead of the default
-          // floor-relative top.
-          anchor={
-            selectedItem.mount
-              ? [
-                  selectedItem.position.x,
-                  selectedItem.mount.elevation +
-                    selectedItem.footprint.height / 2 +
-                    0.14,
-                  selectedItem.position.y,
-                ]
-              : selectedStackTop.has(selectedItem.id)
-                ? [
-                    selectedItem.position.x,
-                    (selectedStackTop.get(selectedItem.id) ?? 0) +
-                      selectedItem.footprint.height +
-                      0.14,
-                    selectedItem.position.y,
-                  ]
-                : undefined
-          }
+          // floor-relative top — and always add the owning storey's
+          // elevation, since the chip renders outside any per-entry group.
+          anchor={[
+            selectedItem.position.x,
+            selectedEntry.elevation +
+              (selectedItem.mount
+                ? selectedItem.mount.elevation +
+                  selectedItem.footprint.height / 2 +
+                  0.14
+                : selectedStackTop.has(selectedItem.id)
+                  ? (selectedStackTop.get(selectedItem.id) ?? 0) +
+                    selectedItem.footprint.height +
+                    0.14
+                  : selectedItem.footprint.height + 0.12),
+            selectedItem.position.y,
+          ]}
         />
       )}
-      {drag && (
-        <MoveDragSession
-          furniture={allFurniture}
-          floor={floor}
-          drag={drag}
-          unit={unit}
-          snapEnabled={snapEnabled}
-          freeVerticalMounts
-          edgeHeights={edgeHeights}
-          onMove={(update) => onMoveItem(drag.id, update)}
-          onEnd={endDrag}
-        />
+      {drag && dragEntry && (
+        <group position-y={dragEntry.elevation}>
+          <MoveDragSession
+            furniture={furnitureByFloor.get(dragEntry.floor.id) ?? []}
+            floor={dragEntry.floor}
+            drag={drag}
+            unit={unit}
+            snapEnabled={snapEnabled}
+            freeVerticalMounts
+            edgeHeights={dragEdgeHeights}
+            onMove={(update) => onMoveItem(drag.id, update)}
+            onEnd={endDrag}
+          />
+        </group>
       )}
     </group>
   );

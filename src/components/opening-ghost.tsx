@@ -29,8 +29,6 @@ import type { Unit } from "#/lib/units";
 
 const GHOST_COLOR = "#3a5bf0";
 
-const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
-
 export interface OpeningGhostProps {
   /** The graph floor — the insert targets the nearest fitting edge. */
   floor: Floor;
@@ -41,6 +39,9 @@ export interface OpeningGhostProps {
   unit: Unit;
   /** Snap toggle: off means free slide along the wall (no quantize/guides). */
   snapEnabled: boolean;
+  /** World-space elevation of the active floor — new placements always
+   * target it, so the raycast plane lifts to it (0 on the ground storey). */
+  planeY?: number;
   onPlace: (kind: OpeningKind, placement: OpeningPlacement) => void;
   onCancel: () => void;
 }
@@ -51,6 +52,7 @@ export function OpeningGhost({
   item,
   unit,
   snapEnabled,
+  planeY = 0,
   onPlace,
   onCancel,
 }: OpeningGhostProps) {
@@ -67,6 +69,7 @@ export function OpeningGhost({
   useEffect(() => {
     const raycaster = new Raycaster();
     const hit = new Vector3();
+    const plane = new Plane(new Vector3(0, 1, 0), -planeY);
     /** Floor point under the pointer, or null off-canvas / past the horizon. */
     const toFloor = (event: PointerEvent): Point | null => {
       if (event.target !== gl.domElement) return null;
@@ -77,7 +80,7 @@ export function OpeningGhost({
         -(((event.clientY - rect.top) / rect.height) * 2 - 1),
       );
       raycaster.setFromCamera(ndc, camera);
-      return raycaster.ray.intersectPlane(FLOOR_PLANE, hit)
+      return raycaster.ray.intersectPlane(plane, hit)
         ? { x: hit.x, y: hit.z }
         : null;
     };
@@ -101,7 +104,7 @@ export function OpeningGhost({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [solids, width, kind, snapEnabled, camera, gl, onPlace, onCancel]);
+  }, [solids, width, kind, snapEnabled, planeY, camera, gl, onPlace, onCancel]);
 
   if (!placement) return null;
   const { solid, offset } = placement;
@@ -110,7 +113,7 @@ export function OpeningGhost({
   const { bottom, top } = defaultVerticals(kind);
 
   return (
-    <group>
+    <group position-y={planeY}>
       <group
         position={[center.x, (bottom + top) / 2, center.y]}
         rotation-y={-Math.atan2(solid.dir.y, solid.dir.x)}

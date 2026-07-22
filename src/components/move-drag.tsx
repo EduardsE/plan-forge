@@ -50,6 +50,13 @@ export const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 /** A live move drag: which item, where it was grabbed, where it started. */
 export interface MoveDrag {
   id: string;
+  /** Id of the floor that owns the dragged item — the 3D stack's lower
+   * entries drag their own storey; the 2D lens's single floor always owns
+   * its own drags too (its `beginDrag` calls omit this, defaulting to ""). */
+  floorId: string;
+  /** World-space elevation of the owning floor (0 for the ground storey and
+   * for every 2D-lens drag, which has no stack). */
+  elevation: number;
   /** Grab offset from the item's center, plan coords — dragging keeps it. */
   grab: Point;
   /**
@@ -215,9 +222,16 @@ export function useMoveDrag(onMoveActiveChange: (active: boolean) => void) {
       screen: { x: number; y: number },
       /** World-space height of the grab point (0 for the flat 2D lens). */
       grabHeight = 0,
+      /** Owning floor id + its elevation (3D stack only; the 2D lens omits
+       * these, so its drags default to the single-floor ""/0 the caller's
+       * own `floor` prop already resolves without consulting them). */
+      floorId = "",
+      elevation = 0,
     ) => {
       setDrag({
         id: item.id,
+        floorId,
+        elevation,
         grab: {
           x: grabPoint.x - item.position.x,
           y: grabPoint.y - item.position.y,

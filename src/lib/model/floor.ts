@@ -111,6 +111,17 @@ export function floorBounds(rooms: Room[]): Bounds | null {
   return { min, max, width: max.x - min.x, height: max.y - min.y };
 }
 
+/** Bounding box containing both `a` and `b`, or whichever is non-null when
+ * the other is null, or null when both are. Used to union camera/pool/shadow
+ * framing across every visible storey of a multifloor stack. */
+export function unionBounds(a: Bounds | null, b: Bounds | null): Bounds | null {
+  if (!a) return b;
+  if (!b) return a;
+  const min = { x: Math.min(a.min.x, b.min.x), y: Math.min(a.min.y, b.min.y) };
+  const max = { x: Math.max(a.max.x, b.max.x), y: Math.max(a.max.y, b.max.y) };
+  return { min, max, width: max.x - min.x, height: max.y - min.y };
+}
+
 /** Summed floor area of every room, m² (degenerate outlines count 0). */
 export function totalFloorArea(rooms: Room[]): number {
   return rooms.reduce((sum, room) => sum + floorArea(room.outline), 0);

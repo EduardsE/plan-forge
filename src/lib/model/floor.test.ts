@@ -8,6 +8,7 @@ import {
   roomOfFurniture,
   totalFloorArea,
   totalPerimeter,
+  unionBounds,
   updateFloorFurniture,
 } from "./floor";
 import { addFurniture } from "./furniture";
@@ -136,5 +137,44 @@ describe("floor totals", () => {
     ];
     expect(totalFloorArea(withEmpty)).toBeCloseTo(42.28, 10);
     expect(totalPerimeter(withEmpty)).toBeCloseTo(35.2, 10);
+  });
+});
+
+describe("unionBounds", () => {
+  it("unions two overlapping boxes", () => {
+    const a = { min: { x: 0, y: 0 }, max: { x: 4, y: 3 }, width: 4, height: 3 };
+    const b = { min: { x: 2, y: 1 }, max: { x: 6, y: 5 }, width: 4, height: 4 };
+    expect(unionBounds(a, b)).toEqual({
+      min: { x: 0, y: 0 },
+      max: { x: 6, y: 5 },
+      width: 6,
+      height: 5,
+    });
+  });
+
+  it("unions two disjoint boxes into their bounding box", () => {
+    const a = { min: { x: 0, y: 0 }, max: { x: 1, y: 1 }, width: 1, height: 1 };
+    const b = {
+      min: { x: 10, y: 10 },
+      max: { x: 12, y: 11 },
+      width: 2,
+      height: 1,
+    };
+    expect(unionBounds(a, b)).toEqual({
+      min: { x: 0, y: 0 },
+      max: { x: 12, y: 11 },
+      width: 12,
+      height: 11,
+    });
+  });
+
+  it("passes either bounds through when the other is null", () => {
+    const a = { min: { x: 0, y: 0 }, max: { x: 4, y: 3 }, width: 4, height: 3 };
+    expect(unionBounds(a, null)).toBe(a);
+    expect(unionBounds(null, a)).toBe(a);
+  });
+
+  it("returns null when both are null", () => {
+    expect(unionBounds(null, null)).toBeNull();
   });
 });

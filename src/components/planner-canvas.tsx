@@ -26,6 +26,7 @@ import type { DrawTool } from "#/components/draw-tool-stack";
 import { OpeningGhost } from "#/components/opening-ghost";
 import { PlacementGhost } from "#/components/placement-ghost";
 import { PlanScene } from "#/components/plan-scene";
+import type { FloorStackEntry } from "#/components/room-scene";
 import { RoomScene } from "#/components/room-scene";
 import { WallMountGhost } from "#/components/wall-mount-ghost";
 import {
@@ -44,8 +45,12 @@ import {
   addFurniture,
   allFurnitureOf,
   type Bounds,
+  type Building,
   type CatalogItem,
+  DEFAULT_WALL_HEIGHT,
+  type DerivedFloor,
   type DerivedRoom,
+  deriveFloor,
   dragOpeningTo,
   edgeCeiling,
   type Floor,
@@ -54,6 +59,8 @@ import {
   flipFloorOpeningHinge,
   flipFloorOpeningSide,
   floorBounds,
+  floorIndexOf,
+  floorOfItem,
   isOpeningItem,
   isWallItem,
   moveFloorOpening,
@@ -63,8 +70,12 @@ import {
   removeFloorOpening,
   resizeFloorOpening,
   type Stack,
+  storeyElevation,
+  storeyHeightOf,
+  unionBounds,
   updateFloorFurniture,
   updateFurniture,
+  wallHeightOf,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
 import { OPENING_GRID, type OpeningPlacement } from "#/lib/opening-place";
@@ -101,6 +112,10 @@ const ZOOM_STEP = 1.25;
 const PLAN_CAMERA_HEIGHT = 30;
 
 const TRANSITION_MS = 600;
+/** How fast the orbit target's height eases toward `focusHeight` (a floor
+ * switch's new storey, or first mount) — quick enough to feel like a snap
+ * reframe, not a slow drift. */
+const FOCUS_HEIGHT_EASE_MS = 300;
 /**
  * Fov the perspective camera narrows to at the top-down end of a lens
  * transition; tight enough that swapping to the true orthographic
@@ -188,6 +203,11 @@ function lerpPose(from: CameraPose, to: CameraPose, k: number): CameraPose {
 interface CameraRigProps {
   /** Whole-floor bounding box the cameras frame (every room together). */
   bounds: Bounds | null;
+  /** World-space height the orbit target eases toward (the active storey's
+   * mid-wall height) — the perspective camera's pivot, so a stacked building
+   * frames its top floor instead of orbiting around the ground plane
+   * underneath it. The plan camera ignores it (top-down). */
+  focusHeight: number;
   planView: boolean;
   /**
    * Which camera actually renders — owned by the parent so the scene
@@ -206,6 +226,7 @@ interface CameraRigProps {
 
 function CameraRig({
   bounds,
+  focusHeight,
   planView,
   renderPlan,
   onRenderPlanChange: setRenderPlan,
@@ -365,7 +386,10 @@ function CameraRig({
 
   const zoomToFit = useCallback(() => {
     if (transitionRef.current) return;
-    target.set(center.x, 0, center.z);
+    // The plan camera looks straight down — target height doesn't frame
+    // anything there, so it stays at the floor plane; the perspective
+    // camera re-centers on the active storey's focus height.
+    target.set(center.x, renderPlan ? 0 : focusHeight, center.z);
     controlsRef.current?.target.copy(target);
     if (renderPlan) {
       fitOrtho();
@@ -374,7 +398,15 @@ function CameraRig({
     }
     controlsRef.current?.update();
     publish();
-  }, [renderPlan, center, target, fitOrtho, fitPerspective, publish]);
+  }, [
+    renderPlan,
+    center,
+    focusHeight,
+    target,
+    fitOrtho,
+    fitPerspective,
+    publish,
+  ]);
 
   const applyZoom = useCallback(
     (factor: number) => {
@@ -506,6 +538,22 @@ function CameraRig({
   }, [planView, size, fitRadius, target, setRenderPlan]);
 
   useFrame((_, delta) => {
+    // The orbit target's height eases toward the active storey's focus
+    // point whenever the perspective camera is live and no lens transition
+    // is flying (a transition's own target is pinned to the matched
+    // top-down endpoint) — a floor switch glides the pivot up or down
+    // instead of snapping. The plan camera looks straight down, so its
+    // target height never needs to chase this.
+    if (!transitionRef.current && !renderPlan) {
+      const diff = focusHeight - target.y;
+      if (Math.abs(diff) > 1e-4) {
+        const k = 1 - Math.exp((-delta * 1000) / FOCUS_HEIGHT_EASE_MS);
+        target.y += diff * k;
+        controlsRef.current?.target.copy(target);
+        controlsRef.current?.update();
+        publish();
+      }
+    }
     const transition = transitionRef.current;
     const perspective = perspectiveRef.current;
     if (!transition || !perspective) return;
@@ -603,7 +651,7 @@ function CameraRig({
         // `enabled` prop alone flushes after OrbitControls has already
         // accepted the gesture and eaten the first pointermoves.
         makeDefault
-        target={[target.x, 0, target.z]}
+        target={[target.x, target.y, target.z]}
         enabled={!transitioning && !locked}
         enableRotate={!renderPlan}
         minDistance={PERSPECTIVE_MIN_DISTANCE}
@@ -624,6 +672,15 @@ function CameraRig({
 const CLICK_SLOP_PX = 4;
 
 export interface PlannerCanvasProps {
+  /** The whole building — the 3D lens stacks every floor from the ground up
+   * through the active one (a Sims-style slice), capping every storey below
+   * the active one with a solid ceiling. */
+  building: Building;
+  activeFloorId: string;
+  /** Every floor's derived rooms, reused across renders for any floor whose
+   * graph didn't change (`deriveFloorsCached`) — the 3D stack builds its
+   * per-storey entries from this instead of re-deriving. */
+  derivedByFloor: Map<string, DerivedFloor>;
   floor: Floor;
   /** The floor's derived rooms — scenes render these; "which room" for an
    * edit resolves from them. */
@@ -633,8 +690,10 @@ export interface PlannerCanvasProps {
   unassignedFurniture: FurnitureItem[];
   /** A discrete whole-floor mutation (opening edits, drops) — one undo step. */
   onFloorChange: (floor: Floor) => void;
-  /** A mid-drag whole-floor state (opening slide) — not its own step. */
-  onFloorPreview: (floor: Floor) => void;
+  /** A mid-drag whole-floor state (opening slide, furniture move) — not its
+   * own step. `floorId` targets a floor other than the active one (the 3D
+   * stack's cross-floor furniture drags); omitted, it defaults to active. */
+  onFloorPreview: (floor: Floor, floorId?: string) => void;
   /** A room drag began/ended (however) — the route settles the previews
    * into one step on end, and stands its keyboard editing down meanwhile. */
   onRoomDragActiveChange: (active: boolean) => void;
@@ -683,6 +742,9 @@ export interface PlannerCanvasProps {
 }
 
 export function PlannerCanvas({
+  building,
+  activeFloorId,
+  derivedByFloor,
   floor,
   rooms,
   unassignedFurniture,
@@ -746,8 +808,37 @@ export function PlannerCanvas({
     },
     [onRoomDragActiveChange],
   );
-  // Whole-floor camera framing: every room's outline together.
-  const bounds = useMemo(() => floorBounds(rooms), [rooms]);
+  // The 3D lens's stack: every floor from the ground up through the active
+  // one, at its derived elevation — a Sims-style slice (floors above the
+  // active one never render). The 2D/draw lenses and placement ignore this
+  // entirely; they keep reading the active-floor `floor`/`rooms` props.
+  const stack: FloorStackEntry[] = useMemo(() => {
+    const activeIndex = floorIndexOf(building, activeFloorId);
+    return building.floors.slice(0, activeIndex + 1).map((f, i) => ({
+      floor: f,
+      derived: derivedByFloor.get(f.id) ?? deriveFloor(f),
+      elevation: storeyElevation(building, i),
+      storeyHeight: storeyHeightOf(f),
+      active: i === activeIndex,
+    }));
+  }, [building, activeFloorId, derivedByFloor]);
+  // Whole-*stack* camera framing: every visible storey's rooms together, so
+  // a tall building doesn't get cropped to the ground floor's footprint.
+  const bounds = useMemo(
+    () =>
+      stack.reduce<Bounds | null>(
+        (acc, entry) => unionBounds(acc, floorBounds(entry.derived.rooms)),
+        null,
+      ),
+    [stack],
+  );
+  // The orbit target's height the camera rig eases toward: the active
+  // storey's mid-wall height, so a stacked building frames its top floor
+  // instead of orbiting around the ground plane underneath it.
+  const activeElevation = stack.length ? stack[stack.length - 1].elevation : 0;
+  const focusHeight =
+    activeElevation +
+    (rooms[0] ? wallHeightOf(rooms[0]) : DEFAULT_WALL_HEIGHT) / 2;
   // Every derived furniture item (rooms' + unassigned) — the placement ghost
   // snaps against all of them, floor-wide.
   const allFurniture = useMemo(
@@ -784,16 +875,21 @@ export function PlannerCanvas({
     // Streams per pointermove — a preview, folded into one history step when
     // the drag session releases the camera controls below. Furniture is
     // floor-level (membership is a derived readout), so a move is just a
-    // position patch on `floor.furniture`; deriveFloor re-partitions the item
-    // into whichever room now contains it — or the unassigned bucket.
+    // position patch on the *owning* floor's furniture; deriveFloor
+    // re-partitions the item into whichever room now contains it — or the
+    // unassigned bucket. The 2D lens only ever drags the active floor's own
+    // items, so `floorOfItem` resolves to `floor` there too — this one path
+    // covers both lenses without a separate cross-floor branch.
     (id: string, update: FurnitureUpdate) => {
+      const ownerFloor = floorOfItem(building, id) ?? floor;
       onFloorPreview(
-        updateFloorFurniture(floor, (room) =>
+        updateFloorFurniture(ownerFloor, (room) =>
           updateFurniture(room, id, update),
         ),
+        ownerFloor.id,
       );
     },
-    [floor, onFloorPreview],
+    [building, floor, onFloorPreview],
   );
 
   // A door/window card released on a wall (the ghost resolved the host edge,
@@ -980,6 +1076,7 @@ export function PlannerCanvas({
       >
         <CameraRig
           bounds={bounds}
+          focusHeight={focusHeight}
           planView={planView}
           renderPlan={renderPlan}
           onRenderPlanChange={setRenderPlan}
@@ -1049,9 +1146,7 @@ export function PlannerCanvas({
           )
         ) : (
           <RoomScene
-            rooms={rooms}
-            unassignedFurniture={unassignedFurniture}
-            floor={floor}
+            stack={stack}
             selectedId={selectedId}
             selectedOpeningId={selectedOpeningId}
             selectedEdgeId={selectedEdgeId}
@@ -1079,6 +1174,7 @@ export function PlannerCanvas({
               item={placingItem}
               unit={unit}
               snapEnabled={snapEnabled}
+              planeY={activeElevation}
               onPlace={placeOpeningItem}
               onCancel={onPlacingEnd}
             />
@@ -1088,6 +1184,7 @@ export function PlannerCanvas({
               item={placingItem}
               unit={unit}
               snapEnabled={snapEnabled}
+              planeY={activeElevation}
               onPlace={placeMountedItem}
               onCancel={onPlacingEnd}
             />
@@ -1098,6 +1195,7 @@ export function PlannerCanvas({
               item={placingItem}
               unit={unit}
               snapEnabled={snapEnabled}
+              planeY={activeElevation}
               onPlace={placeDraggedItem}
               onCancel={onPlacingEnd}
             />

@@ -44,6 +44,7 @@ import { DEFAULT_TIME_OF_DAY, LIGHTING, type TimeOfDay } from "#/lib/lighting";
 import {
   addFloorAbove,
   allFurnitureOf,
+  type Bounds,
   type Building,
   type CatalogItem,
   createFloor,
@@ -92,6 +93,7 @@ import {
   setRoomWallHeight,
   shiftOpeningVertical,
   totalFloorArea,
+  unionBounds,
   updateDerivedRoom,
   updateFloorFurniture,
   updateFloorIn,
@@ -233,7 +235,11 @@ function Planner() {
     [commitFloor],
   );
   const previewFloor = useCallback(
-    (next: Floor) => previewFloorIn(activeFloorIdRef.current, () => next),
+    // `floorId` targets a floor other than the active one (the 3D stack's
+    // cross-floor furniture drags land here via the canvas's `onFloorPreview`);
+    // omitted, it defaults to the active floor, unchanged from before.
+    (next: Floor, floorId?: string) =>
+      previewFloorIn(floorId ?? activeFloorIdRef.current, () => next),
     [previewFloorIn],
   );
   // One derived room's discrete mutation, addressed by floor + room id — one
@@ -284,17 +290,32 @@ function Planner() {
   // Selection is floor-wide: the item is found across every room plus the
   // unassigned (open-canvas) bucket, and its room membership is a readout.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const allFurniture = useMemo(
-    () => allFurnitureOf(derived.rooms, derived.unassignedFurniture),
-    [derived],
+  // Selection can land on any floor now (a 3D-stack pick through a lower
+  // storey's doorway-side view) — every readout below resolves the item's
+  // *owning* floor rather than assuming the active one, falling back to the
+  // active floor when nothing is selected (or the id is stale).
+  const selectedFloor = selectedId
+    ? (floorOfItem(building, selectedId) ?? floor)
+    : floor;
+  const selectedFloorDerived =
+    selectedFloor === floor
+      ? derived
+      : (derivedByFloor.get(selectedFloor.id) ?? deriveFloor(selectedFloor));
+  const selectedFloorFurniture = useMemo(
+    () =>
+      allFurnitureOf(
+        selectedFloorDerived.rooms,
+        selectedFloorDerived.unassignedFurniture,
+      ),
+    [selectedFloorDerived],
   );
   const selectedItem = selectedId
-    ? (allFurniture.find((item) => item.id === selectedId) ?? null)
+    ? (selectedFloorFurniture.find((item) => item.id === selectedId) ?? null)
     : null;
   const selectedRoom = selectedId
-    ? (roomOfFurniture(derived.rooms, selectedId) ?? null)
+    ? (roomOfFurniture(selectedFloorDerived.rooms, selectedId) ?? null)
     : null;
-  const multiRoom = derived.rooms.length > 1;
+  const multiRoom = selectedFloorDerived.rooms.length > 1;
   // Membership readout for the inspector/status bar: the room name on a
   // multi-room floor, "—" when the item sits in no room, else hidden.
   const selectedRoomName = selectedItem
@@ -307,8 +328,9 @@ function Planner() {
   const selectedHostName =
     selectedItem?.stack != null
       ? furnitureDisplayName(
-          allFurniture.find((f) => f.id === selectedItem.stack?.hostId)
-            ?.catalogId ?? "",
+          selectedFloorFurniture.find(
+            (f) => f.id === selectedItem.stack?.hostId,
+          )?.catalogId ?? "",
         )
       : null;
   const selectedWallHeight = selectedRoom
@@ -326,12 +348,20 @@ function Planner() {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const selectedWall = useMemo(() => {
     if (!selectedEdgeId || viewMode === "draw") return null;
-    const edge = floor.edges.find((e) => e.id === selectedEdgeId);
+    // A wall pick can land on any storey (the 3D stack's lower entries pick
+    // too) — resolve the owning floor rather than assuming the active one.
+    const owner = floorOfEdge(building, selectedEdgeId);
+    if (!owner) return null;
+    const edge = owner.edges.find((e) => e.id === selectedEdgeId);
     if (!edge) return null;
-    const a = floor.nodes.find((n) => n.id === edge.a);
-    const b = floor.nodes.find((n) => n.id === edge.b);
+    const a = owner.nodes.find((n) => n.id === edge.a);
+    const b = owner.nodes.find((n) => n.id === edge.b);
     if (!a || !b) return null;
-    const faces = derived.rooms.filter((r) =>
+    const ownerDerived =
+      owner === floor
+        ? derived
+        : (derivedByFloor.get(owner.id) ?? deriveFloor(owner));
+    const faces = ownerDerived.rooms.filter((r) =>
       r.wallRefs.some((ref) => ref.edgeId === edge.id),
     ).length;
     const twoFace = faces === 2;
@@ -341,7 +371,7 @@ function Planner() {
       thickness: twoFace ? WALL_THICKNESS : (edge.thickness ?? WALL_THICKNESS),
       twoFace,
     };
-  }, [selectedEdgeId, viewMode, floor, derived]);
+  }, [selectedEdgeId, viewMode, building, floor, derived, derivedByFloor]);
   const setWallThickness = useCallback(
     (meters: number) => {
       if (!selectedEdgeId) return;
@@ -359,8 +389,16 @@ function Planner() {
   // furnish lenses.
   const selectedOpening = useMemo(() => {
     if (!selectedOpeningId || viewMode === "draw") return null;
-    const opening = floor.openings.find((o) => o.id === selectedOpeningId);
+    // Same cross-storey resolution as the wall/furniture selections: an
+    // opening pick can land on any floor of the 3D stack.
+    const owner = floorOfOpening(building, selectedOpeningId);
+    if (!owner) return null;
+    const opening = owner.openings.find((o) => o.id === selectedOpeningId);
     if (!opening) return null;
+    const ownerDerived =
+      owner === floor
+        ? derived
+        : (derivedByFloor.get(owner.id) ?? deriveFloor(owner));
     const { bottom, top } = openingVerticals(opening);
     const sill = openingSill(opening);
     return {
@@ -369,14 +407,14 @@ function Planner() {
       top,
       sillOverhang: sill.overhang,
       sillMaterial: sill.material,
-      ceiling: edgeCeiling(derived.rooms, opening.edgeId),
-      connects: portalLabel(derived.rooms, floor, opening.id),
+      ceiling: edgeCeiling(ownerDerived.rooms, opening.edgeId),
+      connects: portalLabel(ownerDerived.rooms, owner, opening.id),
       twoFace:
-        derived.rooms.filter((r) =>
+        ownerDerived.rooms.filter((r) =>
           r.wallRefs.some((ref) => ref.edgeId === opening.edgeId),
         ).length === 2,
     };
-  }, [selectedOpeningId, viewMode, derived, floor]);
+  }, [selectedOpeningId, viewMode, building, floor, derived, derivedByFloor]);
   const portalStatus = useMemo(() => {
     if (!selectedOpening?.connects) return null;
     const kind = selectedOpening.opening.kind === "door" ? "Door" : "Window";
@@ -1175,6 +1213,20 @@ function Planner() {
     [building, derivedByFloor],
   );
 
+  // Every floor the 3D stack renders (ground-up through the active one) —
+  // the same slice `PlannerCanvas` builds its `stack` from — union-bounded
+  // for the pool sizing below, so a tall building's spotlight pool covers
+  // the whole visible model, not just the active storey's footprint.
+  const visibleFloorsBounds = useMemo(() => {
+    const activeIndex = Math.max(floorIndexOf(building, activeFloorId), 0);
+    return building.floors
+      .slice(0, activeIndex + 1)
+      .reduce<Bounds | null>(
+        (acc, f) =>
+          unionBounds(acc, floorBounds(derivedByFloor.get(f.id)?.rooms ?? [])),
+        null,
+      );
+  }, [building, activeFloorId, derivedByFloor]);
   // Studio pool sized to the whole-floor bbox: at fit zoom the model's
   // on-screen extent scales with each plan axis over the diagonal, so the
   // 3D lens's pool ellipse follows the same ratios (a wide flat gets a
@@ -1182,7 +1234,7 @@ function Planner() {
   // pool for its 6.40 × 5.20 room; absent bounds fall back to that in CSS.
   const canvasStyle = useMemo(() => {
     const style: Record<string, string> = { gridArea: "canvas" };
-    const bounds = floorBounds(derived.rooms);
+    const bounds = visibleFloorsBounds;
     if (bounds && bounds.width > 0 && bounds.height > 0) {
       const diagonal = Math.hypot(bounds.width, bounds.height);
       const w = Math.round((70 * bounds.width) / diagonal);
@@ -1197,7 +1249,7 @@ function Planner() {
     style["--pool-1"] = pool1;
     style["--pool-2"] = pool2;
     return style;
-  }, [derived.rooms, timeOfDay]);
+  }, [visibleFloorsBounds, timeOfDay]);
 
   return (
     // The library column animates 0 ↔ 306px (the track count stays constant
@@ -1256,6 +1308,9 @@ function Planner() {
         {canvasReady && (
           <Suspense fallback={null}>
             <PlannerCanvas
+              building={building}
+              activeFloorId={activeFloorId}
+              derivedByFloor={derivedByFloor}
               floor={floor}
               rooms={derived.rooms}
               unassignedFurniture={derived.unassignedFurniture}

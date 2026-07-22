@@ -11,6 +11,7 @@ import {
 import { makeFloor, makeLRoom } from "#/lib/model/test-fixtures";
 import {
   buildEdgeSolids,
+  ceilingSlabShape,
   DOOR_HEIGHT,
   faceOutwardOffset,
   nodePosts,
@@ -436,5 +437,53 @@ describe("sillBox", () => {
     const door = be?.holes.find((h) => h.id === "door-BE");
     if (!be || !door) throw new Error("fixture door missing");
     expect(sillBox(be, door)).toBeNull();
+  });
+});
+
+describe("ceilingSlabShape", () => {
+  const rect: Point[] = [
+    { x: 0, y: 0 },
+    { x: 4, y: 0 },
+    { x: 4, y: 3 },
+    { x: 0, y: 3 },
+  ];
+
+  it("returns a shape whose bounding box matches a 4×3 outline", () => {
+    const result = ceilingSlabShape(rect, []);
+    if (!result) throw new Error("shape missing");
+    const points = result.shape.getPoints();
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(4, 9);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(3, 9);
+    expect(result.shape.holes).toHaveLength(0);
+  });
+
+  it("carries one hole path per rectangular hole", () => {
+    const hole: Point[] = [
+      { x: 1, y: 1 },
+      { x: 2, y: 1 },
+      { x: 2, y: 2 },
+      { x: 1, y: 2 },
+    ];
+    const result = ceilingSlabShape(rect, [hole]);
+    if (!result) throw new Error("shape missing");
+    expect(result.shape.holes).toHaveLength(1);
+    const points = result.shape.holes[0].getPoints();
+    const xs = points.map((p) => p.x);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(1, 9);
+  });
+
+  it("is null for a degenerate outline", () => {
+    expect(
+      ceilingSlabShape(
+        [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+        ],
+        [],
+      ),
+    ).toBeNull();
+    expect(ceilingSlabShape([], [])).toBeNull();
   });
 });

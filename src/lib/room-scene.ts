@@ -1,3 +1,4 @@
+import { Path, Shape } from "three";
 import type { DerivedRoom } from "#/lib/model";
 import {
   DEFAULT_WALL_HEIGHT,
@@ -469,6 +470,38 @@ export function nodePosts(floor: Floor, solids: WallSolid[]): NodePost[] {
     });
   }
   return posts;
+}
+
+/**
+ * A capped lower storey's ceiling slab, ready to extrude: the room's interior
+ * outline as a three `Shape`, with one `Path` hole per void in `holes` (empty
+ * until V7 wires stair voids through). Plan y is mirrored to world z, the same
+ * convention `Platform`'s `planShape` uses, so the caller can extrude it the
+ * same way (rotate -90° about x, sink by the extrusion depth to land the top
+ * cap where it belongs). Null for a degenerate (< 3 point) outline.
+ */
+export function ceilingSlabShape(
+  outline: Point[],
+  holes: Point[][],
+): { shape: Shape } | null {
+  if (outline.length < 3) return null;
+  const shape = new Shape();
+  for (const [i, point] of outline.entries()) {
+    if (i === 0) shape.moveTo(point.x, -point.y);
+    else shape.lineTo(point.x, -point.y);
+  }
+  shape.closePath();
+  for (const hole of holes) {
+    if (hole.length < 3) continue;
+    const path = new Path();
+    for (const [i, point] of hole.entries()) {
+      if (i === 0) path.moveTo(point.x, -point.y);
+      else path.lineTo(point.x, -point.y);
+    }
+    path.closePath();
+    shape.holes.push(path);
+  }
+  return { shape };
 }
 
 /**

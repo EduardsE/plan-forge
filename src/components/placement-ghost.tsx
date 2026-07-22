@@ -44,8 +44,6 @@ const CORNER_RADIUS = 0.11;
 const FILL_Y = 0.024;
 const OUTLINE_Y = 0.028;
 
-const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
-
 const noRaycast = () => null;
 
 function v3(p: Point, y: number): [number, number, number] {
@@ -82,6 +80,9 @@ export interface PlacementGhostProps {
   unit: Unit;
   /** Snap toggle: off means free placement (wall-contained, no flush). */
   snapEnabled: boolean;
+  /** World-space elevation of the active floor — new placements always
+   * target it, so the raycast plane lifts to it (0 on the ground storey). */
+  planeY?: number;
   /** The drop landed — furniture is floor-level, so there is no target room
    * to report; deriveFloor assigns membership (or the unassigned bucket). */
   onPlace: (center: Point, stack?: Stack) => void;
@@ -94,6 +95,7 @@ export function PlacementGhost({
   item,
   unit,
   snapEnabled,
+  planeY = 0,
   onPlace,
   onCancel,
 }: PlacementGhostProps) {
@@ -104,6 +106,7 @@ export function PlacementGhost({
   useEffect(() => {
     const raycaster = new Raycaster();
     const hit = new Vector3();
+    const plane = new Plane(new Vector3(0, 1, 0), -planeY);
     /** Floor point under the pointer, or null off-canvas / past the horizon. */
     const toFloor = (event: PointerEvent): Point | null => {
       if (event.target !== gl.domElement) return null;
@@ -114,7 +117,7 @@ export function PlacementGhost({
         -(((event.clientY - rect.top) / rect.height) * 2 - 1),
       );
       raycaster.setFromCamera(ndc, camera);
-      return raycaster.ray.intersectPlane(FLOOR_PLANE, hit)
+      return raycaster.ray.intersectPlane(plane, hit)
         ? { x: hit.x, y: hit.z }
         : null;
     };
@@ -177,7 +180,17 @@ export function PlacementGhost({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [furniture, floor, item, snapEnabled, camera, gl, onPlace, onCancel]);
+  }, [
+    furniture,
+    floor,
+    item,
+    snapEnabled,
+    planeY,
+    camera,
+    gl,
+    onPlace,
+    onCancel,
+  ]);
 
   const rect = useMemo(
     () =>
@@ -202,7 +215,7 @@ export function PlacementGhost({
   const base = snap.host ? stackSurfaceHeight(snap.host) : 0;
 
   return (
-    <group>
+    <group position-y={planeY}>
       <group position={[center.x, base, center.y]}>
         {/* Footprint on the landing surface: translucent fill + bright
 				    dashed outline. */}
