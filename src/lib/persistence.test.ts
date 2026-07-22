@@ -4,6 +4,7 @@ import {
   createSampleFloor,
   type Floor,
   reconcileFloor,
+  type Stair,
   setEdgeThickness,
   setOpeningSillMaterial,
   setOpeningSillOverhang,
@@ -370,5 +371,104 @@ describe("wall thickness + sill persistence", () => {
         }),
       ),
     ).toBeNull();
+  });
+});
+
+describe("floor id / stairs (V1 fill-on-read + validation)", () => {
+  const save = (floor: Floor): string =>
+    serializeSavedState({ floor, unit: "m", savedAt: 1 });
+  const tamper = (
+    floor: Floor,
+    mutate: (parsed: Record<string, unknown>) => void,
+  ): string => {
+    const parsed = JSON.parse(save(floor)) as Record<string, unknown>;
+    mutate(parsed);
+    return JSON.stringify(parsed);
+  };
+  const validStair: Stair = {
+    id: "stair-1",
+    position: { x: 2, y: 2 },
+    rotation: 0,
+    width: 0.9,
+  };
+  const base = (): Floor => reconcileFloor(makeFloor());
+
+  it("fills a v6 floor's missing id and stairs with generated defaults", () => {
+    const json = tamper(base(), (p) => {
+      const floor = p.floor as Record<string, unknown>;
+      delete floor.id;
+      delete floor.stairs;
+    });
+    const restored = deserializeSavedState(json);
+    expect(restored).not.toBeNull();
+    expect(typeof restored?.floor.id).toBe("string");
+    expect(restored?.floor.id.length).toBeGreaterThan(0);
+    expect(restored?.floor.stairs).toEqual([]);
+  });
+
+  it("rejects an empty-string floor id", () => {
+    const json = tamper(base(), (p) => {
+      const floor = p.floor as Record<string, unknown>;
+      floor.id = "";
+    });
+    expect(deserializeSavedState(json)).toBeNull();
+  });
+
+  it("rejects a stairs array whose member isn't stair-shaped", () => {
+    const json = tamper({ ...base(), stairs: [validStair] }, (p) => {
+      const floor = p.floor as Record<string, unknown>;
+      floor.stairs = ["not-a-stair"];
+    });
+    expect(deserializeSavedState(json)).toBeNull();
+  });
+
+  it("rejects a stair width outside [0.7, 2.0]", () => {
+    const tooNarrow = tamper({ ...base(), stairs: [validStair] }, (p) => {
+      const floor = p.floor as Record<string, unknown>;
+      const stairs = floor.stairs as Record<string, unknown>[];
+      stairs[0] = { ...stairs[0], width: 0.5 };
+    });
+    expect(deserializeSavedState(tooNarrow)).toBeNull();
+
+    const tooWide = tamper({ ...base(), stairs: [validStair] }, (p) => {
+      const floor = p.floor as Record<string, unknown>;
+      const stairs = floor.stairs as Record<string, unknown>[];
+      stairs[0] = { ...stairs[0], width: 2.5 };
+    });
+    expect(deserializeSavedState(tooWide)).toBeNull();
+  });
+
+  it("rejects a stair with a non-finite rotation", () => {
+    const json = tamper({ ...base(), stairs: [validStair] }, (p) => {
+      const floor = p.floor as Record<string, unknown>;
+      const stairs = floor.stairs as Record<string, unknown>[];
+      stairs[0] = { ...stairs[0], rotation: "north" };
+    });
+    expect(deserializeSavedState(json)).toBeNull();
+  });
+
+  it("rejects duplicate stair ids", () => {
+    const twoStairs: Floor = {
+      ...base(),
+      stairs: [validStair, { ...validStair, id: "stair-2" }],
+    };
+    const json = tamper(twoStairs, (p) => {
+      const floor = p.floor as Record<string, unknown>;
+      const stairs = floor.stairs as Record<string, unknown>[];
+      stairs[1] = { ...stairs[1], id: stairs[0].id };
+    });
+    expect(deserializeSavedState(json)).toBeNull();
+  });
+
+  it("round-trips a valid stairs array intact", () => {
+    const floor: Floor = {
+      ...base(),
+      stairs: [
+        validStair,
+        { ...validStair, id: "stair-2", position: { x: 4, y: 1 } },
+      ],
+    };
+    const state = { floor, unit: "m" as const, savedAt: 1 };
+    expect(deserializeSavedState(serializeSavedState(state))).toEqual(state);
   });
 });
