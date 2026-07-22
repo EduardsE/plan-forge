@@ -23,7 +23,8 @@ export type CatalogCategory =
   | "decor"
   | "wall-items"
   | "plants"
-  | "openings";
+  | "openings"
+  | "stairs";
 
 export const CATALOG_CATEGORY_LABELS: Record<CatalogCategory, string> = {
   seating: "Seating",
@@ -35,6 +36,7 @@ export const CATALOG_CATEGORY_LABELS: Record<CatalogCategory, string> = {
   "wall-items": "Wall items",
   plants: "Plants",
   openings: "Doors & windows",
+  stairs: "Stairs",
 };
 
 export interface CatalogItem {
@@ -91,11 +93,21 @@ export const CATALOG: CatalogItem[] = [
   // because the model layer stays import-free of the scene helpers.
   item("door", "Door", "openings", 0.9, 0.1, 2.05),
   item("window", "Window", "openings", 1.2, 0.1, 1.58),
+  // Stairs: a card that inserts a `Stair` (model/stairs.ts) rather than
+  // furniture — width/depth/height here are nominal card dims only, never
+  // the real run (derived per-floor from `stairRun(storeyHeightOf(floor))`,
+  // lib/stairs.ts).
+  item("stairs", "Straight stair", "stairs", 0.9, 3.0, 2.6),
 ];
 
 /** Catalog entries that insert an `Opening` rather than a furniture item. */
 export function isOpeningItem(id: string): boolean {
   return id === "door" || id === "window";
+}
+
+/** The catalog entry that inserts a `Stair` rather than furniture. */
+export function isStairItem(id: string): boolean {
+  return id === "stairs";
 }
 
 const byId = new Map(CATALOG.map((entry) => [entry.id, entry]));

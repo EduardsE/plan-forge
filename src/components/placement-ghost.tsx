@@ -15,6 +15,7 @@ import { canHostStack, isStackRider, stackSurfaceHeight } from "#/lib/model";
 import {
   edgeWallObstacles,
   furnitureObstacle,
+  type Obstacle,
   type PlacementGuide,
   separateFromWalls,
   snapPlacement,
@@ -83,6 +84,9 @@ export interface PlacementGhostProps {
   /** World-space elevation of the active floor — new placements always
    * target it, so the raycast plane lifts to it (0 on the ground storey). */
   planeY?: number;
+  /** Containment obstacles beyond the floor's own wall slabs — stair voids
+   * cut into this floor by the floor below, when there is one. */
+  extraObstacles?: Obstacle[];
   /** The drop landed — furniture is floor-level, so there is no target room
    * to report; deriveFloor assigns membership (or the unassigned bucket). */
   onPlace: (center: Point, stack?: Stack) => void;
@@ -96,6 +100,7 @@ export function PlacementGhost({
   unit,
   snapEnabled,
   planeY = 0,
+  extraObstacles,
   onPlace,
   onCancel,
 }: PlacementGhostProps) {
@@ -123,8 +128,13 @@ export function PlacementGhost({
     };
     const rider = isStackRider(item.id);
     // Wall slabs come from the graph, which never changes during a placement
-    // drag — compute the hard boundary once for the whole gesture.
-    const wallObstacles = edgeWallObstacles(floor);
+    // drag — compute the hard boundary once for the whole gesture. Stair
+    // voids (this floor's own, cut by the floor below) join them so a fresh
+    // drop can't land in the opening.
+    const wallObstacles = [
+      ...edgeWallObstacles(floor),
+      ...(extraObstacles ?? []),
+    ];
     /** The ghost placement under the cursor: a hovered host's top for a
      * rider-category item (a fresh drop is unrotated), else the floor —
      * same policy as a move drag: flush-snap against neighbours and wall
@@ -186,6 +196,7 @@ export function PlacementGhost({
     item,
     snapEnabled,
     planeY,
+    extraObstacles,
     camera,
     gl,
     onPlace,

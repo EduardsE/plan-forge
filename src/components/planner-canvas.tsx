@@ -28,6 +28,7 @@ import { PlacementGhost } from "#/components/placement-ghost";
 import { PlanScene } from "#/components/plan-scene";
 import type { FloorStackEntry } from "#/components/room-scene";
 import { RoomScene } from "#/components/room-scene";
+import { StairGhost } from "#/components/stair-ghost";
 import { WallMountGhost } from "#/components/wall-mount-ghost";
 import {
   type CameraApi,
@@ -43,6 +44,7 @@ import type { TimeOfDay } from "#/lib/lighting";
 import {
   addFloorOpening,
   addFurniture,
+  addStair,
   allFurnitureOf,
   type Bounds,
   type Building,
@@ -62,6 +64,7 @@ import {
   floorIndexOf,
   floorOfItem,
   isOpeningItem,
+  isStairItem,
   isWallItem,
   moveFloorOpening,
   type Opening,
@@ -70,6 +73,7 @@ import {
   removeFloorOpening,
   resizeFloorOpening,
   type Stack,
+  type Stair,
   storeyElevation,
   storeyHeightOf,
   unionBounds,
@@ -79,6 +83,8 @@ import {
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
 import { OPENING_GRID, type OpeningPlacement } from "#/lib/opening-place";
+import type { Obstacle } from "#/lib/place";
+import { stairVoidObstacles } from "#/lib/stairs";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -854,6 +860,22 @@ export function PlannerCanvas({
     () => allFurnitureOf(rooms, unassignedFurniture),
     [rooms, unassignedFurniture],
   );
+  // The floor immediately below the active one (independent of the
+  // ghost-underlay toggle — a stair's void is structural, not a drafting
+  // aid) and the containment obstacles its stairs cut into the active
+  // floor's own platform. Threaded through to both lenses' move-drag
+  // sessions and the furniture placement ghost.
+  const belowFloor = useMemo(() => {
+    const index = floorIndexOf(building, activeFloorId);
+    return index > 0 ? building.floors[index - 1] : null;
+  }, [building, activeFloorId]);
+  const activeExtraObstacles = useMemo<Obstacle[]>(
+    () =>
+      belowFloor
+        ? stairVoidObstacles(belowFloor, storeyHeightOf(belowFloor))
+        : [],
+    [belowFloor],
+  );
 
   const selectItem = useCallback(
     (id: string) => {
@@ -1032,6 +1054,17 @@ export function PlannerCanvas({
     },
     [placingItem, floor, onFloorChange, onPlacingEnd, setSelectedId],
   );
+  // A validated stair drop (the ghost never calls onPlace for an invalid
+  // candidate) — commits straight onto the active floor. Selection follows
+  // in V8, which adds the stair selection kind; for now the drop just
+  // commits and ends the placement session, like every other catalog card.
+  const placeStairItem = useCallback(
+    (stairItem: Stair) => {
+      onFloorChange(addStair(floor, stairItem));
+      onPlacingEnd();
+    },
+    [floor, onFloorChange, onPlacingEnd],
+  );
 
   return (
     // isolate: drei <Html> overlays carry huge z-indexes; contain them so
@@ -1140,6 +1173,8 @@ export function PlannerCanvas({
               floor={floor}
               underlayFloor={underlayFloor}
               underlayRooms={underlayRooms}
+              belowFloor={belowFloor}
+              extraObstacles={activeExtraObstacles}
               selectedId={selectedId}
               selectedOpeningId={selectedOpeningId}
               selectedEdgeId={selectedEdgeId}
@@ -1173,6 +1208,7 @@ export function PlannerCanvas({
             onSelectOpening={selectOpening}
             onDragOpening={dragOpening3D}
             onSelectWall={selectWall}
+            activeExtraObstacles={activeExtraObstacles}
           />
         )}
         {/* The placement ghost raycasts the active camera onto the floor
@@ -1201,6 +1237,16 @@ export function PlannerCanvas({
               onPlace={placeMountedItem}
               onCancel={onPlacingEnd}
             />
+          ) : isStairItem(placingItem.id) ? (
+            <StairGhost
+              building={building}
+              activeFloorId={activeFloorId}
+              planeY={activeElevation}
+              unit={unit}
+              snapEnabled={snapEnabled}
+              onPlace={placeStairItem}
+              onCancel={onPlacingEnd}
+            />
           ) : (
             <PlacementGhost
               furniture={allFurniture}
@@ -1209,6 +1255,7 @@ export function PlannerCanvas({
               unit={unit}
               snapEnabled={snapEnabled}
               planeY={activeElevation}
+              extraObstacles={activeExtraObstacles}
               onPlace={placeDraggedItem}
               onCancel={onPlacingEnd}
             />

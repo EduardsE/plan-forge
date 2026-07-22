@@ -5,6 +5,7 @@ import {
   catalogItemById,
   filterCatalog,
   formatSizeCm,
+  isStairItem,
 } from "./catalog";
 import { createSampleRoom } from "./test-fixtures";
 
@@ -81,5 +82,24 @@ describe("formatSizeCm", () => {
     expect(formatSizeCm({ width: 1.68, depth: 0.88, height: 0.82 })).toBe(
       "168 × 88 cm",
     );
+  });
+});
+
+describe("stairs catalog entry", () => {
+  it("has a stairs category with a labeled chip", () => {
+    expect(CATALOG_CATEGORY_LABELS.stairs).toBe("Stairs");
+  });
+
+  it("isStairItem recognizes only the stairs id", () => {
+    expect(isStairItem("stairs")).toBe(true);
+    expect(isStairItem("door")).toBe(false);
+    expect(isStairItem("desk")).toBe(false);
+  });
+
+  it("filterCatalog('', 'stairs') returns the stair entry", () => {
+    const results = filterCatalog("", "stairs");
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe("stairs");
+    expect(results[0].name).toBe("Straight stair");
   });
 });

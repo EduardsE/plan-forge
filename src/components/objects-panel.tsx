@@ -26,11 +26,16 @@ import { cn } from "#/lib/utils";
 export interface ObjectsPanelProps {
   /** Catalog id mid-placement, if any — that card renders as "placing…". */
   placingId: string | null;
+  /** False when the active floor is the top of the stack (a stair needs a
+   * floor above to cut into) — the stairs card renders as a disabled hint
+   * tile instead of a draggable one. */
+  stairsEnabled: boolean;
   onStartPlacing: (item: CatalogItem, origin: { x: number; y: number }) => void;
   onClose: () => void;
 }
 
-/** Chip order, straight from the mockup's chip rows. */
+/** Chip order, straight from the mockup's chip rows (stairs appended last —
+ * it postdates the mockup). */
 const CHIP_ORDER: CatalogCategory[] = [
   "seating",
   "tables",
@@ -41,10 +46,12 @@ const CHIP_ORDER: CatalogCategory[] = [
   "wall-items",
   "plants",
   "openings",
+  "stairs",
 ];
 
 export function ObjectsPanel({
   placingId,
+  stairsEnabled,
   onStartPlacing,
   onClose,
 }: ObjectsPanelProps) {
@@ -116,7 +123,21 @@ export function ObjectsPanel({
 
       <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-3 overflow-y-auto px-[18px]">
         {items.map((item) =>
-          item.id === placingId ? (
+          item.id === "stairs" && !stairsEnabled ? (
+            <div
+              key={item.id}
+              aria-disabled="true"
+              className="flex flex-col rounded-[12px] border border-[var(--control-border)] border-dashed bg-[var(--well)] p-2.5 opacity-60"
+            >
+              <CatalogThumbnail catalogId={item.id} className="h-[82px]" />
+              <div className="mt-[9px] font-semibold text-[13px] text-[var(--ink-400)]">
+                {item.name}
+              </div>
+              <div className="mt-px font-mono text-[11px] text-[var(--ink-300)]">
+                Add a floor above first
+              </div>
+            </div>
+          ) : item.id === placingId ? (
             <div
               key={item.id}
               className="flex flex-col rounded-[12px] border-[1.5px] border-dashed border-[rgba(58,91,240,0.55)] bg-[rgba(58,91,240,0.05)] p-2.5"

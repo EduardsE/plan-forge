@@ -92,6 +92,7 @@ import {
   setRoomName,
   setRoomWallHeight,
   shiftOpeningVertical,
+  storeyHeightOf,
   totalFloorArea,
   unionBounds,
   updateDerivedRoom,
@@ -108,6 +109,7 @@ import {
 } from "#/lib/persistence";
 import { edgeWallObstacles, type Obstacle, PLACEMENT_GRID } from "#/lib/place";
 import { buildEdgeSolids, sunAnchorAzimuth } from "#/lib/room-scene";
+import { stairVoidObstacles } from "#/lib/stairs";
 import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -522,6 +524,17 @@ function Planner() {
     }
     setSelectedOpeningId(null);
   }, [selectedOpeningId, commitFloor]);
+  // Containment obstacles beyond a floor's own wall slabs: the stair voids
+  // the floor immediately below it cuts into its platform (empty when
+  // there's no floor below). Shared by every route-level containment site
+  // (`mutateFurniture`, `nudgeSelected`) so furniture can't be dragged or
+  // nudged into a stairwell opening.
+  const extraObstaclesFor = useCallback((floorId: string): Obstacle[] => {
+    const index = floorIndexOf(buildingRef.current, floorId);
+    if (index <= 0) return [];
+    const below = buildingRef.current.floors[index - 1];
+    return stairVoidObstacles(below, storeyHeightOf(below));
+  }, []);
   // One floor-level furniture commit, targeting the selected item's owning
   // floor: the pure setter runs over that floor's whole furniture
   // (`updateFloorFurniture`), re-contained against the wall slabs — furniture
@@ -534,11 +547,14 @@ function Planner() {
       const owner = floorOfItem(buildingRef.current, selectedId);
       if (!owner) return;
       commitFloor(owner.id, (floor) => {
-        const wallObstacles = edgeWallObstacles(floor);
+        const wallObstacles = [
+          ...edgeWallObstacles(floor),
+          ...extraObstaclesFor(floor.id),
+        ];
         return updateFloorFurniture(floor, (room) => fn(room, wallObstacles));
       });
     },
-    [selectedId, commitFloor],
+    [selectedId, commitFloor, extraObstaclesFor],
   );
   // Inspector commits: one history step each. The pure setters return the
   // room unchanged (same reference) for no-ops, which must not become empty
@@ -647,13 +663,16 @@ function Planner() {
       const owner = floorOfItem(buildingRef.current, selectedId);
       if (!owner) return;
       previewFloorIn(owner.id, (floor) => {
-        const wallObstacles = edgeWallObstacles(floor);
+        const wallObstacles = [
+          ...edgeWallObstacles(floor),
+          ...extraObstaclesFor(floor.id),
+        ];
         return updateFloorFurniture(floor, (room) =>
           nudgeFurniture(wallObstacles, room, selectedId, dx, dy),
         );
       });
     },
-    [selectedId, previewFloorIn],
+    [selectedId, previewFloorIn, extraObstaclesFor],
   );
   // The Settings rail button's popover: per-room name + ceiling height, each
   // commit one history step through the pure room setters (no-ops return the
@@ -1440,6 +1459,9 @@ function Planner() {
         <div className="absolute inset-y-0 right-0 w-[306px]">
           <ObjectsPanel
             placingId={placing?.item.id ?? null}
+            stairsEnabled={
+              floorIndexOf(building, activeFloorId) < building.floors.length - 1
+            }
             onStartPlacing={startPlacing}
             onClose={() => setLibraryOpen(false)}
           />

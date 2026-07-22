@@ -28,6 +28,7 @@ import {
 } from "#/components/move-drag";
 import { RoomOpenings } from "#/components/room-openings";
 import { SelectionChip } from "#/components/selection-chip";
+import { StairMesh } from "#/components/stair-mesh";
 import { overlappingFurnitureIds } from "#/lib/collision";
 import {
   furnitureBaseColor,
@@ -40,19 +41,23 @@ import { LIGHTING, type LightingPreset, type TimeOfDay } from "#/lib/lighting";
 import type {
   Bounds,
   DerivedFloor,
+  DerivedRoom,
   Floor,
   FurnitureItem,
   FurnitureUpdate,
   Point,
+  Stair,
 } from "#/lib/model";
 import {
   allFurnitureOf,
   floorBounds,
+  pointInOutline,
   stackSurfaceHeight,
   unionBounds,
   wallHeightOf,
 } from "#/lib/model";
 import { modelForCatalogId } from "#/lib/model/models";
+import type { Obstacle } from "#/lib/place";
 import {
   buildEdgeSolids,
   ceilingSlabShape,
@@ -68,6 +73,7 @@ import {
   windowUnitDepth,
   windowUnitZ,
 } from "#/lib/room-scene";
+import { stairPolygon, stairRun } from "#/lib/stairs";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -271,6 +277,37 @@ function sharedTextures() {
   return textureCache;
 }
 
+/** Stable empty fallbacks — a stairless floor/room hits these instead of
+ * minting a fresh `[]`/`Map` every render. */
+const EMPTY_HOLES: Point[][] = [];
+const EMPTY_VOID_MAP: Map<string, Point[][]> = new Map();
+
+/**
+ * The void polygons `stairs` cut (already run-sized via `stairRun` for the
+ * storey they climb from), grouped by whichever of `rooms`' outlines
+ * contains each stair's position — the ceiling/platform hole belongs to
+ * that one room, not every room sharing the floor. A stair whose position
+ * falls in no room (the dead band, the open canvas) cuts no hole: there is
+ * no single outline to subtract it from.
+ */
+function stairVoidsByRoom(
+  stairs: Stair[],
+  run: number,
+  rooms: DerivedRoom[],
+): Map<string, Point[][]> {
+  if (stairs.length === 0) return EMPTY_VOID_MAP;
+  const byRoom = new Map<string, Point[][]>();
+  for (const stair of stairs) {
+    const room = rooms.find((r) => pointInOutline(r.outline, stair.position));
+    if (!room) continue;
+    const poly = stairPolygon(stair, run);
+    const list = byRoom.get(room.id);
+    if (list) list.push(poly);
+    else byRoom.set(room.id, [poly]);
+  }
+  return byRoom;
+}
+
 /** Plan outline as a three Shape: plan y is mirrored so world z = plan y. */
 function planShape(outline: Point[]): Shape {
   const shape = new Shape();
@@ -316,16 +353,29 @@ function BlobShadow({
   );
 }
 
-/** Floor slab: plank top, navy skirt. */
-function Platform({ outline }: { outline: Point[] }) {
+/**
+ * Floor slab: plank top, navy skirt. `holes` cuts a stair void from the floor
+ * below straight through the platform (a stair-bearing entry passes its
+ * stairs' polygons into the *entry above's* Platform, keyed by whichever of
+ * that entry's rooms the hole falls in) — the same Shape-holes path
+ * `CeilingSlab` uses (`ceilingSlabShape`).
+ */
+function Platform({
+  outline,
+  holes = EMPTY_HOLES,
+}: {
+  outline: Point[];
+  holes?: Point[][];
+}) {
   const { plank } = sharedTextures();
   const geometry = useMemo(() => {
-    if (outline.length < 3) return null;
-    return new ExtrudeGeometry(planShape(outline), {
+    const slab = ceilingSlabShape(outline, holes);
+    if (!slab) return null;
+    return new ExtrudeGeometry(slab.shape, {
       depth: SLAB_THICKNESS,
       bevelEnabled: false,
     });
-  }, [outline]);
+  }, [outline, holes]);
 
   if (!geometry) return null;
   return (
@@ -390,18 +440,21 @@ const CEILING_COLOR = "#f5f2ea";
 function CeilingSlab({
   outline,
   wallHeight,
+  holes = EMPTY_HOLES,
 }: {
   outline: Point[];
   wallHeight: number;
+  /** Void polygons this storey's own stairs cut into its ceiling. */
+  holes?: Point[][];
 }) {
   const geometry = useMemo(() => {
-    const slab = ceilingSlabShape(outline, []);
+    const slab = ceilingSlabShape(outline, holes);
     if (!slab) return null;
     return new ExtrudeGeometry(slab.shape, {
       depth: SLAB_THICKNESS,
       bevelEnabled: false,
     });
-  }, [outline]);
+  }, [outline, holes]);
 
   if (!geometry) return null;
   return (
@@ -1286,6 +1339,8 @@ export interface FloorStackEntry {
  * and a capped lower storey (solid ceiling slab, no cutaway). */
 function FloorLayer({
   entry,
+  belowFloor,
+  belowStoreyHeight,
   lighting,
   selectedId,
   selectedOpeningId,
@@ -1300,6 +1355,12 @@ function FloorLayer({
   onSelectWall,
 }: {
   entry: FloorStackEntry;
+  /** The floor immediately below `entry` in the stack, or null for the
+   * ground storey — its stairs cut a void into `entry`'s Platform. */
+  belowFloor: Floor | null;
+  /** `belowFloor`'s own storey height (its stairs' run size); ignored when
+   * `belowFloor` is null. */
+  belowStoreyHeight: number;
   lighting: LightingPreset;
   selectedId: string | null;
   selectedOpeningId: string | null;
@@ -1330,6 +1391,30 @@ function FloorLayer({
     () => nodePosts(entry.floor, solids),
     [entry.floor, solids],
   );
+  // This storey's own stairs cut its own ceiling (capped storeys only —
+  // the active storey's roofless proxy needs no hole).
+  const ownVoidRun = useMemo(
+    () => stairRun(entry.storeyHeight).run,
+    [entry.storeyHeight],
+  );
+  const ownVoidsByRoom = useMemo(
+    () => stairVoidsByRoom(entry.floor.stairs, ownVoidRun, entry.derived.rooms),
+    [entry.floor.stairs, ownVoidRun, entry.derived.rooms],
+  );
+  // The floor below's stairs cut *this* storey's platform — keyed by this
+  // storey's own room outlines (the hole's plan position is shared, but the
+  // room it falls in is a fact of this floor, not the one below).
+  const belowVoidRun = useMemo(
+    () => (belowFloor ? stairRun(belowStoreyHeight).run : 0),
+    [belowFloor, belowStoreyHeight],
+  );
+  const belowVoidsByRoom = useMemo(
+    () =>
+      belowFloor
+        ? stairVoidsByRoom(belowFloor.stairs, belowVoidRun, entry.derived.rooms)
+        : EMPTY_VOID_MAP,
+    [belowFloor, belowVoidRun, entry.derived.rooms],
+  );
   return (
     <group position-y={entry.elevation}>
       <Walls
@@ -1349,9 +1434,19 @@ function FloorLayer({
         onDrag={onDragOpening}
         onDragActiveChange={onMoveActiveChange}
       />
+      {entry.floor.stairs.map((stair) => (
+        <StairMesh
+          key={stair.id}
+          stair={stair}
+          storeyHeight={entry.storeyHeight}
+        />
+      ))}
       {entry.derived.rooms.map((room) => (
         <group key={room.id}>
-          <Platform outline={room.outline} />
+          <Platform
+            outline={room.outline}
+            holes={belowVoidsByRoom.get(room.id) ?? EMPTY_HOLES}
+          />
           {entry.active ? (
             <CeilingShadowProxy
               outline={room.outline}
@@ -1361,6 +1456,7 @@ function FloorLayer({
             <CeilingSlab
               outline={room.outline}
               wallHeight={wallHeightOf(room)}
+              holes={ownVoidsByRoom.get(room.id) ?? EMPTY_HOLES}
             />
           )}
           <FurnitureBucket
@@ -1414,6 +1510,12 @@ export interface RoomSceneProps {
    * the raw whole-hole bottom, resolved onto one floor by the canvas. */
   onDragOpening: (id: string, offset: number, bottom: number | null) => void;
   onSelectWall: (edgeId: string) => void;
+  /** Containment obstacles beyond the active floor's own wall slabs: stair
+   * voids cut into it by the floor below (empty when there's none). Applied
+   * only to a drag confined to the active floor — a drag on a lower stack
+   * entry (through a doorway-side pick) doesn't get these; a known scope
+   * limit (V7 only threads the active floor's voids through). */
+  activeExtraObstacles: Obstacle[];
 }
 
 export function RoomScene({
@@ -1431,6 +1533,7 @@ export function RoomScene({
   onSelectOpening,
   onDragOpening,
   onSelectWall,
+  activeExtraObstacles,
 }: RoomSceneProps) {
   const activeEntry =
     stack.find((entry) => entry.active) ?? stack[stack.length - 1] ?? null;
@@ -1536,10 +1639,12 @@ export function RoomScene({
       {/* One shadow for the whole stack, grounded at the studio pool (y≈0) —
           not per storey, which would stack dark seams under a tall model. */}
       {bounds && <FloorContactShadow bounds={bounds} />}
-      {stack.map((entry) => (
+      {stack.map((entry, i) => (
         <FloorLayer
           key={entry.floor.id}
           entry={entry}
+          belowFloor={i > 0 ? stack[i - 1].floor : null}
+          belowStoreyHeight={i > 0 ? stack[i - 1].storeyHeight : 0}
           lighting={lighting}
           selectedId={selectedId}
           selectedOpeningId={selectedOpeningId}
@@ -1596,6 +1701,7 @@ export function RoomScene({
             snapEnabled={snapEnabled}
             freeVerticalMounts
             edgeHeights={dragEdgeHeights}
+            extraObstacles={dragEntry.active ? activeExtraObstacles : undefined}
             onMove={(update) => onMoveItem(drag.id, update)}
             onEnd={endDrag}
           />

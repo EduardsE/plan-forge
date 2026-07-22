@@ -9,7 +9,7 @@ import {
   partHullScale,
   partScale,
 } from "./furniture-parts";
-import { CATALOG, catalogItemById, isOpeningItem } from "./model";
+import { CATALOG, catalogItemById, isOpeningItem, isStairItem } from "./model";
 
 /**
  * Conservative world-space AABB of a part: the shape's local box half-extents
@@ -64,10 +64,11 @@ const EPS = 1e-6;
 
 describe("furnitureParts", () => {
   it("composes more than a single box for every non-rug catalog item", () => {
-    // Opening entries (door/window) insert into walls and never render as
-    // furniture, so they carry no part composition.
+    // Opening entries (door/window) insert into walls, and the stair entry
+    // renders via `StairMesh`'s tread boxes — neither goes through
+    // `furnitureParts`, so neither carries a part composition here.
     for (const entry of CATALOG) {
-      if (isOpeningItem(entry.id)) continue;
+      if (isOpeningItem(entry.id) || isStairItem(entry.id)) continue;
       const parts = furnitureParts(entry.id, entry.footprint);
       if (entry.id === "rug") expect(parts).toHaveLength(1);
       else expect(parts.length, entry.id).toBeGreaterThanOrEqual(2);

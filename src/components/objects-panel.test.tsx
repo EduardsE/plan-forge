@@ -2,12 +2,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ObjectsPanel } from "./objects-panel";
 
-function renderPanel(placingId: string | null = null) {
+function renderPanel(placingId: string | null = null, stairsEnabled = true) {
   const onStartPlacing = vi.fn();
   const onClose = vi.fn();
   render(
     <ObjectsPanel
       placingId={placingId}
+      stairsEnabled={stairsEnabled}
       onStartPlacing={onStartPlacing}
       onClose={onClose}
     />,
@@ -78,5 +79,37 @@ describe("ObjectsPanel", () => {
       screen.getByRole("button", { name: "Close objects panel" }),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a disabled hint tile for stairs when stairsEnabled is false", () => {
+    const { onStartPlacing } = renderPanel(null, false);
+    fireEvent.click(screen.getByRole("button", { name: "Stairs" }));
+    expect(screen.getByText("Straight stair")).toBeDefined();
+    expect(screen.getByText("Add a floor above first")).toBeDefined();
+    expect(screen.queryByRole("button", { name: /Straight stair/ })).toBeNull();
+
+    const tile = screen.getByText("Straight stair").closest("div");
+    expect(tile).not.toBeNull();
+    if (tile) {
+      fireEvent.pointerDown(tile, {
+        isPrimary: true,
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+      });
+    }
+    expect(onStartPlacing).not.toHaveBeenCalled();
+  });
+
+  it("renders the stairs card as a normal draggable card when stairsEnabled is true", () => {
+    const { onStartPlacing } = renderPanel(null, true);
+    fireEvent.click(screen.getByRole("button", { name: "Stairs" }));
+    expect(screen.queryByText("Add a floor above first")).toBeNull();
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: /Straight stair/ }),
+      { isPrimary: true, button: 0, clientX: 10, clientY: 20 },
+    );
+    expect(onStartPlacing).toHaveBeenCalledTimes(1);
+    expect(onStartPlacing.mock.calls[0][0].id).toBe("stairs");
   });
 });

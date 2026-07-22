@@ -16,6 +16,7 @@ import { mountAt } from "#/lib/mount-place";
 import {
   edgeWallObstacles,
   furnitureObstacle,
+  type Obstacle,
   type PlacementGuide,
   rotatedFootprintSize,
   separateFromWalls,
@@ -291,6 +292,7 @@ export function MoveDragSession({
   snapEnabled,
   freeVerticalMounts = false,
   edgeHeights,
+  extraObstacles,
   onMove,
   onEnd,
 }: {
@@ -308,6 +310,12 @@ export function MoveDragSession({
   freeVerticalMounts?: boolean;
   /** Per-edge wall heights — the ceiling clamp for free-vertical drags. */
   edgeHeights?: Map<string, number>;
+  /** Containment obstacles beyond the floor's own wall slabs — stair voids
+   * cut into this floor by the floor below, when there is one. Joins
+   * `wallObstacles` for the floor-item snap/contain path only (mount and
+   * rider drags don't touch it: a wall-mounted or stacked item isn't at
+   * floor level). */
+  extraObstacles?: Obstacle[];
   /** Live update — a floor item patches its position; a wall item also its
    * rotation and mount as it slides onto the nearest wall; a rider its stack
    * anchor. Furniture is floor-level, so there is no target room to report. */
@@ -333,6 +341,8 @@ export function MoveDragSession({
   snapRef.current = snapEnabled;
   const edgeHeightsRef = useRef(edgeHeights);
   edgeHeightsRef.current = edgeHeights;
+  const extraObstaclesRef = useRef(extraObstacles);
+  extraObstaclesRef.current = extraObstacles;
 
   useEffect(() => {
     // Track the pointer across the plane of the grab point, so an elevated
@@ -344,8 +354,13 @@ export function MoveDragSession({
       new Plane(new Vector3(0, 1, 0), -drag.grabHeight),
     );
     // Wall slabs come from the graph, which never changes during a furniture
-    // drag — compute the hard boundary once for the whole gesture.
-    const wallObstacles = edgeWallObstacles(floorRef.current);
+    // drag — compute the hard boundary once for the whole gesture. Stair
+    // voids (this floor's own, cut by the floor below) join them so a floor
+    // item can't be dragged/snapped into the opening.
+    const wallObstacles = [
+      ...edgeWallObstacles(floorRef.current),
+      ...(extraObstaclesRef.current ?? []),
+    ];
     // The elevation a free-vertical mount drag currently rides at; a re-home
     // to another wall keeps it until the pointer settles on the new plane.
     let liveElevation = drag.mount?.elevation ?? 0;

@@ -16,6 +16,7 @@ import {
   useMoveDrag,
 } from "#/components/move-drag";
 import { PlanOpenings } from "#/components/plan-openings";
+import { PlanStairs } from "#/components/plan-stairs";
 import { RotateHandle } from "#/components/rotate-handle";
 import { SelectionChip } from "#/components/selection-chip";
 import { overlappingFurnitureIds } from "#/lib/collision";
@@ -35,8 +36,13 @@ import {
   furnitureDisplayName,
   outlineBounds,
   portalLabel,
+  storeyHeightOf,
 } from "#/lib/model";
-import { edgeWallObstacles, rotatedFootprintSize } from "#/lib/place";
+import {
+  edgeWallObstacles,
+  type Obstacle,
+  rotatedFootprintSize,
+} from "#/lib/place";
 import {
   circlePoints,
   dashedPolyline,
@@ -1033,6 +1039,14 @@ export interface PlanSceneProps {
   /** `underlayFloor`'s derived rooms, for `buildEdgeSolids`; ignored when
    * `underlayFloor` is null. */
   underlayRooms: DerivedRoom[];
+  /** The floor immediately below the active one, independent of the
+   * ghost-underlay toggle — its stairs cut a real void into *this* floor
+   * (`PlanStairs variant="void"`), a structural fact, not a drafting aid.
+   * Null when there's no floor below. */
+  belowFloor: Floor | null;
+  /** Containment obstacles beyond this floor's own wall slabs: stair voids
+   * cut into it by `belowFloor` (empty when there's none). */
+  extraObstacles: Obstacle[];
   selectedId: string | null;
   /** Selected opening id — never set together with `selectedId`. */
   selectedOpeningId: string | null;
@@ -1066,6 +1080,8 @@ export function PlanScene({
   floor,
   underlayFloor,
   underlayRooms,
+  belowFloor,
+  extraObstacles,
   selectedId,
   selectedOpeningId,
   selectedEdgeId,
@@ -1157,6 +1173,20 @@ export function PlanScene({
         selectedEdgeId={selectedEdgeId}
         onSelectWall={onSelectWall}
       />
+      {floor.stairs.length > 0 && (
+        <PlanStairs
+          floor={floor}
+          storeyHeight={storeyHeightOf(floor)}
+          variant="up"
+        />
+      )}
+      {belowFloor && belowFloor.stairs.length > 0 && (
+        <PlanStairs
+          floor={belowFloor}
+          storeyHeight={storeyHeightOf(belowFloor)}
+          variant="void"
+        />
+      )}
       <PlanOpenings
         solids={solids}
         selectedId={selectedOpeningId}
@@ -1207,6 +1237,7 @@ export function PlanScene({
           drag={drag}
           unit={unit}
           snapEnabled={snapEnabled}
+          extraObstacles={extraObstacles}
           onMove={(update) => onMoveItem(drag.id, update)}
           onEnd={endDrag}
         />
