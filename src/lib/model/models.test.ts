@@ -19,6 +19,7 @@ describe("model manifest", () => {
       "sofa-2",
       "spider-table",
       "succulent",
+      "tv",
       "wardrobe",
     ]);
   });

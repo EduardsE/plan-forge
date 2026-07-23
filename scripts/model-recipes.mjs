@@ -177,6 +177,21 @@ export const RECIPES = [
     },
   },
   {
+    // Authored in Blender for this project (session 2026-07-23): a near-
+    // frameless wall-mounted flatscreen — dark matte bezel + near-black glossy
+    // screen glass, no branding. Modelled to face -Y in Blender so it exports
+    // as +z front (rotateYDeg 0); realWidth is a 55"-class panel.
+    catalogId: "tv",
+    input: "assets/raw-models/tv.glb",
+    source: "authored in Blender (untextured, no branding)",
+    realWidth: 1.24,
+    rotateYDeg: 0,
+    slots: {
+      tv_bezel: "neutral",
+      tv_screen: "neutral",
+    },
+  },
+  {
     // Authored in Blender for this project (session 2026-07-22): walnut slab
     // on a black steel spider base. Wood grain is a Poly Haven CC0 texture
     // (dark_wood), so it stays "neutral" like the credenza's veneer; the

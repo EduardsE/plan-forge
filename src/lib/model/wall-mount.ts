@@ -72,6 +72,8 @@ export function wallFrames(outline: Point[]): MountFrame[] {
 const MOUNT_ELEVATIONS: Record<string, number> = {
   "picture-frame": 1.5,
   "wall-clock": 1.9,
+  // A wall-mounted TV hangs with its center around seated eye level.
+  tv: 1.2,
 };
 export const DEFAULT_MOUNT_ELEVATION = 1.5;
 

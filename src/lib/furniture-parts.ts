@@ -60,6 +60,7 @@ export const FURNITURE_COLORS: Record<string, string> = {
   "floor-mirror": "#8c6b48",
   "wall-clock": "#f7f0e2",
   "picture-frame": "#d8845c",
+  tv: "#1c1e24",
 };
 export const FURNITURE_FALLBACK_COLOR = "#b98a5f";
 
@@ -480,6 +481,18 @@ function pictureFrameParts(
   ];
 }
 
+/** Flatscreen TV: a thin bezel slab with a near-black screen inset on +z. */
+function tvParts({ width: w, depth: d, height: h }: Footprint, color: string) {
+  return [
+    box(color, [w, h, d * 0.6], [0, h / 2, -d * 0.2]),
+    box(
+      darker(color, 0.7),
+      [w * 0.97, h * 0.94, d * 0.5],
+      [0, h / 2, d * 0.24],
+    ),
+  ];
+}
+
 /** Wall clock: rim + face cylinders lying along z, two hands on the face. */
 function clockParts(
   { width: w, depth: d, height: h }: Footprint,
@@ -578,6 +591,8 @@ export function furnitureParts(
       return pictureFrameParts(footprint, color);
     case "wall-clock":
       return clockParts(footprint, color);
+    case "tv":
+      return tvParts(footprint, color);
   }
   switch (catalogItemById(catalogId)?.category) {
     case "seating":

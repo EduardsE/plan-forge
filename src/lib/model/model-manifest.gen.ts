@@ -68,6 +68,11 @@ export const MODEL_MANIFEST = {
       potted_plant_01_leaves: "neutral",
     },
   },
+  tv: {
+    file: "/models/tv.glb",
+    natural: { width: 1.24, depth: 0.057, height: 0.72 },
+    slots: { tv_bezel: "neutral", tv_screen: "neutral" },
+  },
   "spider-table": {
     file: "/models/spider-table.glb",
     natural: { width: 2.4, depth: 1.1, height: 0.75 },

@@ -84,6 +84,9 @@ export const CATALOG: CatalogItem[] = [
   item("floor-mirror", "Floor Mirror", "decor", 0.55, 0.4, 1.65),
   item("picture-frame", "Picture Frame", "wall-items", 0.9, 0.06, 0.7),
   item("wall-clock", "Wall Clock", "wall-items", 0.36, 0.06, 0.36),
+  // Real-mesh wall item: footprint mirrors the prepared model's natural size
+  // (model-manifest.gen.ts) — locked by models.test.ts.
+  item("tv", "TV", "wall-items", 1.24, 0.057, 0.72),
   item("plant", "Potted Plant", "plants", 0.45, 0.422, 0.54),
   item("succulent", "Succulent", "plants", 0.17, 0.187, 0.271),
   item("plant-large", "Tall Plant", "plants", 0.6, 0.647, 1.379),
