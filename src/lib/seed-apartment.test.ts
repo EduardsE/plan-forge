@@ -18,9 +18,10 @@ it("survives the strict persistence round-trip", () => {
     "floor-lower",
     "floor-main",
   ]);
-  // Every opening survived reconciliation: 4 windows (two living, bedroom,
-  // bath) + 4 doors upstairs; window + door downstairs.
-  expect(state?.building.floors.map((f) => f.openings.length)).toEqual([2, 8]);
+  // Every opening survived reconciliation: 7 windows (living and bath ones
+  // doubled with upper lights, bedroom) + 4 doors upstairs; window + door
+  // downstairs.
+  expect(state?.building.floors.map((f) => f.openings.length)).toEqual([2, 11]);
 });
 
 it("derives the six plan rooms with their names", () => {
