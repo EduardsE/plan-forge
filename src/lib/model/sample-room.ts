@@ -188,6 +188,14 @@ function createSampleGroundFloor(): Floor {
         footprint: { width: 0.9, depth: 0.55, height: 0.42 },
       },
       {
+        id: "gf-coffee-succulent",
+        catalogId: "succulent",
+        position: { x: 1.55, y: 4.6 },
+        rotation: 0,
+        footprint: { width: 0.17, depth: 0.187, height: 0.271 },
+        stack: { hostId: "gf-coffee-table", dx: 0, dy: 0.15 },
+      },
+      {
         id: "gf-armchair",
         catalogId: "armchair",
         position: { x: 1.7, y: 2.9 },
@@ -567,6 +575,14 @@ function createSampleUpperFloor(): Floor {
         position: { x: 0.48, y: 6.0 },
         rotation: 90,
         footprint: { width: 2.2, depth: 0.85, height: 1.12 },
+      },
+      {
+        id: "uf-desk-succulent",
+        catalogId: "succulent",
+        position: { x: 0.48, y: 6.0 },
+        rotation: 0,
+        footprint: { width: 0.17, depth: 0.187, height: 0.271 },
+        stack: { hostId: "uf-desk", dx: -0.8, dy: 0 },
       },
       {
         id: "uf-desk-chair",

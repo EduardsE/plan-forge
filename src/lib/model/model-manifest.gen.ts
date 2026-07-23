@@ -50,6 +50,11 @@ export const MODEL_MANIFEST = {
       potted_plant_02_leaves: "neutral",
     },
   },
+  succulent: {
+    file: "/models/succulent.glb",
+    natural: { width: 0.17, depth: 0.187, height: 0.271 },
+    slots: { potted_plant_04: "neutral" },
+  },
   "plant-large": {
     file: "/models/plant-large.glb",
     natural: { width: 0.6, depth: 0.647, height: 1.379 },

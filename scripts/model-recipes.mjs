@@ -126,6 +126,20 @@ export const RECIPES = [
     },
   },
   {
+    // Poly Haven photogrammetry scan: haworthia succulent in a small cream
+    // pot — a tabletop plant (stackable on surfaces). Already light (~9k
+    // tris, one material), so no simplify. realWidth from the asset's
+    // published dimensions (170 mm).
+    catalogId: "succulent",
+    input: "assets/raw-models/potted_plant_04/potted_plant_04_1k.gltf",
+    source: "https://polyhaven.com/a/potted_plant_04 (CC0)",
+    realWidth: 0.17,
+    rotateYDeg: 0,
+    slots: {
+      potted_plant_04: "neutral",
+    },
+  },
+  {
     // Poly Haven photogrammetry scan: tall plant in a terracotta urn — the
     // room's large floor plant. Same prep rationale as "plant" above.
     catalogId: "plant-large",
