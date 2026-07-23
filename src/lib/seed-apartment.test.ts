@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { deriveFloor, storeyHeightOf } from "#/lib/model";
+import { deriveFloor, pointInOutline, storeyHeightOf } from "#/lib/model";
 import { deserializeSavedState, serializeSavedState } from "#/lib/persistence";
 import { createApartmentBuilding } from "#/lib/seed-apartment";
 import { stairRun, stairValid } from "#/lib/stairs";
@@ -42,6 +42,42 @@ it("keeps the stair valid inside the stairwell strip", () => {
   // 2.2 m ceiling + slab -> 13 risers x 0.25 m tread.
   expect(stairRun(storeyHeightOf(lower)).run).toBeCloseTo(3.25);
   expect(stairValid(building, lower.id, lower.stairs[0])).toBe(true);
+});
+
+it("places every furniture item inside a room", () => {
+  for (const floor of createApartmentBuilding().floors) {
+    const { rooms } = deriveFloor(floor);
+    for (const item of floor.furniture) {
+      const home = rooms.find((room) =>
+        pointInOutline(room.outline, item.position),
+      );
+      expect(home, `${item.id} landed outside every room`).toBeDefined();
+    }
+  }
+});
+
+it("keeps furniture out of the stair void cut into the living room", () => {
+  const [lower] = createApartmentBuilding().floors;
+  const stair = lower.stairs[0];
+  const { run } = stairRun(storeyHeightOf(lower));
+  // Rotation 270: the run spans x, the width spans y, around the center.
+  const min = {
+    x: stair.position.x - run / 2,
+    y: stair.position.y - stair.width / 2,
+  };
+  const max = {
+    x: stair.position.x + run / 2,
+    y: stair.position.y + stair.width / 2,
+  };
+  const [, main] = createApartmentBuilding().floors;
+  for (const item of main.furniture) {
+    const inVoid =
+      item.position.x > min.x &&
+      item.position.x < max.x &&
+      item.position.y > min.y &&
+      item.position.y < max.y;
+    expect(inVoid, `${item.id} sits over the stair void`).toBe(false);
+  }
 });
 
 it("returns an independent building per call", () => {

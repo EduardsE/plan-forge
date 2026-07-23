@@ -1,4 +1,12 @@
-import type { Building, Floor, Opening, WallEdge, WallNode } from "#/lib/model";
+import type {
+  Building,
+  Floor,
+  FurnitureItem,
+  Opening,
+  WallEdge,
+  WallNode,
+} from "#/lib/model";
+import { catalogItemById } from "#/lib/model";
 import { STORAGE_KEY, serializeSavedState } from "#/lib/persistence";
 
 /**
@@ -57,6 +65,26 @@ function win(
   };
 }
 
+/** A furniture item at its catalog footprint. Rotation faces the front
+ * (+depth axis) per the footprint convention: 0 → +y, 90 → +x, 270 → -x. */
+function f(
+  id: string,
+  catalogId: string,
+  x: number,
+  y: number,
+  rotation = 0,
+): FurnitureItem {
+  const entry = catalogItemById(catalogId);
+  if (!entry) throw new Error(`unknown catalog id: ${catalogId}`);
+  return {
+    id,
+    catalogId,
+    position: { x, y },
+    rotation,
+    footprint: entry.footprint,
+  };
+}
+
 /** Upper storey: living 019-4, bedroom 019-3, entry 019-1, bath 019-2. */
 const mainFloor: Floor = {
   id: "floor-main",
@@ -101,7 +129,60 @@ const mainFloor: Floor = {
     // The bedroom's 2.53 window on the south facade.
     win("w-bedroom", "e7", 0.55, 2.53, -1, 0.4, 2.15),
   ],
-  furniture: [],
+  furniture: [
+    // Living: sofa against the east wall facing the big west windows,
+    // dining set in the lower half, clear of the stair void (x 0.35..3.60,
+    // y 7.34..8.15) and the entry door (y 4.97..5.87 on the east divider).
+    f("lv-sofa", "sofa-2", 4.77, 2.4, 270),
+    f("lv-coffee", "coffee-table", 3.6, 2.4, 270),
+    f("lv-rug", "rug", 3.7, 2.4),
+    f("lv-armchair", "armchair", 2.75, 1.15, 45),
+    f("lv-floor-lamp", "floor-lamp", 4.8, 3.6),
+    f("lv-monstera", "monstera", 0.7, 4.7),
+    f("lv-plant-tall", "plant-large", 4.75, 0.65),
+    f("lv-dining", "dining-table", 2.3, 5.9),
+    f("lv-bench", "bench", 2.3, 6.6, 180),
+    f("lv-stool-1", "stool", 1.8, 5.2),
+    f("lv-stool-2", "stool", 2.8, 5.2),
+    f("lv-credenza", "credenza", 4.29, 6.6, 270),
+    {
+      ...f("lv-table-lamp", "table-lamp", 4.29, 7.2),
+      stack: { hostId: "lv-credenza", dx: 0.6, dy: 0 },
+    },
+    {
+      ...f("lv-frame", "picture-frame", 2.45, 0.28, 180),
+      mount: { edgeId: "e1", offset: 2.0, side: 1, elevation: 1.45 },
+    },
+    // Bedroom: double bed headboard on the west wall, wardrobe clear of the
+    // door swing (x 3.7..4.5 on the north divider).
+    f("bd-bed", "bed-double", 1.19, 9.55, 90),
+    f("bd-side-1", "side-table", 0.5, 8.5),
+    {
+      ...f("bd-lamp", "table-lamp", 0.5, 8.5),
+      stack: { hostId: "bd-side-1", dx: 0, dy: 0 },
+    },
+    f("bd-wardrobe", "wardrobe", 2.9, 8.56),
+    f("bd-plant", "plant", 4.3, 10.6),
+    {
+      ...f("bd-frame", "picture-frame", 0.28, 9.55, 90),
+      mount: { edgeId: "e8", offset: 1.21, side: 1, elevation: 1.5 },
+    },
+    // Entry: bench under the coat wall, mirror in the far corner, both clear
+    // of the entrance and living door swings.
+    f("en-bench", "bench", 4.89, 6.8, 90),
+    f("en-mirror", "floor-mirror", 5.82, 7.75, 315),
+    {
+      ...f("en-clock", "wall-clock", 6.13, 6.9, 270),
+      mount: { edgeId: "e4", offset: 2.0, side: 1, elevation: 1.6 },
+    },
+    // Bath: no fixtures in the catalog, so storage and a stool.
+    f("ba-shelf", "shelf", 5.94, 9.8, 270),
+    f("ba-stool", "stool", 4.95, 10.6),
+    {
+      ...f("ba-succulent", "succulent", 5.94, 9.8),
+      stack: { hostId: "ba-shelf", dx: 0.3, dy: 0 },
+    },
+  ],
   rooms: [
     { id: "room-living", name: "Living room", anchor: { x: 2.5, y: 2.5 } },
     { id: "room-entry", name: "Entryway", anchor: { x: 5.5, y: 6.2 } },
@@ -137,7 +218,21 @@ const lowerFloor: Floor = {
     door("d-lower-bed", "f6", 3.6, 0.75, 1),
     win("w-lower-bed", "f4", 1.55, 1.5, -1, 0.5, 2.0),
   ],
-  furniture: [],
+  furniture: [
+    // Single bed on the west wall, desk under the window, wardrobe past the
+    // door swing (x 3.6..4.35 on the north divider).
+    f("lb-bed", "bed-single", 1.05, 8.75, 90),
+    // The desk stops short of the window's protruding sill board.
+    f("lb-desk", "desk", 2.6, 10.38, 180),
+    f("lb-chair", "desk-chair", 2.6, 9.6),
+    f("lb-wardrobe", "wardrobe", 4.26, 9.6, 270),
+    f("lb-rug", "rug", 2.3, 9.9),
+    {
+      ...f("lb-lamp", "table-lamp", 3.5, 10.5),
+      stack: { hostId: "lb-desk", dx: 0.9, dy: 0 },
+    },
+    f("lb-plant", "plant", 0.4, 10.5),
+  ],
   rooms: [
     {
       id: "room-lower-bed",
