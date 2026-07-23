@@ -1313,6 +1313,7 @@ export function PlannerCanvas({
           ) : isWallItem(placingItem.id) ? (
             <WallMountGhost
               floor={floor}
+              rooms={rooms}
               item={placingItem}
               unit={unit}
               snapEnabled={snapEnabled}

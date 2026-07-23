@@ -12,21 +12,24 @@ import {
 import { SnapGuides } from "#/components/snap-guides";
 import {
   type CatalogItem,
+  type DerivedRoom,
   defaultMountElevation,
   type Floor,
-  type Point,
 } from "#/lib/model";
-import { mountAt, type WallMountResult } from "#/lib/mount-place";
+import { mountAt, mountAtRay, type WallMountResult } from "#/lib/mount-place";
+import { buildEdgeSolids } from "#/lib/room-scene";
 import type { Unit } from "#/lib/units";
 
 /**
  * The placement ghost for wall-mounted items (picture frames, clocks) — the
  * wall-item counterpart to `PlacementGhost`. It raycasts window pointermoves
- * onto the floor (the drag started on a DOM card, outside R3F's events),
- * finds the nearest wall via `mountAt`, and previews the item as a bright
- * standing rectangle hung on that wall at its mount elevation, with the same
- * distance-to-corner guide pills the opening tools use. Pointerup on the
- * canvas commits the mount; anywhere else the drag layer cancels.
+ * against the walls first (`mountAtRay`, so 3D aiming lands on the face under
+ * the cursor) and falls back to the floor plane + nearest edge (`mountAt`) —
+ * the drag started on a DOM card, outside R3F's events. The item previews as
+ * a bright standing rectangle hung on the target wall at its mount elevation,
+ * with the same distance-to-corner guide pills the opening tools use.
+ * Pointerup on the canvas commits the mount; anywhere else the drag layer
+ * cancels.
  */
 
 const GHOST_COLOR = "#3a5bf0";
@@ -34,6 +37,8 @@ const GHOST_COLOR = "#3a5bf0";
 export interface WallMountGhostProps {
   /** The graph floor; the mount targets the nearest fitting edge. */
   floor: Floor;
+  /** Derived rooms, for the walls' face adjacency (heights, cutaway sides). */
+  rooms: DerivedRoom[];
   item: CatalogItem;
   unit: Unit;
   /** Snap toggle: off means free slide along the wall (no quantize/guides). */
@@ -48,6 +53,7 @@ export interface WallMountGhostProps {
 
 export function WallMountGhost({
   floor,
+  rooms,
   item,
   unit,
   snapEnabled,
@@ -61,11 +67,14 @@ export function WallMountGhost({
   const elevation = defaultMountElevation(item.id);
 
   useEffect(() => {
+    const solids = buildEdgeSolids(floor, rooms);
     const raycaster = new Raycaster();
     const hit = new Vector3();
     const plane = new Plane(new Vector3(0, 1, 0), -planeY);
-    /** Floor point under the pointer, or null off-canvas / past the horizon. */
-    const toFloor = (event: PointerEvent): Point | null => {
+    /** The mount under the pointer: the wall face the ray strikes, else the
+     * nearest edge to the floor point under it. Null off-canvas / past the
+     * horizon. */
+    const resolve = (event: PointerEvent): WallMountResult | null => {
       if (event.target !== gl.domElement) return null;
       const rect = gl.domElement.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return null;
@@ -74,22 +83,40 @@ export function WallMountGhost({
         -(((event.clientY - rect.top) / rect.height) * 2 - 1),
       );
       raycaster.setFromCamera(ndc, camera);
-      return raycaster.ray.intersectPlane(plane, hit)
-        ? { x: hit.x, y: hit.z }
-        : null;
+      const { origin, direction } = raycaster.ray;
+      const aimed = mountAtRay(
+        floor,
+        solids,
+        {
+          origin: { x: origin.x, y: origin.y - planeY, z: origin.z },
+          dir: { x: direction.x, y: direction.y, z: direction.z },
+        },
+        {
+          x: camera.position.x,
+          y: camera.position.y - planeY,
+          z: camera.position.z,
+        },
+        item.footprint,
+        elevation,
+        snapEnabled,
+      );
+      if (aimed) return aimed;
+      if (!raycaster.ray.intersectPlane(plane, hit)) return null;
+      return mountAt(
+        floor,
+        { x: hit.x, y: hit.z },
+        item.footprint,
+        elevation,
+        snapEnabled,
+      );
     };
-    /** Nearest fitting edge across the graph. */
-    const resolve = (point: Point): WallMountResult | null =>
-      mountAt(floor, point, item.footprint, elevation, snapEnabled);
     const handleMove = (event: PointerEvent) => {
-      const point = toFloor(event);
-      setResult(point ? resolve(point) : null);
+      setResult(resolve(event));
     };
     const handleUp = (event: PointerEvent) => {
       // Off-canvas releases belong to the drag layer.
       if (!(event.target instanceof HTMLCanvasElement)) return;
-      const point = toFloor(event);
-      const placed = point ? resolve(point) : null;
+      const placed = resolve(event);
       if (placed) onPlace(placed);
       else onCancel();
     };
@@ -101,6 +128,7 @@ export function WallMountGhost({
     };
   }, [
     floor,
+    rooms,
     item,
     elevation,
     snapEnabled,

@@ -68,6 +68,7 @@ import {
   sillBox,
   stubSpans,
   type WallSolid,
+  wallStandsFull,
   wallZCenter,
   wallZOffset,
   windowUnitDepth,
@@ -186,14 +187,6 @@ const paneMaterial = new ShaderMaterial({
   fragmentShader: PANE_FRAGMENT,
   side: DoubleSide,
 });
-
-/**
- * Cutaway threshold on the wall-to-camera facing dot: slightly negative so
- * near-edge-on walls cut down too instead of lingering as slivers.
- */
-const HIDE_FACING_THRESHOLD = -0.06;
-/** Above this upness the camera is plan-like and every wall stays full. */
-const PLAN_UPNESS = 0.94;
 
 function makeTexture(
   width: number,
@@ -918,20 +911,14 @@ function Walls({
 
   useFrame(({ camera }) => {
     const tall = tallRef.current;
+    // Camera in this storey's floor-local frame (walls stand at local y 0).
+    const cam = {
+      x: camera.position.x,
+      y: camera.position.y - elevation,
+      z: camera.position.z,
+    };
     for (const [i, solid] of solids.entries()) {
-      const midX = solid.start.x + (solid.dir.x * solid.length) / 2;
-      const midZ = solid.start.y + (solid.dir.y * solid.length) / 2;
-      const toCamX = camera.position.x - midX;
-      const toCamY = camera.position.y - (elevation + solid.height / 2);
-      const toCamZ = camera.position.z - midZ;
-      const distance = Math.hypot(toCamX, toCamY, toCamZ) || 1;
-      const facing =
-        (toCamX * solid.outward.x + toCamZ * solid.outward.y) / distance;
-      // Straight-down (plan) views keep every wall full. Otherwise a two-face
-      // wall always cuts down; a 0/1-face wall cuts down when it faces us.
-      const planLike = toCamY / distance > PLAN_UPNESS;
-      const full =
-        planLike || (solid.faces < 2 && facing < HIDE_FACING_THRESHOLD);
+      const full = wallStandsFull(solid, cam);
       const display = displays[i];
       if (display.full) display.full.visible = full;
       if (display.stub) display.stub.visible = !full;
@@ -1627,10 +1614,9 @@ export function RoomScene({
     : null;
   const dragFloor = dragEntry?.floor ?? null;
   const dragDerived = dragEntry?.derived ?? null;
-  const dragEdgeHeights = useMemo(() => {
+  const dragWallSolids = useMemo(() => {
     if (!dragFloor || !dragDerived) return undefined;
-    const solids = buildEdgeSolids(dragFloor, dragDerived.rooms);
-    return new Map(solids.map((solid) => [solid.edgeId, solid.height]));
+    return buildEdgeSolids(dragFloor, dragDerived.rooms);
   }, [dragFloor, dragDerived]);
 
   return (
@@ -1717,7 +1703,8 @@ export function RoomScene({
             unit={unit}
             snapEnabled={snapEnabled}
             freeVerticalMounts
-            edgeHeights={dragEdgeHeights}
+            wallSolids={dragWallSolids}
+            elevationY={dragEntry.elevation}
             extraObstacles={dragEntry.active ? activeExtraObstacles : undefined}
             onMove={(update) => onMoveItem(drag.id, update)}
             onEnd={endDrag}

@@ -50,6 +50,39 @@ export const STUB_WALL_HEIGHT = 0.3;
 
 const MIN_HOLE_SIZE = 1e-6;
 
+/**
+ * Cutaway threshold on the wall-to-camera facing dot: slightly negative so
+ * near-edge-on walls cut down too instead of lingering as slivers.
+ */
+export const HIDE_FACING_THRESHOLD = -0.06;
+/** Above this upness the camera is plan-like and every wall stays full. */
+export const PLAN_UPNESS = 0.94;
+
+/**
+ * Whether the dollhouse cutaway keeps `solid` at full height for a camera at
+ * `camera` (floor-local: x/z are plan coordinates, y up from this storey's
+ * floor). One implementation for the per-frame wall display and the pointer
+ * ray-pick (`mountAtRay`), so what placement hits is what the user sees: a
+ * two-face wall always stubs while orbiting, a 0/1-face wall stubs only when
+ * it faces the camera, and a plan-like (near-overhead) view keeps every wall
+ * full.
+ */
+export function wallStandsFull(
+  solid: WallSolid,
+  camera: { x: number; y: number; z: number },
+): boolean {
+  const midX = solid.start.x + (solid.dir.x * solid.length) / 2;
+  const midZ = solid.start.y + (solid.dir.y * solid.length) / 2;
+  const toCamX = camera.x - midX;
+  const toCamY = camera.y - solid.height / 2;
+  const toCamZ = camera.z - midZ;
+  const distance = Math.hypot(toCamX, toCamY, toCamZ) || 1;
+  const facing =
+    (toCamX * solid.outward.x + toCamZ * solid.outward.y) / distance;
+  const planLike = toCamY / distance > PLAN_UPNESS;
+  return planLike || (solid.faces < 2 && facing < HIDE_FACING_THRESHOLD);
+}
+
 /** A stretch along a wall, as distances from the wall's start corner (node a). */
 export interface Span {
   start: number;

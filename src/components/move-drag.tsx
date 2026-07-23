@@ -12,7 +12,12 @@ import type {
   WallMount,
 } from "#/lib/model";
 import { canHostStack, DEFAULT_WALL_HEIGHT, isStackRider } from "#/lib/model";
-import { mountAt } from "#/lib/mount-place";
+import {
+  type MountRay,
+  mountAt,
+  mountAtRay,
+  type WallMountResult,
+} from "#/lib/mount-place";
 import {
   edgeWallObstacles,
   furnitureObstacle,
@@ -22,6 +27,7 @@ import {
   separateFromWalls,
   snapPlacement,
 } from "#/lib/place";
+import type { WallSolid } from "#/lib/room-scene";
 import { stackAt } from "#/lib/stack-place";
 import type { Unit } from "#/lib/units";
 
@@ -286,7 +292,8 @@ export function MoveDragSession({
   unit,
   snapEnabled,
   freeVerticalMounts = false,
-  edgeHeights,
+  wallSolids,
+  elevationY = 0,
   extraObstacles,
   onMove,
   onEnd,
@@ -303,8 +310,13 @@ export function MoveDragSession({
   /** 3D lens: a wall-item drag tracks the pointer on its wall's vertical
    * plane, so the elevation follows the hand (the 2D plan has no vertical). */
   freeVerticalMounts?: boolean;
-  /** Per-edge wall heights — the ceiling clamp for free-vertical drags. */
-  edgeHeights?: Map<string, number>;
+  /** The floor's wall solids (3D lens) — the ceiling clamp for free-vertical
+   * drags, and the ray pick that re-homes a mount to the wall face the
+   * pointer actually aims at. */
+  wallSolids?: WallSolid[];
+  /** World-space elevation of the dragged floor's storey — the wall ray pick
+   * works in floor-local coordinates. */
+  elevationY?: number;
   /** Containment obstacles beyond the floor's own wall slabs — stair voids
    * cut into this floor by the floor below, when there is one. Joins
    * `wallObstacles` for the floor-item snap/contain path only (mount and
@@ -334,8 +346,8 @@ export function MoveDragSession({
   floorRef.current = floor;
   const snapRef = useRef(snapEnabled);
   snapRef.current = snapEnabled;
-  const edgeHeightsRef = useRef(edgeHeights);
-  edgeHeightsRef.current = edgeHeights;
+  const wallSolidsRef = useRef(wallSolids);
+  wallSolidsRef.current = wallSolids;
   const extraObstaclesRef = useRef(extraObstacles);
   extraObstaclesRef.current = extraObstacles;
 
@@ -359,6 +371,26 @@ export function MoveDragSession({
     // The elevation a free-vertical mount drag currently rides at; a re-home
     // to another wall keeps it until the pointer settles on the new plane.
     let liveElevation = drag.mount?.elevation ?? 0;
+    /** A wall's ceiling height, from the solids the 3D lens passes in. */
+    const edgeCeiling = (edgeId: string) =>
+      wallSolidsRef.current?.find((solid) => solid.edgeId === edgeId)?.height ??
+      DEFAULT_WALL_HEIGHT;
+    const rayCaster = new Raycaster();
+    /** The pointer ray in floor-local space, for the aimed-wall re-home. */
+    const pointerRay = (event: PointerEvent): MountRay | null => {
+      const rect = gl.domElement.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return null;
+      const ndc = new Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -(((event.clientY - rect.top) / rect.height) * 2 - 1),
+      );
+      rayCaster.setFromCamera(ndc, camera);
+      const { origin, direction } = rayCaster.ray;
+      return {
+        origin: { x: origin.x, y: origin.y - elevationY, z: origin.z },
+        dir: { x: direction.x, y: direction.y, z: direction.z },
+      };
+    };
     /** The dragged item's current host edge (live through the previews). */
     const currentMountEdge = () =>
       furnitureRef.current.find((item) => item.id === drag.id)?.mount?.edgeId ??
@@ -400,62 +432,90 @@ export function MoveDragSession({
       if (drag.mount) {
         const mountDrag = drag.mount;
         const half = mountDrag.bodyHeight / 2;
+        // A re-home resolved from the pointer ray (aimed wall face), taking
+        // precedence over the horizontal-plane nearest-edge fallback.
+        let aimed: WallMountResult | null = null;
         if (freeVerticalMounts) {
-          // Track the pointer on the current wall's vertical plane: sliding
-          // along it moves the item, moving up/down it re-elevates. Beyond
-          // the wall's ends the horizontal-plane target below re-homes to
-          // the nearest wall at the elevation the drag last rode at.
           const edgeId = currentMountEdge();
           const frame = edgeId ? edgeFrame(edgeId) : null;
-          const side =
-            furniture.find((item) => item.id === drag.id)?.mount?.side ??
-            mountDrag.original.side;
-          const wallHit = frame
-            ? wallProjector(gl, camera, frame)(event)
-            : null;
-          if (frame && wallHit) {
-            const grabAlong =
-              drag.grab.x * frame.dir.x + drag.grab.y * frame.dir.y;
-            const along = wallHit.along - grabAlong;
-            if (
-              along > -WALL_STAY_MARGIN &&
-              along < frame.length + WALL_STAY_MARGIN
-            ) {
-              // Center target on the wall line, nudged to the item's side so
-              // `mountAt` keeps hanging it on the same face.
-              target = {
-                x:
-                  frame.start.x +
-                  frame.dir.x * along -
-                  frame.dir.y * side * 0.05,
-                y:
-                  frame.start.y +
-                  frame.dir.y * along +
-                  frame.dir.x * side * 0.05,
-              };
-              const ceiling =
-                edgeHeightsRef.current?.get(edgeId ?? "") ??
-                DEFAULT_WALL_HEIGHT;
-              liveElevation = Math.min(
-                Math.max(wallHit.up - mountDrag.elevationGrab, half),
-                Math.max(ceiling - half, half),
-              );
+          // The wall face the pointer ray strikes — the face the user sees
+          // under the cursor. It decides re-homes to other walls AND which
+          // face of the current wall the item hangs on: the horizontal-plane
+          // fallback below lands *behind* an aimed wall and would flip the
+          // mount to its back face.
+          const ray = pointerRay(event);
+          const rayResult =
+            ray && wallSolidsRef.current
+              ? mountAtRay(
+                  floorRef.current,
+                  wallSolidsRef.current,
+                  ray,
+                  {
+                    x: camera.position.x,
+                    y: camera.position.y - elevationY,
+                    z: camera.position.z,
+                  },
+                  mountDrag.footprint,
+                  liveElevation,
+                  snapRef.current,
+                )
+              : null;
+          if (rayResult && rayResult.mount.edgeId !== edgeId) {
+            // Aimed at another wall: re-home onto the face under the cursor,
+            // at the elevation the drag last rode at.
+            aimed = rayResult;
+          } else if (frame) {
+            // Track the pointer on the current wall's vertical plane:
+            // sliding along it moves the item (grab offset kept), moving
+            // up/down it re-elevates. The hung face follows the aim while
+            // the ray sees the wall; off every wall it stays put.
+            const side =
+              rayResult?.mount.side ??
+              furniture.find((item) => item.id === drag.id)?.mount?.side ??
+              mountDrag.original.side;
+            const wallHit = wallProjector(gl, camera, frame)(event);
+            if (wallHit) {
+              const grabAlong =
+                drag.grab.x * frame.dir.x + drag.grab.y * frame.dir.y;
+              const along = wallHit.along - grabAlong;
+              if (
+                along > -WALL_STAY_MARGIN &&
+                along < frame.length + WALL_STAY_MARGIN
+              ) {
+                // Center target on the wall line, nudged to `side` so
+                // `mountAt` hangs it on that face.
+                target = {
+                  x:
+                    frame.start.x +
+                    frame.dir.x * along -
+                    frame.dir.y * side * 0.05,
+                  y:
+                    frame.start.y +
+                    frame.dir.y * along +
+                    frame.dir.x * side * 0.05,
+                };
+                const ceiling = edgeCeiling(edgeId ?? "");
+                liveElevation = Math.min(
+                  Math.max(wallHit.up - mountDrag.elevationGrab, half),
+                  Math.max(ceiling - half, half),
+                );
+              }
             }
           }
         }
-        // Wall item: re-mount to the nearest graph edge that fits it.
-        const result = mountAt(
-          floorRef.current,
-          target,
-          mountDrag.footprint,
-          freeVerticalMounts ? liveElevation : mountDrag.elevation,
-          snapRef.current,
-        );
+        // Wall item: the aimed face, else the nearest edge that fits it.
+        const result =
+          aimed ??
+          mountAt(
+            floorRef.current,
+            target,
+            mountDrag.footprint,
+            freeVerticalMounts ? liveElevation : mountDrag.elevation,
+            snapRef.current,
+          );
         if (!result) return;
         // A re-home onto a lower wall pulls the elevation under its ceiling.
-        const ceiling =
-          edgeHeightsRef.current?.get(result.mount.edgeId) ??
-          DEFAULT_WALL_HEIGHT;
+        const ceiling = edgeCeiling(result.mount.edgeId);
         const clamped = freeVerticalMounts
           ? Math.min(
               Math.max(result.mount.elevation, half),
@@ -551,7 +611,7 @@ export function MoveDragSession({
       window.removeEventListener("pointerup", handleUp);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [drag, camera, gl, freeVerticalMounts]);
+  }, [drag, camera, gl, freeVerticalMounts, elevationY]);
 
   return (
     <group>
