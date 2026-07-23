@@ -466,7 +466,17 @@ function CeilingSlab({
       receiveShadow
       castShadow
     >
-      <meshStandardMaterial color={CEILING_COLOR} roughness={0.92} />
+      {/* The storey above's Platform occupies this same slab volume (its
+			    elevation is wallHeight + SLAB_THICKNESS), so their side faces are
+			    exactly coplanar; the offset pushes this slab behind in the depth
+			    buffer so the platform's navy skirt wins instead of z-fighting. */}
+      <meshStandardMaterial
+        color={CEILING_COLOR}
+        roughness={0.92}
+        polygonOffset
+        polygonOffsetFactor={1}
+        polygonOffsetUnits={1}
+      />
     </mesh>
   );
 }
