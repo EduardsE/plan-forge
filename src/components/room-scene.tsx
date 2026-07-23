@@ -862,7 +862,9 @@ function WallMesh({
  * Every wall of the floor (one solid per edge) plus filler posts at the
  * graph's corner/junction nodes, with the per-frame dollhouse cutaway: a
  * two-face wall always stubs while orbiting (it always occludes one of its
- * rooms), a 0/1-face wall stubs only when it faces the camera.
+ * rooms), a 0/1-face wall stubs only when it faces the camera. Every storey
+ * in the stack runs the cutaway — a capped lower floor peels open toward the
+ * camera exactly like the active one, just under its ceiling slab.
  */
 function Walls({
   solids,
@@ -870,20 +872,17 @@ function Walls({
   lighting,
   selectedEdgeId,
   onSelectWall,
-  capped = false,
+  elevation = 0,
 }: {
   solids: WallSolid[];
   posts: NodePost[];
   lighting: LightingPreset;
   selectedEdgeId: string | null;
   onSelectWall: (edgeId: string) => void;
-  /** A lower stacked storey: every wall (and post) stays full height, always
-   * — both the camera-facing hide and the two-face always-stub rule stand
-   * down. The JSX below already declares that state by default (the "full"
-   * display group has no `visible` override, the "stub" one is `visible=
-   * {false}`), so this just skips the per-frame loop that would otherwise
-   * flip them for the active storey's cutaway. */
-  capped?: boolean;
+  /** This storey's slab-top height: the parent group lifts the walls there,
+   * so the facing math must compare the camera against wall mid-height in
+   * *world* y, not local. */
+  elevation?: number;
 }) {
   const displays = useMemo<WallDisplay[]>(
     () => solids.map(() => ({ full: null, stub: null })),
@@ -918,13 +917,12 @@ function Walls({
   const tallRef = useRef<boolean[]>([]);
 
   useFrame(({ camera }) => {
-    if (capped) return;
     const tall = tallRef.current;
     for (const [i, solid] of solids.entries()) {
       const midX = solid.start.x + (solid.dir.x * solid.length) / 2;
       const midZ = solid.start.y + (solid.dir.y * solid.length) / 2;
       const toCamX = camera.position.x - midX;
-      const toCamY = camera.position.y - solid.height / 2;
+      const toCamY = camera.position.y - (elevation + solid.height / 2);
       const toCamZ = camera.position.z - midZ;
       const distance = Math.hypot(toCamX, toCamY, toCamZ) || 1;
       const facing =
@@ -1333,9 +1331,9 @@ function FurnitureBucket({
 }
 
 /** One rendered storey of the 3D stack: a graph floor at its derived
- * elevation, with `active` marking the one storey that gets today's full
- * interactive tree (cutaway walls, roofless ceiling proxy) — every entry
- * below it renders `capped` (solid ceiling, walls always full height). */
+ * elevation, with `active` marking the one storey that renders roofless
+ * (shadow-only ceiling proxy) — every entry below it is capped by a solid
+ * ceiling slab. All storeys share the live camera-facing wall cutaway. */
 export interface FloorStackEntry {
   floor: Floor;
   derived: DerivedFloor;
@@ -1345,8 +1343,9 @@ export interface FloorStackEntry {
 }
 
 /** One storey's walls/openings/platform/furniture, positioned by its
- * elevation. `entry.active` switches between today's roofless cutaway tree
- * and a capped lower storey (solid ceiling slab, no cutaway). */
+ * elevation. `entry.active` switches the ceiling between today's roofless
+ * shadow proxy and a capped lower storey's solid slab; the wall cutaway
+ * runs on every storey either way. */
 function FloorLayer({
   entry,
   belowFloor,
@@ -1439,7 +1438,7 @@ function FloorLayer({
         lighting={lighting}
         selectedEdgeId={selectedEdgeId}
         onSelectWall={onSelectWall}
-        capped={!entry.active}
+        elevation={entry.elevation}
       />
       <RoomOpenings
         solids={solids}

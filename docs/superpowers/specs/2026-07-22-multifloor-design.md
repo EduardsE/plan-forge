@@ -113,8 +113,10 @@ Stair {
   slice). Switching floors re-slices.
 - **Active floor: today's behavior exactly** — cutaway/stub walls, furniture, opening
   pick volumes, selection rims, drags.
-- **Lower floors render "capped":** walls at full height with no cutaway (they're
-  covered anyway), furniture in place, plus a **ceiling slab** per room — the room's
+- **Lower floors render "capped":** the same live camera-facing wall cutaway as the
+  active floor (originally spec'd as full-height/no-cutaway; changed 2026-07-23 —
+  frozen full walls hid lower interiors while orbiting), furniture in place, plus a
+  **ceiling slab** per room — the room's
   outline polygon extruded `SLAB_THICKNESS`, sitting on top of that room's walls —
   with stair voids cut as shape holes. The floor-above's platform cuts the matching
   hole, so a stairwell reads as one continuous opening from both sides.
