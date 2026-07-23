@@ -128,6 +128,8 @@ const mainFloor: Floor = {
     win("w-living-2", "e9", 5.87, 1.77, 1, 0.4, 2.15),
     // The bedroom's 2.53 window on the south facade.
     win("w-bedroom", "e7", 0.55, 2.53, -1, 0.4, 2.15),
+    // The bath's window on its 1.74 south wall segment; privacy-high sill.
+    win("w-bath", "e6", 0.45, 0.9, 1, 0.9, 2.15),
   ],
   furniture: [
     // Living: sofa against the east wall facing the big west windows,
@@ -177,7 +179,7 @@ const mainFloor: Floor = {
     },
     // Bath: no fixtures in the catalog, so storage and a stool.
     f("ba-shelf", "shelf", 5.94, 9.8, 270),
-    f("ba-stool", "stool", 4.95, 10.6),
+    f("ba-stool", "stool", 4.8, 10.5),
     {
       ...f("ba-succulent", "succulent", 5.94, 9.8),
       stack: { hostId: "ba-shelf", dx: 0.3, dy: 0 },
