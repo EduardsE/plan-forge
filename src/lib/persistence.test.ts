@@ -296,7 +296,7 @@ describe("deserializeSavedState rejection", () => {
           position: { x: 4, y: 1 },
           rotation: 0,
           footprint: { width: 0.22, depth: 0.22, height: 0.48 },
-          stack: { hostId: "desk-1", dx: 0.4, dy: 0.1 },
+          stack: { hostId: "gf-dining-table", dx: 0.4, dy: 0.1 },
         },
       ];
       return floor;
@@ -317,7 +317,7 @@ describe("deserializeSavedState rejection", () => {
     const bent = stacked();
     bent.furniture[bent.furniture.length - 1] = {
       ...bent.furniture[bent.furniture.length - 1],
-      stack: { hostId: "desk-1", dx: Number.NaN, dy: 0 },
+      stack: { hostId: "gf-dining-table", dx: Number.NaN, dy: 0 },
     };
     expect(
       deserializeSavedState(serializeSavedState(withFloor(bent))),

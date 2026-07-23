@@ -48,7 +48,7 @@ import {
   type Building,
   type CatalogItem,
   createFloor,
-  createSampleFloor,
+  createSampleBuilding,
   DEFAULT_WALL_HEIGHT,
   type DerivedFloor,
   deriveFloor,
@@ -160,7 +160,7 @@ function Planner() {
   // `settleRoom` fires at gesture end — an esc-cancelled drag leaves no step
   // at all.
   const [buildingHistory, setBuildingHistory] = useState(() =>
-    createHistory<Building>({ floors: [createSampleFloor()] }),
+    createHistory<Building>(createSampleBuilding()),
   );
   const building = buildingHistory.current;
   // Live building for handlers that must compute an edit *and* read its
