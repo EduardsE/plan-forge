@@ -63,6 +63,7 @@ import {
   floorBounds,
   floorIndexOf,
   floorOfItem,
+  floorOfStair,
   isOpeningItem,
   isStairItem,
   isWallItem,
@@ -79,12 +80,13 @@ import {
   unionBounds,
   updateFloorFurniture,
   updateFurniture,
+  updateStair,
   wallHeightOf,
 } from "#/lib/model";
 import type { WallMountResult } from "#/lib/mount-place";
 import { OPENING_GRID, type OpeningPlacement } from "#/lib/opening-place";
 import type { Obstacle } from "#/lib/place";
-import { stairVoidObstacles } from "#/lib/stairs";
+import { stairValid, stairVoidObstacles } from "#/lib/stairs";
 import type { Unit } from "#/lib/units";
 import { cn } from "#/lib/utils";
 import type { ViewMode } from "#/lib/view-mode";
@@ -722,6 +724,10 @@ export interface PlannerCanvasProps {
    * body; the inspector edits its thickness. */
   selectedEdgeId: string | null;
   onSelectedEdgeIdChange: (id: string | null) => void;
+  /** Stair selection (either lens) — an id picked on its own tread symbol/
+   * mesh or the void it cuts on the floor above; the inspector edits it. */
+  selectedStairId: string | null;
+  onSelectedStairIdChange: (id: string | null) => void;
   cameraApiRef: RefObject<CameraApi | null>;
   readoutStore: CameraReadoutStore;
   /** Display unit for draw-mode labels. */
@@ -773,6 +779,8 @@ export function PlannerCanvas({
   onSelectedOpeningIdChange: setSelectedOpeningId,
   selectedEdgeId,
   onSelectedEdgeIdChange: setSelectedEdgeId,
+  selectedStairId,
+  onSelectedStairIdChange: setSelectedStairId,
   cameraApiRef,
   readoutStore,
   unit,
@@ -882,24 +890,56 @@ export function PlannerCanvas({
       setSelectedId(id);
       setSelectedOpeningId(null);
       setSelectedEdgeId(null);
+      setSelectedStairId(null);
     },
-    [setSelectedId, setSelectedOpeningId, setSelectedEdgeId],
+    [
+      setSelectedId,
+      setSelectedOpeningId,
+      setSelectedEdgeId,
+      setSelectedStairId,
+    ],
   );
   const selectOpening = useCallback(
     (id: string) => {
       setSelectedOpeningId(id);
       setSelectedId(null);
       setSelectedEdgeId(null);
+      setSelectedStairId(null);
     },
-    [setSelectedId, setSelectedOpeningId, setSelectedEdgeId],
+    [
+      setSelectedId,
+      setSelectedOpeningId,
+      setSelectedEdgeId,
+      setSelectedStairId,
+    ],
   );
   const selectWall = useCallback(
     (edgeId: string) => {
       setSelectedEdgeId(edgeId);
       setSelectedId(null);
       setSelectedOpeningId(null);
+      setSelectedStairId(null);
     },
-    [setSelectedId, setSelectedOpeningId, setSelectedEdgeId],
+    [
+      setSelectedId,
+      setSelectedOpeningId,
+      setSelectedEdgeId,
+      setSelectedStairId,
+    ],
+  );
+  const selectStair = useCallback(
+    (id: string) => {
+      setSelectedStairId(id);
+      setSelectedId(null);
+      setSelectedOpeningId(null);
+      setSelectedEdgeId(null);
+    },
+    [
+      setSelectedId,
+      setSelectedOpeningId,
+      setSelectedEdgeId,
+      setSelectedStairId,
+    ],
   );
 
   const moveItem = useCallback(
@@ -918,6 +958,36 @@ export function PlannerCanvas({
           updateFurniture(room, id, update),
         ),
         ownerFloor.id,
+      );
+    },
+    [building, floor, onFloorPreview],
+  );
+
+  // The stair rotate-handle's live update (2D lens): streams per pointermove
+  // like `moveItem`, but gated by `stairValid` on every frame — unlike
+  // furniture, a stair's own containment only sees its owning floor's walls,
+  // never the floor it climbs *to*, so the validity gate has to live here,
+  // where the whole `building` is in scope. An invalid step is simply
+  // skipped (no preview call), which reads as the handle refusing to turn
+  // any further in that direction — the same feel as a nudge stopped by a
+  // wall — rather than committing an invalid rest state.
+  const rotateStair = useCallback(
+    (id: string, update: { position: Point; rotation: number }) => {
+      const owner = floorOfStair(building, id) ?? floor;
+      const stair = owner.stairs.find((s) => s.id === id);
+      if (!stair) return;
+      const candidate: Stair = {
+        ...stair,
+        position: update.position,
+        rotation: update.rotation,
+      };
+      if (!stairValid(building, owner.id, candidate)) return;
+      onFloorPreview(
+        updateStair(owner, id, {
+          position: update.position,
+          rotation: update.rotation,
+        }),
+        owner.id,
       );
     },
     [building, floor, onFloorPreview],
@@ -1002,7 +1072,14 @@ export function PlannerCanvas({
     setSelectedId(null);
     setSelectedOpeningId(null);
     setSelectedEdgeId(null);
-  }, [placingItem, setSelectedId, setSelectedOpeningId, setSelectedEdgeId]);
+    setSelectedStairId(null);
+  }, [
+    placingItem,
+    setSelectedId,
+    setSelectedOpeningId,
+    setSelectedEdgeId,
+    setSelectedStairId,
+  ]);
 
   const placeDraggedItem = useCallback(
     // Furniture is floor-level: the drop lands on `floor.furniture` wherever
@@ -1114,6 +1191,7 @@ export function PlannerCanvas({
           setSelectedId(null);
           setSelectedOpeningId(null);
           setSelectedEdgeId(null);
+          setSelectedStairId(null);
         }}
       >
         <CameraRig
@@ -1178,6 +1256,7 @@ export function PlannerCanvas({
               selectedId={selectedId}
               selectedOpeningId={selectedOpeningId}
               selectedEdgeId={selectedEdgeId}
+              selectedStairId={selectedStairId}
               unit={unit}
               snapEnabled={snapEnabled}
               onSelectItem={selectItem}
@@ -1190,6 +1269,8 @@ export function PlannerCanvas({
               onDeleteOpening={deleteOpening}
               onResizeOpening={resizeOpeningTo}
               onSelectWall={selectWall}
+              onSelectStair={selectStair}
+              onStairRotate={rotateStair}
             />
           )
         ) : (
@@ -1198,6 +1279,7 @@ export function PlannerCanvas({
             selectedId={selectedId}
             selectedOpeningId={selectedOpeningId}
             selectedEdgeId={selectedEdgeId}
+            selectedStairId={selectedStairId}
             unit={unit}
             snapEnabled={snapEnabled}
             timeOfDay={timeOfDay}
@@ -1208,6 +1290,7 @@ export function PlannerCanvas({
             onSelectOpening={selectOpening}
             onDragOpening={dragOpening3D}
             onSelectWall={selectWall}
+            onSelectStair={selectStair}
             activeExtraObstacles={activeExtraObstacles}
           />
         )}

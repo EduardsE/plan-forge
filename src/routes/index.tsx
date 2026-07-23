@@ -66,6 +66,7 @@ import {
   floorOfEdge,
   floorOfItem,
   floorOfOpening,
+  floorOfStair,
   furnitureDisplayName,
   openingSill,
   openingVerticals,
@@ -76,11 +77,13 @@ import {
   removeFloor,
   removeFloorOpening,
   removeFurniture,
+  removeStair,
   renameFloor,
   resizeFloorOpening,
   roomOfFurniture,
   rotateFurniture,
   type SillMaterial,
+  type Stair,
   setEdgeThickness,
   setFurnitureColorway,
   setFurnitureFootprint,
@@ -99,6 +102,7 @@ import {
   updateFloorFurniture,
   updateFloorIn,
   updateFurniture,
+  updateStair,
   WALL_THICKNESS,
   wallHeightOf,
 } from "#/lib/model";
@@ -109,7 +113,7 @@ import {
 } from "#/lib/persistence";
 import { edgeWallObstacles, type Obstacle, PLACEMENT_GRID } from "#/lib/place";
 import { buildEdgeSolids, sunAnchorAzimuth } from "#/lib/room-scene";
-import { stairVoidObstacles } from "#/lib/stairs";
+import { stairRun, stairValid, stairVoidObstacles } from "#/lib/stairs";
 import type { Unit } from "#/lib/units";
 import type { ViewMode } from "#/lib/view-mode";
 
@@ -384,6 +388,105 @@ function Planner() {
       );
     },
     [selectedEdgeId, commitFloor],
+  );
+  // The stair selection (V8, either lens): an id picked on its own tread
+  // symbol/mesh or the void it cuts on the floor above. Mutually exclusive
+  // with the other three; the inspector edits width/rotation/position.
+  const [selectedStairId, setSelectedStairId] = useState<string | null>(null);
+  const selectedStair = useMemo(() => {
+    if (!selectedStairId || viewMode === "draw") return null;
+    // A stair pick can land on any storey too — resolve the owning floor.
+    const owner = floorOfStair(building, selectedStairId);
+    if (!owner) return null;
+    const stair = owner.stairs.find((s) => s.id === selectedStairId);
+    if (!stair) return null;
+    const ownerIndex = floorIndexOf(building, owner.id);
+    return {
+      stair,
+      run: stairRun(storeyHeightOf(owner)).run,
+      rises: `${floorDisplayName(building, ownerIndex)} → ${floorDisplayName(building, ownerIndex + 1)}`,
+    };
+  }, [selectedStairId, viewMode, building]);
+  // One stair edit, shared by every commit path (WIDTH/ROTATE/POS X/Y
+  // fields, the keyboard's `r`): builds the patched stair and validity-gates
+  // it (`stairValid`, against both the owning floor's and the floor-above's
+  // wall slabs) *before* committing — invalid patches no-op, so a field
+  // snaps back exactly like a rejected furniture resize. `patch` may be a
+  // function of the current stair (for a relative edit like +90°) so callers
+  // never have to re-read `stair.rotation` themselves.
+  const patchStair = useCallback(
+    (
+      patch:
+        | Partial<Omit<Stair, "id">>
+        | ((stair: Stair) => Partial<Omit<Stair, "id">>),
+    ) => {
+      if (!selectedStairId) return;
+      const owner = floorOfStair(buildingRef.current, selectedStairId);
+      if (!owner) return;
+      const stair = owner.stairs.find((s) => s.id === selectedStairId);
+      if (!stair) return;
+      const resolved = typeof patch === "function" ? patch(stair) : patch;
+      const candidateBuilding = updateFloorIn(
+        buildingRef.current,
+        owner.id,
+        (f) => updateStair(f, selectedStairId, resolved),
+      );
+      const candidateStair = floorById(
+        candidateBuilding,
+        owner.id,
+      )?.stairs.find((s) => s.id === selectedStairId);
+      if (!candidateStair) return;
+      if (!stairValid(candidateBuilding, owner.id, candidateStair)) return;
+      commitFloor(owner.id, (f) => updateStair(f, selectedStairId, resolved));
+    },
+    [selectedStairId, commitFloor],
+  );
+  const resizeSelectedStair = useCallback(
+    (width: number) => patchStair({ width }),
+    [patchStair],
+  );
+  const rotateSelectedStairTo = useCallback(
+    (deg: number) => patchStair({ rotation: deg }),
+    [patchStair],
+  );
+  const rotateSelectedStair90 = useCallback(
+    () => patchStair((stair) => ({ rotation: (stair.rotation + 90) % 360 })),
+    [patchStair],
+  );
+  const moveSelectedStairTo = useCallback(
+    (position: Point) => patchStair({ position }),
+    [patchStair],
+  );
+  const deleteSelectedStair = useCallback(() => {
+    if (!selectedStairId) return;
+    const owner = floorOfStair(buildingRef.current, selectedStairId);
+    if (owner) {
+      commitFloor(owner.id, (f) => removeStair(f, selectedStairId));
+    }
+    setSelectedStairId(null);
+  }, [selectedStairId, commitFloor]);
+  // An arrow-key nudge on the selected stair: same functional-preview burst
+  // as furniture's `nudgeSelected`, but validity-gated per step (against the
+  // pre-step floor from `buildingRef.current`, whose walls don't change from
+  // a stair edit) — an invalid step is simply skipped, so the burst stalls
+  // at a wall instead of tunneling through it.
+  const nudgeSelectedStair = useCallback(
+    (dx: number, dy: number) => {
+      if (!selectedStairId) return;
+      const owner = floorOfStair(buildingRef.current, selectedStairId);
+      if (!owner) return;
+      const stair = owner.stairs.find((s) => s.id === selectedStairId);
+      if (!stair) return;
+      const candidate: Stair = {
+        ...stair,
+        position: { x: stair.position.x + dx, y: stair.position.y + dy },
+      };
+      if (!stairValid(buildingRef.current, owner.id, candidate)) return;
+      previewFloorIn(owner.id, (f) =>
+        updateStair(f, selectedStairId, { position: candidate.position }),
+      );
+    },
+    [selectedStairId, previewFloorIn],
   );
   // Everything the inspector's opening view needs, resolved once: effective
   // verticals, the host edge's ceiling, the portal label, whether the wall
@@ -736,6 +839,7 @@ function Planner() {
     setSelectedId(null);
     setSelectedOpeningId(null);
     setSelectedEdgeId(null);
+    setSelectedStairId(null);
   }, []);
   // Bottom-left view toggles. Grid shows the in-scene reference grid; snap
   // gates draw/placement quantize + flush snapping. Both default on, matching
@@ -1173,6 +1277,86 @@ function Planner() {
     settingsOpen,
   ]);
 
+  // The stair selection's keyboard: modeled on the furniture one — arrows
+  // nudge (a key-repeat burst previews and folds into one history step on
+  // keyup), `r` rotates +90°, delete/backspace removes, esc deselects. Same
+  // input-skipping window listener, mutually exclusive with the other three.
+  useEffect(() => {
+    if (
+      !selectedStairId ||
+      selectedId ||
+      selectedOpeningId ||
+      selectedEdgeId ||
+      viewMode === "draw"
+    ) {
+      return;
+    }
+    if (sceneDragActive) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest("input, textarea, [contenteditable]")
+      ) {
+        return;
+      }
+      const step = event.shiftKey ? FINE_NUDGE_STEP : PLACEMENT_GRID;
+      switch (event.key) {
+        case "ArrowUp":
+          event.preventDefault();
+          nudgeSelectedStair(0, -step);
+          break;
+        case "ArrowDown":
+          event.preventDefault();
+          nudgeSelectedStair(0, step);
+          break;
+        case "ArrowLeft":
+          event.preventDefault();
+          nudgeSelectedStair(-step, 0);
+          break;
+        case "ArrowRight":
+          event.preventDefault();
+          nudgeSelectedStair(step, 0);
+          break;
+        case "r":
+        case "R":
+          rotateSelectedStair90();
+          break;
+        case "Delete":
+        case "Backspace":
+          event.preventDefault();
+          deleteSelectedStair();
+          break;
+        case "Escape":
+          if (!settingsOpen) setSelectedStairId(null);
+          break;
+      }
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key.startsWith("Arrow")) settleRoom();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      // Deselecting or switching lenses mid-burst still settles the previews.
+      settleRoom();
+    };
+  }, [
+    selectedStairId,
+    selectedId,
+    selectedOpeningId,
+    selectedEdgeId,
+    viewMode,
+    sceneDragActive,
+    settingsOpen,
+    nudgeSelectedStair,
+    rotateSelectedStair90,
+    deleteSelectedStair,
+    settleRoom,
+  ]);
+
   // Screen 2d, amended 2026-07-16: the library docks as its own column
   // between rail and canvas while the inspector keeps the right edge — the
   // place → tweak → place loop never has to swap panels.
@@ -1361,6 +1545,8 @@ function Planner() {
               onSelectedOpeningIdChange={setSelectedOpeningId}
               selectedEdgeId={selectedEdgeId}
               onSelectedEdgeIdChange={setSelectedEdgeId}
+              selectedStairId={selectedStairId}
+              onSelectedStairIdChange={setSelectedStairId}
               cameraApiRef={cameraApiRef}
               readoutStore={readoutStore}
               unit={unit}
@@ -1478,6 +1664,7 @@ function Planner() {
         selectedWallHeight={selectedWallHeight}
         selectedOpening={selectedOpening}
         selectedWall={selectedWall}
+        selectedStair={selectedStair}
         nodeCount={floor.nodes.length}
         openingCount={derived.rooms[0]?.openingCount ?? 0}
         onResize={resizeSelected}
@@ -1496,6 +1683,10 @@ function Planner() {
         onOpeningSillMaterial={setSelectedOpeningSillMaterial}
         onOpeningDelete={deleteSelectedOpening}
         onWallThickness={setWallThickness}
+        onStairResize={resizeSelectedStair}
+        onStairRotateTo={rotateSelectedStairTo}
+        onStairMoveTo={moveSelectedStairTo}
+        onStairDelete={deleteSelectedStair}
         onDelete={deleteSelected}
       />
     </div>

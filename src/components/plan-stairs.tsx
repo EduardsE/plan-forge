@@ -1,7 +1,8 @@
-import { Html, Line } from "@react-three/drei";
-import { useMemo } from "react";
+import { Html, Line, useCursor } from "@react-three/drei";
+import { useMemo, useState } from "react";
 import { MathUtils } from "three";
-import type { Floor, Point } from "#/lib/model";
+import { CLICK_SLOP_PX } from "#/components/move-drag";
+import type { Floor, Point, Stair } from "#/lib/model";
 import { dashedPolyline } from "#/lib/plan-scene";
 import { stairRun, TREAD_DEPTH } from "#/lib/stairs";
 
@@ -19,6 +20,13 @@ import { stairRun, TREAD_DEPTH } from "#/lib/stairs";
  * climb) to +run/2 (top) — a `rotation-y` group wrapper reproduces the same
  * rotation `stairClimbDir(rotation)` computes, so no separate vector math is
  * needed here (see `StairMesh`'s docstring for the derivation).
+ *
+ * Pickable (V8): both variants get an invisible flat pick mesh over the
+ * footprint (`FILL_Y`-level, like every other plan footprint) — a void
+ * symbol picks the *owning* (lower) floor's stair id, same as the up symbol;
+ * the caller resolves ownership (`floorOfStair`), this component just
+ * reports which id was clicked. Selected/hovered tints the outline
+ * accent-blue, matching every other plan footprint's active-state contract.
  */
 
 /** Ink-grey stroke for the owning floor's real stair symbol — the plan's
@@ -26,9 +34,17 @@ import { stairRun, TREAD_DEPTH } from "#/lib/stairs";
 const UP_COLOR = "#33415c";
 /** Paper ink-500 — the void's non-editable, non-wall grey. */
 const VOID_COLOR = "#9A9A92";
+/** Accent blue (`plan-scene.tsx`'s `SELECTION_COLOR`) — selected/hovered. */
+const SELECTION_COLOR = "#3a5bf0";
 
 const STAIR_LINE_Y = 0.0145;
 const VOID_LINE_Y = 0.011;
+/** Flat pick mesh, level with every other plan footprint's fill. */
+const PICK_Y = 0.01;
+
+/** Raycast opt-out for decorative strokes — only the pick mesh below is a
+ * click/hover target. */
+const noRaycast = () => null;
 
 function v3(p: Point, y: number): [number, number, number] {
   return [p.x, y, p.y];
@@ -43,13 +59,16 @@ function UpSymbol({
   width,
   run,
   risers,
+  active,
 }: {
   width: number;
   run: number;
   risers: number;
+  active: boolean;
 }) {
   const hw = width / 2;
   const hd = run / 2;
+  const color = active ? SELECTION_COLOR : UP_COLOR;
   const outline = useMemo(
     () => [
       { x: -hw, y: -hd },
@@ -81,31 +100,35 @@ function UpSymbol({
     <group>
       <Line
         points={outline.map((p) => v3(p, STAIR_LINE_Y))}
-        color={UP_COLOR}
+        color={color}
         lineWidth={2}
         alphaToCoverage={false}
+        raycast={noRaycast}
       />
       {treads.map((line, i) => (
         <Line
           // biome-ignore lint/suspicious/noArrayIndexKey: a static per-riser list.
           key={i}
           points={line.map((p) => v3(p, STAIR_LINE_Y))}
-          color={UP_COLOR}
+          color={color}
           lineWidth={1.5}
           alphaToCoverage={false}
+          raycast={noRaycast}
         />
       ))}
       <Line
         points={[v3({ x: 0, y: -hd }, STAIR_LINE_Y), v3(tip, STAIR_LINE_Y)]}
-        color={UP_COLOR}
+        color={color}
         lineWidth={1.5}
         alphaToCoverage={false}
+        raycast={noRaycast}
       />
       <Line
         points={arrowHead.map((p) => v3(p, STAIR_LINE_Y))}
-        color={UP_COLOR}
+        color={color}
         lineWidth={1.5}
         alphaToCoverage={false}
+        raycast={noRaycast}
       />
       <Html
         position={[0, STAIR_LINE_Y, hd - 0.32]}
@@ -119,9 +142,18 @@ function UpSymbol({
 }
 
 /** The floor above's void: dashed outline, one diagonal break line, "DN". */
-function VoidSymbol({ width, run }: { width: number; run: number }) {
+function VoidSymbol({
+  width,
+  run,
+  active,
+}: {
+  width: number;
+  run: number;
+  active: boolean;
+}) {
   const hw = width / 2;
   const hd = run / 2;
+  const color = active ? SELECTION_COLOR : VOID_COLOR;
   const outline = useMemo(
     () => [
       { x: -hw, y: -hd },
@@ -150,16 +182,18 @@ function VoidSymbol({ width, run }: { width: number; run: number }) {
       <Line
         segments
         points={dashes.map((p) => v3(p, VOID_LINE_Y))}
-        color={VOID_COLOR}
+        color={color}
         lineWidth={2}
         alphaToCoverage={false}
+        raycast={noRaycast}
       />
       <Line
         segments
         points={breakDashes.map((p) => v3(p, VOID_LINE_Y))}
-        color={VOID_COLOR}
+        color={color}
         lineWidth={1.5}
         alphaToCoverage={false}
+        raycast={noRaycast}
       />
       <Html
         position={[0, VOID_LINE_Y, 0]}
@@ -172,6 +206,67 @@ function VoidSymbol({ width, run }: { width: number; run: number }) {
   );
 }
 
+/** One stair's symbol, positioned/rotated at its footprint, with the shared
+ * pick/hover/selected contract every plan footprint uses. `onSelect` absent
+ * renders a static (non-interactive) symbol — matches every other plan
+ * layer's `interactive` convention. */
+function StairSymbol({
+  stair,
+  run,
+  risers,
+  variant,
+  selected,
+  onSelect,
+}: {
+  stair: Stair;
+  run: number;
+  risers: number;
+  variant: "up" | "void";
+  selected: boolean;
+  onSelect?: (id: string) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered);
+  const active = selected || hovered;
+  return (
+    <group
+      position={[stair.position.x, 0, stair.position.y]}
+      rotation-y={MathUtils.degToRad(stair.rotation)}
+    >
+      {onSelect && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: <mesh> is an R3F scene node, not a DOM element.
+        <mesh
+          rotation-x={-Math.PI / 2}
+          position-y={PICK_Y}
+          onClick={(event) => {
+            if (event.delta > CLICK_SLOP_PX) return;
+            event.stopPropagation();
+            onSelect(stair.id);
+          }}
+          onPointerOver={(event) => {
+            event.stopPropagation();
+            setHovered(true);
+          }}
+          onPointerOut={() => setHovered(false)}
+        >
+          <planeGeometry args={[stair.width, run]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
+      {variant === "up" ? (
+        <UpSymbol
+          width={stair.width}
+          run={run}
+          risers={risers}
+          active={active}
+        />
+      ) : (
+        <VoidSymbol width={stair.width} run={run} active={active} />
+      )}
+    </group>
+  );
+}
+
 export interface PlanStairsProps {
   /** The floor whose `stairs` this draws — the owning floor for "up", the
    * floor below the active one for "void". */
@@ -179,32 +274,37 @@ export interface PlanStairsProps {
   /** The climbing floor's own storey height (`storeyHeightOf`), driving the
    * same `stairRun` the ghost and `StairMesh` use. */
   storeyHeight: number;
-  /** Selection lands in V8; accepted now so this component's signature
-   * doesn't change when it does. */
+  /** Currently selected stair id, if any (either variant can hold it — a
+   * void symbol picks the same id its owning floor's "up" symbol would). */
   selectedStairId?: string | null;
+  /** Absent renders a static, non-interactive symbol. */
   onSelectStair?: (id: string) => void;
   /** "up" on the owning floor (treads + arrow + "UP"); "void" on the floor
    * above (dashed outline + break line + "DN"). */
   variant: "up" | "void";
 }
 
-export function PlanStairs({ floor, storeyHeight, variant }: PlanStairsProps) {
+export function PlanStairs({
+  floor,
+  storeyHeight,
+  selectedStairId = null,
+  onSelectStair,
+  variant,
+}: PlanStairsProps) {
   const { risers, run } = useMemo(() => stairRun(storeyHeight), [storeyHeight]);
   if (floor.stairs.length === 0) return null;
   return (
     <>
       {floor.stairs.map((stair) => (
-        <group
+        <StairSymbol
           key={stair.id}
-          position={[stair.position.x, 0, stair.position.y]}
-          rotation-y={MathUtils.degToRad(stair.rotation)}
-        >
-          {variant === "up" ? (
-            <UpSymbol width={stair.width} run={run} risers={risers} />
-          ) : (
-            <VoidSymbol width={stair.width} run={run} />
-          )}
-        </group>
+          stair={stair}
+          run={run}
+          risers={risers}
+          variant={variant}
+          selected={stair.id === selectedStairId}
+          onSelect={onSelectStair}
+        />
       ))}
     </>
   );

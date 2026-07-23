@@ -13,6 +13,7 @@ import {
   type Point,
   type Room,
   type SillMaterial,
+  type Stair,
   totalFloorArea,
   totalPerimeter,
   wallHeightOf,
@@ -670,6 +671,131 @@ function WallSection({
   );
 }
 
+/** The route-resolved selected stair: the stored shape plus the two facts
+ * only the building knows (the total run and which storeys it connects). */
+export interface StairSelection {
+  stair: Stair;
+  /** Total horizontal run, meters (`stairRun` off the owning floor's storey
+   * height). */
+  run: number;
+  /** "Ground floor → Floor 2" — the storeys it climbs between
+   * (`floorDisplayName` on the owner and the floor above it). */
+  rises: string;
+}
+
+function StairSection({
+  selection,
+  unit,
+  onResize,
+  onRotateTo,
+  onMoveTo,
+  onDelete,
+}: {
+  selection: StairSelection;
+  unit: Unit;
+  /** A committed width from the WIDTH field (clamping is the model's). */
+  onResize: (width: number) => void;
+  /** A committed exact angle, degrees CCW. */
+  onRotateTo: (deg: number) => void;
+  /** A committed center position, meters. */
+  onMoveTo: (position: Point) => void;
+  onDelete: () => void;
+}) {
+  const { stair, run, rises } = selection;
+
+  const commitWidth = (text: string) => {
+    const meters = parseLength(text, unit);
+    if (meters === null) return;
+    if (Math.abs(meters - stair.width) < SAME_EPSILON) return;
+    onResize(meters);
+  };
+  const commitRotation = (text: string) => {
+    const deg = Number(text.trim().replace(",", "."));
+    if (!Number.isFinite(deg)) return;
+    const normalized = ((deg % 360) + 360) % 360;
+    if (Math.abs(normalized - stair.rotation) < SAME_EPSILON) return;
+    onRotateTo(normalized);
+  };
+  const commitPosition = (axis: "x" | "y") => (text: string) => {
+    const meters = parseLength(text, unit);
+    if (meters === null) return;
+    if (Math.abs(meters - stair.position[axis]) < SAME_EPSILON) return;
+    onMoveTo({ ...stair.position, [axis]: meters });
+  };
+
+  const lengthField = (
+    label: string,
+    ariaLabel: string,
+    meters: number,
+    onCommit: (text: string) => void,
+  ) => (
+    <Field
+      label={label}
+      ariaLabel={ariaLabel}
+      suffix={unit}
+      value={formatLengthValue(meters, unit)}
+      onCommit={onCommit}
+    />
+  );
+
+  return (
+    <>
+      <div className="min-w-0">
+        <div
+          className="truncate font-semibold text-[15px] text-[var(--ink-900)]"
+          data-testid="inspector-item-name"
+        >
+          Stair
+        </div>
+        <div className="mt-[2px] truncate text-[12.5px] text-[var(--ink-400)]">
+          Rises {rises} · {formatLengthValue(run, unit)} {unit} run
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        <SectionLabel>TRANSFORM</SectionLabel>
+        <div className="grid grid-cols-2 gap-2">
+          {lengthField("WIDTH", "Width", stair.width, commitWidth)}
+          <Field
+            label="ROTATE"
+            ariaLabel="Rotation"
+            suffix="°"
+            value={formatDegrees(stair.rotation)}
+            onCommit={commitRotation}
+          />
+          {lengthField(
+            "POS X",
+            "Position X",
+            stair.position.x,
+            commitPosition("x"),
+          )}
+          {lengthField(
+            "POS Y",
+            "Position Y",
+            stair.position.y,
+            commitPosition("y"),
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        <SectionLabel>ARRANGE</SectionLabel>
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            aria-label="Delete stair"
+            onClick={onDelete}
+            className="flex flex-col items-center gap-[5px] rounded-[8px] border border-[rgba(214,69,69,0.22)] bg-[rgba(214,69,69,0.05)] py-[9px] text-[var(--danger)] hover:bg-[rgba(214,69,69,0.1)]"
+          >
+            <Trash2 width={17} height={17} strokeWidth={1.6} />
+            <span className="text-[10px]">Delete</span>
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export interface InspectorProps {
   /** The floor's derived rooms (footer totals + the room overview). */
   rooms: Room[];
@@ -696,6 +822,9 @@ export interface InspectorProps {
   /** The selected wall (either lens): its own SELECTION view with a
    * read-only length readout and an editable thickness field. */
   selectedWall?: WallSelection | null;
+  /** The selected stair (either lens): its own SELECTION view with editable
+   * width/rotation/position, the read-only rises line, and delete. */
+  selectedStair?: StairSelection | null;
   /** Every floor in the building, ground-first. With more than one entry, the
    * footer's FLOOR stat always becomes the building's summed area and a
    * FLOORS count replaces ROOMS/CEILING — that swap holds regardless of
@@ -731,6 +860,13 @@ export interface InspectorProps {
   onOpeningSillMaterial?: (material: SillMaterial) => void;
   onOpeningDelete?: () => void;
   onWallThickness?: (meters: number) => void;
+  /** A committed width from the stair's WIDTH field. */
+  onStairResize?: (width: number) => void;
+  /** A committed exact angle from the stair's ROTATE field. */
+  onStairRotateTo?: (deg: number) => void;
+  /** A committed center position from the stair's POS X/Y fields. */
+  onStairMoveTo?: (position: Point) => void;
+  onStairDelete?: () => void;
 }
 
 export function Inspector({
@@ -745,6 +881,7 @@ export function Inspector({
   openingCount = 0,
   selectedOpening = null,
   selectedWall = null,
+  selectedStair = null,
   floorSummaries = [],
   onResize,
   onRotateTo,
@@ -763,22 +900,37 @@ export function Inspector({
   onOpeningSillMaterial = () => {},
   onOpeningDelete = () => {},
   onWallThickness = () => {},
+  onStairResize = () => {},
+  onStairRotateTo = () => {},
+  onStairMoveTo = () => {},
+  onStairDelete = () => {},
 }: InspectorProps) {
   const drawing = mode === "draw";
   const showSelection = selectedItem !== null && !drawing;
   const showOpening = !showSelection && selectedOpening !== null && !drawing;
   const showWall =
     !showSelection && !showOpening && selectedWall !== null && !drawing;
+  const showStair =
+    !showSelection &&
+    !showOpening &&
+    !showWall &&
+    selectedStair !== null &&
+    !drawing;
   const multiRoom = rooms.length > 1;
   // More than one floor on the building: the overview (no selection) and the
   // footer both switch from the active floor's own facts to the whole
   // building's.
   const buildingMode = floorSummaries.length > 1;
   const showBuilding =
-    !showSelection && !showOpening && !showWall && !drawing && buildingMode;
+    !showSelection &&
+    !showOpening &&
+    !showWall &&
+    !showStair &&
+    !drawing &&
+    buildingMode;
   const header = drawing
     ? "OUTLINE"
-    : showSelection || showOpening || showWall
+    : showSelection || showOpening || showWall || showStair
       ? "SELECTION"
       : showBuilding
         ? "BUILDING"
@@ -858,6 +1010,15 @@ export function Inspector({
             selection={selectedWall}
             unit={unit}
             onThickness={onWallThickness}
+          />
+        ) : showStair ? (
+          <StairSection
+            selection={selectedStair}
+            unit={unit}
+            onResize={onStairResize}
+            onRotateTo={onStairRotateTo}
+            onMoveTo={onStairMoveTo}
+            onDelete={onStairDelete}
           />
         ) : showBuilding ? (
           <div className="flex flex-col gap-2.5">

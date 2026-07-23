@@ -8,7 +8,7 @@ import {
   floorProjector,
   useControlsPause,
 } from "#/components/move-drag";
-import type { FurnitureItem, FurnitureUpdate, Point } from "#/lib/model";
+import type { Footprint, Point } from "#/lib/model";
 import {
   type Obstacle,
   rotatedFootprintSize,
@@ -31,7 +31,27 @@ import {
  * route folds the streamed previews into one history step when the camera
  * controls release). Wall-mounted items never render one — their rotation is
  * derived from the wall.
+ *
+ * `item` is a minimal shape (position/rotation/footprint) so both furniture
+ * and stairs (V8) can drive the same handle — it never reads a
+ * furniture-only field like `mount`/`stack`; that gating lives at the call
+ * site via the `contain` prop instead.
  */
+
+/** The minimal shape a rotate target needs — furniture and stairs both fit. */
+export interface RotateTarget {
+  position: Point;
+  rotation: number;
+  footprint: Footprint;
+}
+
+/** A rotate-drag commit: the (possibly wall-contained) center plus the new
+ * angle. A strict subset of `FurnitureUpdate`, so a furniture call site can
+ * pass this straight through to its own update type. */
+export interface RotateUpdate {
+  position: Point;
+  rotation: number;
+}
 
 const HANDLE_COLOR = "#3a5bf0";
 /** Gap from the footprint's edge to the knob center, meters. */
@@ -72,10 +92,11 @@ export function RotateHandle({
   outline,
   wallObstacles,
   snapEnabled,
+  contain,
   onRotate,
   onActiveChange,
 }: {
-  item: FurnitureItem;
+  item: RotateTarget;
   /** The containing room's outline for wall-angle detents — empty for an
    * unassigned (open-canvas) item, which keeps only the 15° grid. */
   outline: Point[];
@@ -84,8 +105,12 @@ export function RotateHandle({
   wallObstacles: Obstacle[];
   /** Snap toggle: off means free rotation (whole degrees, no detents). */
   snapEnabled: boolean;
+  /** Re-contain the spun hull against `wallObstacles` (floor items) — false
+   * for a furniture mount/rider, whose position derives from its host and
+   * would otherwise fight this handle's own containment. */
+  contain: boolean;
   /** Live update per pointermove — a preview, settled by `onActiveChange`. */
-  onRotate: (update: FurnitureUpdate) => void;
+  onRotate: (update: RotateUpdate) => void;
   /** The drag started/ended — pauses the camera and settles history. */
   onActiveChange: (active: boolean) => void;
 }) {
@@ -212,7 +237,7 @@ export function RotateHandle({
               Math.hypot(width, depth) / 2,
             ),
             footprint: { width, depth },
-            contain: !item.mount && !item.stack,
+            contain,
             originScreen: { x: event.clientX, y: event.clientY },
           });
           begin();

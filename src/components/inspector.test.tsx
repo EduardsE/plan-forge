@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { FurnitureItem, Room } from "#/lib/model";
+import type { FurnitureItem, Room, Stair } from "#/lib/model";
 import { createSampleRoom } from "#/lib/model/test-fixtures";
 import { Inspector } from "./inspector";
 
@@ -30,6 +30,13 @@ const kitchen: Room = {
   ],
 };
 const twoRooms: Room[] = [room, kitchen];
+
+const stair: Stair = {
+  id: "stair-1",
+  position: { x: 2, y: 1.5 },
+  rotation: 0,
+  width: 0.9,
+};
 
 function renderInspector(props: Partial<Parameters<typeof Inspector>[0]>) {
   return render(
@@ -259,5 +266,93 @@ describe("Inspector", () => {
 
     expect(screen.getByText("SELECTION")).toBeTruthy();
     expect(screen.queryByTestId("inspector-floor-row")).toBeNull();
+  });
+
+  it("shows a selected stair with editable transform fields and a rises line", () => {
+    renderInspector({
+      selectedStair: {
+        stair,
+        run: 3.75,
+        rises: "Ground floor → Floor 2",
+      },
+    });
+
+    expect(screen.getByText("SELECTION")).toBeTruthy();
+    expect(screen.getByTestId("inspector-item-name").textContent).toBe("Stair");
+    expect(
+      (screen.getByLabelText("Width") as HTMLInputElement).value,
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Rotation")).toBeTruthy();
+    expect(screen.getByLabelText("Position X")).toBeTruthy();
+    expect(screen.getByLabelText("Position Y")).toBeTruthy();
+    expect(
+      screen.getByText("Rises Ground floor → Floor 2 · 3.75 m run"),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete stair" })).toBeTruthy();
+  });
+
+  it("commits a stair width edit on blur", () => {
+    const onStairResize = vi.fn();
+    renderInspector({
+      selectedStair: { stair, run: 3.75, rises: "Ground floor → Floor 2" },
+      onStairResize,
+    });
+
+    const width = screen.getByLabelText("Width") as HTMLInputElement;
+    fireEvent.change(width, { target: { value: "1.2" } });
+    fireEvent.blur(width);
+
+    expect(onStairResize).toHaveBeenCalledWith(1.2);
+  });
+
+  it("commits a stair rotation edit on blur", () => {
+    const onStairRotateTo = vi.fn();
+    renderInspector({
+      selectedStair: { stair, run: 3.75, rises: "Ground floor → Floor 2" },
+      onStairRotateTo,
+    });
+
+    const rotate = screen.getByLabelText("Rotation") as HTMLInputElement;
+    fireEvent.change(rotate, { target: { value: "90" } });
+    fireEvent.blur(rotate);
+
+    expect(onStairRotateTo).toHaveBeenCalledWith(90);
+  });
+
+  it("commits a stair position edit", () => {
+    const onStairMoveTo = vi.fn();
+    renderInspector({
+      selectedStair: { stair, run: 3.75, rises: "Ground floor → Floor 2" },
+      onStairMoveTo,
+    });
+
+    const posX = screen.getByLabelText("Position X") as HTMLInputElement;
+    fireEvent.change(posX, { target: { value: "3" } });
+    fireEvent.blur(posX);
+
+    expect(onStairMoveTo).toHaveBeenCalledWith({ ...stair.position, x: 3 });
+  });
+
+  it("fires the stair delete action", () => {
+    const onStairDelete = vi.fn();
+    renderInspector({
+      selectedStair: { stair, run: 3.75, rises: "Ground floor → Floor 2" },
+      onStairDelete,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete stair" }));
+
+    expect(onStairDelete).toHaveBeenCalledOnce();
+  });
+
+  it("prefers a furniture/opening/wall selection over a stair selection", () => {
+    renderInspector({
+      selectedItem: item,
+      selectedStair: { stair, run: 3.75, rises: "Ground floor → Floor 2" },
+    });
+
+    expect(screen.queryByTestId("inspector-item-name")?.textContent).not.toBe(
+      "Stair",
+    );
   });
 });

@@ -1345,6 +1345,7 @@ function FloorLayer({
   selectedId,
   selectedOpeningId,
   selectedEdgeId,
+  selectedStairId,
   unit,
   snapEnabled,
   onSelectItem,
@@ -1353,6 +1354,7 @@ function FloorLayer({
   onDragOpening,
   onMoveActiveChange,
   onSelectWall,
+  onSelectStair,
 }: {
   entry: FloorStackEntry;
   /** The floor immediately below `entry` in the stack, or null for the
@@ -1365,6 +1367,9 @@ function FloorLayer({
   selectedId: string | null;
   selectedOpeningId: string | null;
   selectedEdgeId: string | null;
+  /** Stair selection reaches across the whole stack — a capped lower
+   * storey's stair picks and selects too. */
+  selectedStairId: string | null;
   unit: Unit;
   snapEnabled: boolean;
   onSelectItem: (id: string) => void;
@@ -1378,6 +1383,7 @@ function FloorLayer({
   onDragOpening: (id: string, offset: number, bottom: number | null) => void;
   onMoveActiveChange: (active: boolean) => void;
   onSelectWall: (edgeId: string) => void;
+  onSelectStair: (id: string) => void;
 }) {
   // One wall solid per graph edge (dangling walls included), plus filler
   // posts at the corner/junction nodes — keyed on this entry's own floor/
@@ -1439,6 +1445,8 @@ function FloorLayer({
           key={stair.id}
           stair={stair}
           storeyHeight={entry.storeyHeight}
+          selected={stair.id === selectedStairId}
+          onSelect={onSelectStair}
         />
       ))}
       {entry.derived.rooms.map((room) => (
@@ -1489,6 +1497,8 @@ export interface RoomSceneProps {
   selectedOpeningId: string | null;
   /** Wall selection — a graph edge picked by clicking its body. */
   selectedEdgeId: string | null;
+  /** Stair selection — reaches across the whole stack, like furniture. */
+  selectedStairId: string | null;
   unit: Unit;
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
   snapEnabled: boolean;
@@ -1510,6 +1520,7 @@ export interface RoomSceneProps {
    * the raw whole-hole bottom, resolved onto one floor by the canvas. */
   onDragOpening: (id: string, offset: number, bottom: number | null) => void;
   onSelectWall: (edgeId: string) => void;
+  onSelectStair: (id: string) => void;
   /** Containment obstacles beyond the active floor's own wall slabs: stair
    * voids cut into it by the floor below (empty when there's none). Applied
    * only to a drag confined to the active floor — a drag on a lower stack
@@ -1523,6 +1534,7 @@ export function RoomScene({
   selectedId,
   selectedOpeningId,
   selectedEdgeId,
+  selectedStairId,
   unit,
   snapEnabled,
   timeOfDay,
@@ -1533,6 +1545,7 @@ export function RoomScene({
   onSelectOpening,
   onDragOpening,
   onSelectWall,
+  onSelectStair,
   activeExtraObstacles,
 }: RoomSceneProps) {
   const activeEntry =
@@ -1649,6 +1662,7 @@ export function RoomScene({
           selectedId={selectedId}
           selectedOpeningId={selectedOpeningId}
           selectedEdgeId={selectedEdgeId}
+          selectedStairId={selectedStairId}
           unit={unit}
           snapEnabled={snapEnabled}
           onSelectItem={onSelectItem}
@@ -1666,6 +1680,7 @@ export function RoomScene({
           onDragOpening={onDragOpening}
           onMoveActiveChange={onMoveActiveChange}
           onSelectWall={onSelectWall}
+          onSelectStair={onSelectStair}
         />
       ))}
       {selectedItem && selectedEntry && (

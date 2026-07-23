@@ -36,6 +36,7 @@ import {
   furnitureDisplayName,
   outlineBounds,
   portalLabel,
+  roomAtPoint,
   storeyHeightOf,
 } from "#/lib/model";
 import {
@@ -63,6 +64,7 @@ import {
   type WallSolid,
   wallBandRange,
 } from "#/lib/room-scene";
+import { stairRun } from "#/lib/stairs";
 import type { Unit } from "#/lib/units";
 
 /**
@@ -1052,6 +1054,9 @@ export interface PlanSceneProps {
   selectedOpeningId: string | null;
   /** Selected wall — a graph edge picked by clicking its body. */
   selectedEdgeId: string | null;
+  /** Selected stair — an id picked either on its owning floor's "up" symbol
+   * or the void it cuts into `belowFloor`'s "up" one below it. */
+  selectedStairId: string | null;
   unit: Unit;
   /** Snap toggle: off means free furniture moves (no flush/quantize). */
   snapEnabled: boolean;
@@ -1072,6 +1077,15 @@ export interface PlanSceneProps {
   /** A committed width from the opening chip's field. */
   onResizeOpening: (id: string, width: number) => void;
   onSelectWall: (edgeId: string) => void;
+  onSelectStair: (id: string) => void;
+  /** Live update per pointermove during a stair rotate-handle drag — a
+   * preview, resolved by the canvas (which has the whole building, so it can
+   * validity-gate against the floor the stair climbs *to*, not just this
+   * lens's own floor/underlay). */
+  onStairRotate: (
+    id: string,
+    update: { position: Point; rotation: number },
+  ) => void;
 }
 
 export function PlanScene({
@@ -1085,6 +1099,7 @@ export function PlanScene({
   selectedId,
   selectedOpeningId,
   selectedEdgeId,
+  selectedStairId,
   unit,
   snapEnabled,
   onSelectItem,
@@ -1097,6 +1112,8 @@ export function PlanScene({
   onDeleteOpening,
   onResizeOpening,
   onSelectWall,
+  onSelectStair,
+  onStairRotate,
 }: PlanSceneProps) {
   const bounds = useMemo(() => floorBounds(rooms), [rooms]);
   // One wall solid per graph edge + filler posts at the junction nodes, drawn
@@ -1140,6 +1157,35 @@ export function PlanScene({
         room.furniture.some((item) => item.id === selectedId),
       )
     : undefined;
+  // A selected stair can be this floor's own (owner = `floor`) or picked off
+  // the void its owner (`belowFloor`) cuts into this floor's plan — resolve
+  // which, then derive the rotate handle's inputs from *that* owner: its own
+  // wall slabs (plus this floor's stair-void obstacles, only meaningful when
+  // the owner *is* this floor) for containment, and the room its position
+  // falls in (only resolvable for this floor's own rooms) for wall-angle
+  // detents.
+  const selectedStairInfo = useMemo(() => {
+    if (!selectedStairId) return null;
+    const own = floor.stairs.find((s) => s.id === selectedStairId);
+    if (own) {
+      return {
+        stair: own,
+        run: stairRun(storeyHeightOf(floor)).run,
+        outline: roomAtPoint(rooms, own.position)?.outline ?? [],
+        wallObstacles: [...edgeWallObstacles(floor), ...extraObstacles],
+      };
+    }
+    const below = belowFloor?.stairs.find((s) => s.id === selectedStairId);
+    if (below && belowFloor) {
+      return {
+        stair: below,
+        run: stairRun(storeyHeightOf(belowFloor)).run,
+        outline: [] as Point[],
+        wallObstacles: edgeWallObstacles(belowFloor),
+      };
+    }
+    return null;
+  }, [selectedStairId, floor, belowFloor, rooms, extraObstacles]);
 
   if (!bounds) return null;
   const dimensionOffset =
@@ -1177,6 +1223,8 @@ export function PlanScene({
         <PlanStairs
           floor={floor}
           storeyHeight={storeyHeightOf(floor)}
+          selectedStairId={selectedStairId}
+          onSelectStair={onSelectStair}
           variant="up"
         />
       )}
@@ -1184,6 +1232,8 @@ export function PlanScene({
         <PlanStairs
           floor={belowFloor}
           storeyHeight={storeyHeightOf(belowFloor)}
+          selectedStairId={selectedStairId}
+          onSelectStair={onSelectStair}
           variant="void"
         />
       )}
@@ -1206,9 +1256,34 @@ export function PlanScene({
           // An unassigned item has no containing room — no wall-angle
           // detents, but the knob (and the 15° grid) still works.
           outline={selectedRoom?.outline ?? []}
-          wallObstacles={wallObstacles}
+          // Carried over from V7's review: a rotate near a stair void used to
+          // only see the wall slabs, so a spin could swing the hull straight
+          // over the hole — the void obstacles join the wall slabs here too.
+          wallObstacles={[...wallObstacles, ...extraObstacles]}
           snapEnabled={snapEnabled}
+          contain={!selectedItem.stack}
           onRotate={(update) => onMoveItem(selectedItem.id, update)}
+          onActiveChange={onMoveActiveChange}
+        />
+      )}
+      {selectedStairInfo && !drag && (
+        <RotateHandle
+          item={{
+            position: selectedStairInfo.stair.position,
+            rotation: selectedStairInfo.stair.rotation,
+            footprint: {
+              width: selectedStairInfo.stair.width,
+              depth: selectedStairInfo.run,
+              height: 0,
+            },
+          }}
+          outline={selectedStairInfo.outline}
+          wallObstacles={selectedStairInfo.wallObstacles}
+          snapEnabled={snapEnabled}
+          contain
+          onRotate={(update) =>
+            onStairRotate(selectedStairInfo.stair.id, update)
+          }
           onActiveChange={onMoveActiveChange}
         />
       )}
