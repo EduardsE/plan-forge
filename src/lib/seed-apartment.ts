@@ -50,7 +50,6 @@ function win(
   side: 1 | -1,
   sill: number,
   head: number,
-  sillOverhang = 0.15,
 ): Opening {
   return {
     id,
@@ -61,7 +60,7 @@ function win(
     side,
     sill,
     head,
-    sillOverhang,
+    sillOverhang: 0.15,
     sillMaterial: "wood",
   };
 }
@@ -125,18 +124,15 @@ const mainFloor: Floor = {
     door("d-bath", "e12", 0.5, 0.7, 1),
     door("d-bedroom", "e14", 3.7, 0.8, 1),
     // West facade: the plan's 0.56 / 1.77 / 0.12 / 1.78 window pair. The
-    // tall rooms carry stacked double windows — an upper light over each
-    // lower window, split by a 0.3 m transom bar, flush (no sill board).
-    win("w-living-1", "e9", 3.97, 1.78, 1, 0.4, 2.15),
-    win("w-living-1-upper", "e9", 3.97, 1.78, 1, 2.45, 3.7, 0),
-    win("w-living-2", "e9", 5.87, 1.77, 1, 0.4, 2.15),
-    win("w-living-2-upper", "e9", 5.87, 1.77, 1, 2.45, 3.7, 0),
+    // 4.3 m living room has them as single tall windows — one continuous
+    // opening, one sill — running from 0.4 m up to 3.7 m.
+    win("w-living-1", "e9", 3.97, 1.78, 1, 0.4, 3.7),
+    win("w-living-2", "e9", 5.87, 1.77, 1, 0.4, 3.7),
     // The bedroom's 2.53 window on the south facade.
     win("w-bedroom", "e7", 0.55, 2.53, -1, 0.4, 2.15),
-    // The bath's window on its 1.74 south wall segment; privacy-high sill,
-    // with its own upper light under the 3.7 m ceiling.
-    win("w-bath", "e6", 0.45, 0.9, 1, 0.9, 2.15),
-    win("w-bath-upper", "e6", 0.45, 0.9, 1, 2.45, 3.3, 0),
+    // The bath's window on its 1.74 south wall segment: privacy-high sill,
+    // tall under the 3.7 m ceiling.
+    win("w-bath", "e6", 0.45, 0.9, 1, 0.9, 3.3),
   ],
   furniture: [
     // Living: sofa against the east wall facing the big west windows,
