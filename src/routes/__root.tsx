@@ -1,7 +1,9 @@
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import { useEffect } from "react";
 
+import { installCreateHome } from "#/lib/seed-apartment";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -42,6 +44,10 @@ export const Route = createRootRoute({
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    installCreateHome();
+  }, []);
+
   return (
     <html lang="en">
       <head>
