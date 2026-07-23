@@ -126,6 +126,29 @@ export const RECIPES = [
     },
   },
   {
+    // Sketchfab CC-BY model: monstera deliciosa in a fluted white pot on a
+    // mid-century walnut stand. ATTRIBUTION REQUIRED if the app ships
+    // publicly: "Monstera Deliciosa Potted Mid-Century plant" by ChubbyPanda,
+    // CC-BY-4.0. Re-download: import UID 1ab9bf841df04c07b1819be596327629 via
+    // Blender (Sketchfab addon), delete the default cube, downscale textures
+    // (leaves baseColor 2048, rest 1024, data maps 512), export GLB. The
+    // leaves are alpha-cutout cards — the prep script keeps their baseColor
+    // PNG (quantized) while opaque baseColors go JPEG.
+    catalogId: "monstera",
+    input: "assets/raw-models/monstera/monstera.glb",
+    source:
+      "https://sketchfab.com/3d-models/1ab9bf841df04c07b1819be596327629 (CC-BY-4.0, ChubbyPanda)",
+    realWidth: 0.8,
+    rotateYDeg: 0,
+    maxTexture: 2048,
+    textureQuality: 85,
+    slots: {
+      "Mat.1": "neutral",
+      "Mat.2": "neutral",
+      material: "neutral",
+    },
+  },
+  {
     // Poly Haven photogrammetry scan: haworthia succulent in a small cream
     // pot — a tabletop plant (stackable on surfaces). Already light (~9k
     // tris, one material), so no simplify. realWidth from the asset's

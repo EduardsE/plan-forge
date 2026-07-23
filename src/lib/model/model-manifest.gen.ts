@@ -50,6 +50,11 @@ export const MODEL_MANIFEST = {
       potted_plant_02_leaves: "neutral",
     },
   },
+  monstera: {
+    file: "/models/monstera.glb",
+    natural: { width: 0.8, depth: 0.728, height: 1.252 },
+    slots: { "Mat.1": "neutral", "Mat.2": "neutral", material: "neutral" },
+  },
   succulent: {
     file: "/models/succulent.glb",
     natural: { width: 0.17, depth: 0.187, height: 0.271 },

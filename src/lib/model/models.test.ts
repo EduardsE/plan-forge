@@ -13,6 +13,7 @@ describe("model manifest", () => {
       "credenza",
       "dining-table",
       "floor-lamp",
+      "monstera",
       "plant",
       "plant-large",
       "sofa-2",

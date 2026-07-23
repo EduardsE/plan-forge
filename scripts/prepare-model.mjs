@@ -114,7 +114,23 @@ async function processRecipe(recipe) {
     // Photographic base-colour maps go to JPEG (core glTF, no extension) —
     // far smaller than PNG for wood grain. Data maps (metallic-roughness,
     // normal, occlusion) stay PNG so channel values aren't lossily distorted;
-    // uniform ones compress to almost nothing anyway.
+    // uniform ones compress to almost nothing anyway. Base colours on
+    // non-opaque materials (alpha-cutout foliage) carry their cutout in the
+    // alpha channel, which JPEG has no room for — they stay PNG and get
+    // palette quantization instead. The pattern regexes must never match the
+    // empty string: textureCompress applies a pattern to the texture URI too,
+    // and GLB-embedded textures have an empty URI.
+    const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const alphaNames = [
+      ...new Set(
+        root
+          .listMaterials()
+          .filter((m) => m.getAlphaMode() !== "OPAQUE")
+          .map((m) => m.getBaseColorTexture()?.getName())
+          .filter(Boolean),
+      ),
+    ].map(escapeRe);
+    const alt = alphaNames.join("|");
     steps.push(
       textureCompress({ encoder: sharp, targetFormat: "png", resize }),
       textureCompress({
@@ -122,8 +138,22 @@ async function processRecipe(recipe) {
         targetFormat: "jpeg",
         quality: recipe.textureQuality ?? 85,
         slots: /baseColor/,
+        ...(alphaNames.length
+          ? { pattern: new RegExp(`^(?!(?:${alt})$).+$`) }
+          : {}),
       }),
     );
+    if (alphaNames.length) {
+      steps.push(
+        textureCompress({
+          encoder: sharp,
+          targetFormat: "png",
+          quality: recipe.textureQuality ?? 85,
+          slots: /baseColor/,
+          pattern: new RegExp(`^(?:${alt})$`),
+        }),
+      );
+    }
   }
   await doc.transform(...steps);
 

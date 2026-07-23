@@ -241,11 +241,11 @@ function createSampleGroundFloor(): Floor {
         footprint: { width: 0.38, depth: 0.439, height: 2.149 },
       },
       {
-        id: "gf-plant-large",
-        catalogId: "plant-large",
-        position: { x: 0.4, y: 0.45 },
+        id: "gf-monstera",
+        catalogId: "monstera",
+        position: { x: 0.55, y: 0.6 },
         rotation: 0,
-        footprint: { width: 0.6, depth: 0.647, height: 1.379 },
+        footprint: { width: 0.8, depth: 0.728, height: 1.252 },
       },
       {
         id: "gf-picture-frame",

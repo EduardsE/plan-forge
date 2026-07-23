@@ -190,6 +190,13 @@ const GLYPHS: Record<string, GlyphLayer[]> = {
     layer("-9px", 40, 34, 30, "#4f7d46", "50%"),
     layer("-50%", 16, 28, 22, "#b4633e", "3px 3px 9px 9px"),
   ],
+  monstera: [
+    layer("-24px", 42, 26, 24, "#3f6b3a", "50% 40% 50% 45%"),
+    layer("0px", 48, 28, 26, "#4f7d46", "45% 50% 40% 50%"),
+    layer("-11px", 38, 30, 26, "#43704d", "50%"),
+    layer("-50%", 24, 20, 18, "#ece8df", "3px 3px 8px 8px"),
+    layer("-50%", 12, 24, 13, WOOD_DARK, "2px"),
+  ],
   succulent: [
     layer("-50%", 34, 26, 22, "#3f6b3a", "50% 50% 40% 40%"),
     layer("-50%", 18, 22, 18, "#e8e4da", "2px 2px 8px 8px"),

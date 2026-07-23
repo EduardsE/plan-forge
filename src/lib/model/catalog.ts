@@ -87,6 +87,7 @@ export const CATALOG: CatalogItem[] = [
   item("plant", "Potted Plant", "plants", 0.45, 0.422, 0.54),
   item("succulent", "Succulent", "plants", 0.17, 0.187, 0.271),
   item("plant-large", "Tall Plant", "plants", 0.6, 0.647, 1.379),
+  item("monstera", "Monstera", "plants", 0.8, 0.728, 1.252),
   // Openings: cards that insert a door/window into the wall they're dropped
   // on instead of adding furniture. Width/depth/height mirror the opening
   // constants (DOOR_WIDTH/WINDOW_WIDTH in opening-place.ts, WALL_THICKNESS
