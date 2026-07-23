@@ -54,7 +54,9 @@ export function PlacementDragLayer({
 
   return (
     <div
-      className="pointer-events-none fixed z-50"
+      // Temporarily hidden: the floating dragged card is suppressed while the
+      // in-scene ghost still tracks the floor. Swap `hidden` off to restore it.
+      className="hidden pointer-events-none fixed z-50"
       style={{ left: position.x, top: position.y }}
     >
       <div
