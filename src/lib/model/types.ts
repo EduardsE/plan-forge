@@ -236,8 +236,9 @@ export interface Room {
  * and `edges` are the wall runs; `openings` are edge-anchored; `furniture`
  * lives floor-level (partitioned into rooms by center containment on derive);
  * `rooms` is the identity registry (names/heights) matched to the graph's
- * faces. The floor is the unit of app state: history and persistence hold a
- * `Floor`; `deriveFloor` turns it into renderable rooms.
+ * faces. The floor is the unit of geometry: history and persistence hold a
+ * `Building` (an ordered stack of floors); `deriveFloor` turns one `Floor`
+ * into renderable rooms.
  */
 export interface Floor {
   id: string;

@@ -822,14 +822,21 @@ function Planner() {
   // still there).
   const deleteFloor = useCallback((floorId: string) => {
     const current = buildingRef.current;
-    const next = removeFloor(current, floorId);
-    if (next === current) return; // last-floor no-op
+    const removed = removeFloor(current, floorId);
+    if (removed === current) return; // last-floor no-op
     if (activeFloorIdRef.current === floorId) {
       const removedIndex = floorIndexOf(current, floorId);
-      const newIndex = Math.min(removedIndex, next.floors.length - 1);
-      setActiveFloorId(next.floors[newIndex].id);
+      const newIndex = Math.min(removedIndex, removed.floors.length - 1);
+      setActiveFloorId(removed.floors[newIndex].id);
     }
-    setBuildingHistory((history) => commitHistory(history, next));
+    // Compute `removeFloor` again here, from `history.current` rather than
+    // the ref snapshot above — same result, but safe if this updater lands
+    // after another queued commit in the same batch (every other commit path
+    // computes its next state inside the updater for this reason).
+    setBuildingHistory((history) => {
+      const next = removeFloor(history.current, floorId);
+      return next === history.current ? history : commitHistory(history, next);
+    });
   }, []);
   // A floor-chip click: the target floor may hide content the current
   // selections point at (a different storey's furniture/opening/wall), so a

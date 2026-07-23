@@ -21,7 +21,7 @@ import {
 import type { Unit } from "#/lib/units";
 
 /**
- * localStorage autosave for the floor model. The model is plain JSON already;
+ * localStorage autosave for the building model. The model is plain JSON already;
  * this module owns the storage payload — serialization, and the paranoid
  * deserialization that keeps a stale or hand-edited save from crashing the
  * scenes (anything malformed hydrates as "no save").
@@ -339,6 +339,10 @@ function isBuilding(value: unknown): value is { floors: StoredFloor[] } {
   const stairIds = new Set<string>();
   for (const raw of building.floors) {
     if (!isFloor(raw)) return false;
+    // A missing id skips the dedup check here safely: `fillFloor` fills it
+    // with a fresh `crypto.randomUUID()` right after this validation passes,
+    // so two floors that both omit `id` can never collide — there is nothing
+    // yet to compare them against.
     if (raw.id !== undefined) {
       if (floorIds.has(raw.id)) return false;
       floorIds.add(raw.id);

@@ -27,7 +27,7 @@ import {
   useMoveDrag,
 } from "#/components/move-drag";
 import { RoomOpenings } from "#/components/room-openings";
-import { SelectionChip } from "#/components/selection-chip";
+import { CHIP_CLEARANCE, SelectionChip } from "#/components/selection-chip";
 import { StairMesh } from "#/components/stair-mesh";
 import { overlappingFurnitureIds } from "#/lib/collision";
 import {
@@ -1667,14 +1667,7 @@ export function RoomScene({
           snapEnabled={snapEnabled}
           onSelectItem={onSelectItem}
           onDragStart={(item, grabPoint, screen, grabHeight) =>
-            beginDrag(
-              item,
-              grabPoint,
-              screen,
-              grabHeight,
-              entry.floor.id,
-              entry.elevation,
-            )
+            beginDrag(item, grabPoint, screen, grabHeight, entry.floor.id)
           }
           onSelectOpening={onSelectOpening}
           onDragOpening={onDragOpening}
@@ -1701,7 +1694,7 @@ export function RoomScene({
                   ? (selectedStackTop.get(selectedItem.id) ?? 0) +
                     selectedItem.footprint.height +
                     0.14
-                  : selectedItem.footprint.height + 0.12),
+                  : selectedItem.footprint.height + CHIP_CLEARANCE),
             selectedItem.position.y,
           ]}
         />

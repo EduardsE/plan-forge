@@ -1132,15 +1132,15 @@ export function PlannerCanvas({
     [placingItem, floor, onFloorChange, onPlacingEnd, setSelectedId],
   );
   // A validated stair drop (the ghost never calls onPlace for an invalid
-  // candidate) — commits straight onto the active floor. Selection follows
-  // in V8, which adds the stair selection kind; for now the drop just
-  // commits and ends the placement session, like every other catalog card.
+  // candidate) — commits straight onto the active floor, then selects it,
+  // same as every other catalog card insert.
   const placeStairItem = useCallback(
     (stairItem: Stair) => {
       onFloorChange(addStair(floor, stairItem));
+      selectStair(stairItem.id);
       onPlacingEnd();
     },
-    [floor, onFloorChange, onPlacingEnd],
+    [floor, onFloorChange, onPlacingEnd, selectStair],
   );
 
   return (

@@ -43,6 +43,13 @@ const withFloor = (floor: Floor) => ({
   building: { floors: [floor] },
 });
 
+/** Pulls the first floor's raw parsed record out of a tampered save payload. */
+const floorAt = (p: Record<string, unknown>): Record<string, unknown> => {
+  const building = p.building as Record<string, unknown>;
+  const floors = building.floors as Record<string, unknown>[];
+  return floors[0];
+};
+
 describe("serialize / deserialize round trip", () => {
   it("restores the building, unit, and savedAt exactly", () => {
     const state = sampleState();
@@ -368,11 +375,6 @@ describe("wall thickness + sill persistence", () => {
       mutate(parsed);
       return JSON.stringify(parsed);
     };
-    const floorAt = (p: Record<string, unknown>): Record<string, unknown> => {
-      const building = p.building as Record<string, unknown>;
-      const floors = building.floors as Record<string, unknown>[];
-      return floors[0];
-    };
     expect(
       deserializeSavedState(
         tamper((p) => {
@@ -417,11 +419,6 @@ describe("floor id / stairs (fill-on-read + validation)", () => {
     const parsed = JSON.parse(save(floor)) as Record<string, unknown>;
     mutate(parsed);
     return JSON.stringify(parsed);
-  };
-  const floorAt = (p: Record<string, unknown>): Record<string, unknown> => {
-    const building = p.building as Record<string, unknown>;
-    const floors = building.floors as Record<string, unknown>[];
-    return floors[0];
   };
   const validStair: Stair = {
     id: "stair-1",

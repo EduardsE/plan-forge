@@ -9,7 +9,7 @@ import { formatFootprintCm, furnitureDisplayName } from "#/lib/model";
  */
 
 /** Gap between the item's top face and the label. */
-const CHIP_CLEARANCE = 0.12;
+export const CHIP_CLEARANCE = 0.12;
 
 /** Shared by the opening chip (plan-openings.tsx). */
 export const ACTION_BUTTON_CLASS =
