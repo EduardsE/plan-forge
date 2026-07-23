@@ -66,7 +66,7 @@ export function makeFloor(): Floor {
         catalogId: "plant",
         position: { x: 8, y: 4 },
         rotation: 0,
-        footprint: { width: 0.45, depth: 0.45, height: 1.2 },
+        footprint: { width: 0.45, depth: 0.422, height: 0.54 },
       },
       {
         id: "stool-1",
@@ -187,7 +187,7 @@ export function createSampleRoom(): Room {
         catalogId: "plant",
         position: { x: 5.68, y: 3.23 },
         rotation: 0,
-        footprint: { width: 0.45, depth: 0.45, height: 1.2 },
+        footprint: { width: 0.45, depth: 0.422, height: 0.54 },
       },
     ],
   };
@@ -257,7 +257,7 @@ export function createSampleKitchen(): Room {
         catalogId: "plant",
         position: { x: 9.05, y: 4.85 },
         rotation: 0,
-        footprint: { width: 0.45, depth: 0.45, height: 1.2 },
+        footprint: { width: 0.45, depth: 0.422, height: 0.54 },
       },
     ],
   };

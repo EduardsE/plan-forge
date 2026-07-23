@@ -237,7 +237,7 @@ function createSampleGroundFloor(): Floor {
         catalogId: "plant-large",
         position: { x: 0.4, y: 0.45 },
         rotation: 0,
-        footprint: { width: 0.6, depth: 0.6, height: 1.6 },
+        footprint: { width: 0.6, depth: 0.647, height: 1.379 },
       },
       {
         id: "gf-picture-frame",
@@ -295,7 +295,7 @@ function createSampleGroundFloor(): Floor {
         catalogId: "plant",
         position: { x: 11.0, y: 7.0 },
         rotation: 0,
-        footprint: { width: 0.45, depth: 0.45, height: 1.2 },
+        footprint: { width: 0.45, depth: 0.422, height: 0.54 },
       },
       {
         id: "gf-wall-clock",
@@ -340,7 +340,7 @@ function createSampleGroundFloor(): Floor {
         catalogId: "plant",
         position: { x: 4.5, y: 3.35 },
         rotation: 0,
-        footprint: { width: 0.45, depth: 0.45, height: 1.2 },
+        footprint: { width: 0.45, depth: 0.422, height: 0.54 },
       },
     ],
     rooms: [
@@ -558,7 +558,7 @@ function createSampleUpperFloor(): Floor {
         catalogId: "plant",
         position: { x: 3.8, y: 0.4 },
         rotation: 0,
-        footprint: { width: 0.45, depth: 0.45, height: 1.2 },
+        footprint: { width: 0.45, depth: 0.422, height: 0.54 },
       },
       // — Home office —
       {
@@ -623,7 +623,7 @@ function createSampleUpperFloor(): Floor {
         catalogId: "plant",
         position: { x: 5.9, y: 2.6 },
         rotation: 0,
-        footprint: { width: 0.45, depth: 0.45, height: 1.2 },
+        footprint: { width: 0.45, depth: 0.422, height: 0.54 },
       },
       // — Landing (kept clear of the stair void x 5.35…6.25, y 3.225…6.975) —
       {
@@ -638,7 +638,7 @@ function createSampleUpperFloor(): Floor {
         catalogId: "plant",
         position: { x: 4.5, y: 6.9 },
         rotation: 0,
-        footprint: { width: 0.45, depth: 0.45, height: 1.2 },
+        footprint: { width: 0.45, depth: 0.422, height: 0.54 },
       },
       {
         id: "uf-landing-frame",
@@ -711,7 +711,7 @@ function createSampleUpperFloor(): Floor {
         catalogId: "plant-large",
         position: { x: 10.95, y: 6.9 },
         rotation: 0,
-        footprint: { width: 0.6, depth: 0.6, height: 1.6 },
+        footprint: { width: 0.6, depth: 0.647, height: 1.379 },
       },
       // — Dressing room —
       {

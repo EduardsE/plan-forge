@@ -109,6 +109,37 @@ export const RECIPES = [
     },
   },
   {
+    // Poly Haven photogrammetry scan: squat syngonium in a terracotta pot.
+    // Leaves are fully modeled geometry (no alpha-card foliage), so simplify
+    // is safe; error tolerance is kept tight so leaf silhouettes survive.
+    // No maxTexture: the 1k source textures are already JPEG — re-encoding
+    // the normal/roughness maps to PNG would grow them several-fold.
+    catalogId: "plant",
+    input: "assets/raw-models/potted_plant_02/potted_plant_02_1k.gltf",
+    source: "https://polyhaven.com/a/potted_plant_02 (CC0)",
+    realWidth: 0.45,
+    rotateYDeg: 0,
+    simplify: { ratio: 0.3, error: 0.005 },
+    slots: {
+      potted_plant_02_pot: "neutral",
+      potted_plant_02_leaves: "neutral",
+    },
+  },
+  {
+    // Poly Haven photogrammetry scan: tall plant in a terracotta urn — the
+    // room's large floor plant. Same prep rationale as "plant" above.
+    catalogId: "plant-large",
+    input: "assets/raw-models/potted_plant_01/potted_plant_01_1k.gltf",
+    source: "https://polyhaven.com/a/potted_plant_01 (CC0)",
+    realWidth: 0.6,
+    rotateYDeg: 0,
+    simplify: { ratio: 0.2, error: 0.005 },
+    slots: {
+      potted_plant_01_pot: "neutral",
+      potted_plant_01_leaves: "neutral",
+    },
+  },
+  {
     // Authored in Blender for this project (session 2026-07-22): walnut slab
     // on a black steel spider base. Wood grain is a Poly Haven CC0 texture
     // (dark_wood), so it stays "neutral" like the credenza's veneer; the

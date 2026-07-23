@@ -42,6 +42,22 @@ export const MODEL_MANIFEST = {
     natural: { width: 0.38, depth: 0.439, height: 2.149 },
     slots: { lamp: "body", metal: "neutral" },
   },
+  plant: {
+    file: "/models/plant.glb",
+    natural: { width: 0.45, depth: 0.422, height: 0.54 },
+    slots: {
+      potted_plant_02_pot: "neutral",
+      potted_plant_02_leaves: "neutral",
+    },
+  },
+  "plant-large": {
+    file: "/models/plant-large.glb",
+    natural: { width: 0.6, depth: 0.647, height: 1.379 },
+    slots: {
+      potted_plant_01_pot: "neutral",
+      potted_plant_01_leaves: "neutral",
+    },
+  },
   "spider-table": {
     file: "/models/spider-table.glb",
     natural: { width: 2.4, depth: 1.1, height: 0.75 },

@@ -30,11 +30,17 @@ const browser = await chromium.launch({ headless: true, channel: "chrome" });
 ## Seeding a known floor
 
 Skip UI setup by seeding the autosave before load (`page.addInitScript`):
-key `planforge.room`, payload `{ version: 4, floor: { rooms: [...] }, unit: "m"|"cm", savedAt }`.
-Room: `{ id, name, outline: [{x,y}...], openings: [], furniture: [...] }`;
-furniture item: `{ id, catalogId, position: {x,y}, rotation, footprint: {width,depth,height} }`
-(catalog ids in `src/lib/model/catalog.ts`, e.g. `wardrobe` is 1.0×0.6, H 2.0).
-Deserialization is strict — any malformed field silently drops the whole save.
+key `planforge.room`, payload (wall-graph format, `src/lib/persistence.ts`)
+`{ version: 6, floor: {...}, unit: "m"|"cm", savedAt: <epoch ms> }` — or
+`{ version: 7, building: { floors: [...] } }` for multifloor.
+Floor: `{ nodes: [{id,x,y}...], edges: [{id,a,b}...], openings: [],
+rooms: [{id, name?, anchor: {x,y}}], furniture: [...] }` — `anchor` is any
+point inside the enclosed region; a 4-node/4-edge loop makes a rectangle.
+Furniture item: `{ id, catalogId, position: {x,y}, rotation, footprint:
+{width,depth,height} }` (catalog ids + default footprints in
+`src/lib/model/catalog.ts`). Deserialization is strict — any malformed field
+(including a string `savedAt`) silently drops the whole save and the sample
+house loads instead.
 
 ## Driving the 3D canvas
 
