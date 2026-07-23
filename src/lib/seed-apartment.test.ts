@@ -39,9 +39,25 @@ it("keeps the stair valid inside the stairwell strip", () => {
   const [lower, main] = building.floors;
   expect(main.stairs).toHaveLength(0);
   expect(lower.stairs).toHaveLength(1);
-  // 2.2 m ceiling + slab -> 13 risers x 0.25 m tread.
-  expect(stairRun(storeyHeightOf(lower)).run).toBeCloseTo(3.25);
+  // 2.3 m ceiling + slab -> 14 risers x 0.25 m tread.
+  expect(stairRun(storeyHeightOf(lower)).run).toBeCloseTo(3.5);
   expect(stairValid(building, lower.id, lower.stairs[0])).toBe(true);
+});
+
+it("uses the apartment's real ceiling heights", () => {
+  const [lower, main] = createApartmentBuilding().floors;
+  const heights = (floor: (typeof lower | typeof main) & object) =>
+    Object.fromEntries(floor.rooms.map((room) => [room.id, room.wallHeight]));
+  expect(heights(main)).toEqual({
+    "room-living": 4.3,
+    "room-entry": 3.7,
+    "room-bath": 3.7,
+    "room-bed": 2.3,
+  });
+  expect(heights(lower)).toEqual({
+    "room-lower-bed": 2.3,
+    "room-stairs": 2.3,
+  });
 });
 
 it("places every furniture item inside a room", () => {

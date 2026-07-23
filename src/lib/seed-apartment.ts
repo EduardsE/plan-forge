@@ -131,7 +131,7 @@ const mainFloor: Floor = {
   ],
   furniture: [
     // Living: sofa against the east wall facing the big west windows,
-    // dining set in the lower half, clear of the stair void (x 0.35..3.60,
+    // dining set in the lower half, clear of the stair void (x 0.30..3.80,
     // y 7.34..8.15) and the entry door (y 4.97..5.87 on the east divider).
     f("lv-sofa", "sofa-2", 4.77, 2.4, 270),
     f("lv-coffee", "coffee-table", 3.6, 2.4, 270),
@@ -183,11 +183,32 @@ const mainFloor: Floor = {
       stack: { hostId: "ba-shelf", dx: 0.3, dy: 0 },
     },
   ],
+  // The real ceilings: a 4.3 m living room, 3.7 m entry/bath, 2.3 m bedroom.
   rooms: [
-    { id: "room-living", name: "Living room", anchor: { x: 2.5, y: 2.5 } },
-    { id: "room-entry", name: "Entryway", anchor: { x: 5.5, y: 6.2 } },
-    { id: "room-bath", name: "Bathroom", anchor: { x: 5.5, y: 9.8 } },
-    { id: "room-bed", name: "Bedroom", anchor: { x: 2.3, y: 9.8 } },
+    {
+      id: "room-living",
+      name: "Living room",
+      wallHeight: 4.3,
+      anchor: { x: 2.5, y: 2.5 },
+    },
+    {
+      id: "room-entry",
+      name: "Entryway",
+      wallHeight: 3.7,
+      anchor: { x: 5.5, y: 6.2 },
+    },
+    {
+      id: "room-bath",
+      name: "Bathroom",
+      wallHeight: 3.7,
+      anchor: { x: 5.5, y: 9.8 },
+    },
+    {
+      id: "room-bed",
+      name: "Bedroom",
+      wallHeight: 2.3,
+      anchor: { x: 2.3, y: 9.8 },
+    },
   ],
   stairs: [],
 };
@@ -215,12 +236,12 @@ const lowerFloor: Floor = {
     e("f7", "m1", "m6"), // west, stairwell
   ],
   openings: [
-    door("d-lower-bed", "f6", 3.6, 0.75, 1),
+    door("d-lower-bed", "f6", 3.85, 0.7, 1),
     win("w-lower-bed", "f4", 1.55, 1.5, -1, 0.5, 2.0),
   ],
   furniture: [
     // Single bed on the west wall, desk under the window, wardrobe past the
-    // door swing (x 3.6..4.35 on the north divider).
+    // door swing (x 3.85..4.55 on the north divider).
     f("lb-bed", "bed-single", 1.05, 8.75, 90),
     // The desk stops short of the window's protruding sill board.
     f("lb-desk", "desk", 2.6, 10.38, 180),
@@ -233,27 +254,29 @@ const lowerFloor: Floor = {
     },
     f("lb-plant", "plant", 0.4, 10.5),
   ],
+  // The real ceilings: 2.3 m downstairs (the stairwell matches, keeping the
+  // storey — and with it the stair run — as short as the truth allows).
   rooms: [
     {
       id: "room-lower-bed",
       name: "Bedroom",
-      wallHeight: 2.2,
+      wallHeight: 2.3,
       anchor: { x: 2.3, y: 9.8 },
     },
     {
       id: "room-stairs",
       name: "Stairs",
-      wallHeight: 2.2,
+      wallHeight: 2.3,
       anchor: { x: 4.35, y: 7.75 },
     },
   ],
   // Climbs toward -x: bottom step at the landing by the bedroom door,
-  // arriving upstairs at the living room's west end. The 2.2 m storey keeps
-  // the run at 13 risers (3.25 m), spanning x 0.35..3.60 inside the strip.
+  // arriving upstairs at the living room's west end. The 2.3 m storey needs
+  // 14 risers (3.5 m run), spanning x 0.30..3.80 inside the strip.
   stairs: [
     {
       id: "stair-1",
-      position: { x: 1.975, y: 7.745 },
+      position: { x: 2.05, y: 7.745 },
       rotation: 270,
       width: 0.81,
     },
