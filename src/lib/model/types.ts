@@ -64,6 +64,13 @@ export interface Opening {
   sillOverhang?: number;
   /** Windows only: sill board material. Absent means `"white"`. */
   sillMaterial?: "white" | "wood";
+  /**
+   * Windows only: how many pane columns/rows the frame divides into.
+   * Absent means the default 2×2 (`DEFAULT_PANE_COLS`/`DEFAULT_PANE_ROWS`);
+   * effective values come from `openingPaneGrid` (model/openings.ts).
+   */
+  paneCols?: number;
+  paneRows?: number;
   /** Doors only: which edge carries the hinge (near edge = `"start"`). */
   hinge?: "start" | "end";
   /**

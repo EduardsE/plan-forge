@@ -31,6 +31,12 @@ export type SillMaterial = "white" | "wood";
 export const DEFAULT_SILL_OVERHANG = 0.03;
 export const MAX_SILL_OVERHANG = 0.4;
 
+/** Default pane grid of a window's frame (columns × rows). */
+export const DEFAULT_PANE_COLS = 2;
+export const DEFAULT_PANE_ROWS = 2;
+/** Most pane columns or rows the setter allows. */
+export const MAX_PANE_DIVISIONS = 8;
+
 /** Effective vertical extent of an opening's hole, floor-relative meters. */
 export function openingVerticals(opening: Opening): {
   bottom: number;
@@ -53,6 +59,17 @@ export function openingSill(opening: Opening): {
   return {
     overhang: opening.sillOverhang ?? DEFAULT_SILL_OVERHANG,
     material: opening.sillMaterial ?? "white",
+  };
+}
+
+/** Effective pane grid of a window's frame (defaults resolved). */
+export function openingPaneGrid(opening: Opening): {
+  cols: number;
+  rows: number;
+} {
+  return {
+    cols: opening.paneCols ?? DEFAULT_PANE_COLS,
+    rows: opening.paneRows ?? DEFAULT_PANE_ROWS,
   };
 }
 
@@ -297,6 +314,47 @@ export function setOpeningSillMaterial(
         return rest;
       }
       return { ...o, sillMaterial: material };
+    }),
+  );
+}
+
+/** Round a requested pane count to an integer in 1..MAX_PANE_DIVISIONS. */
+function clampPaneCount(value: number): number {
+  return Math.min(Math.max(Math.round(value), 1), MAX_PANE_DIVISIONS);
+}
+
+/**
+ * Set a window frame's pane grid; either axis may be omitted to keep its
+ * current value, and the 2×2 default stores as absent fields. Doors /
+ * unknown ids / non-finite values no-op by reference.
+ */
+export function setOpeningPaneGrid(
+  floor: Floor,
+  id: string,
+  grid: { cols?: number; rows?: number },
+): Floor {
+  const opening = floor.openings.find((o) => o.id === id);
+  if (!opening || opening.kind !== "window") return floor;
+  const current = openingPaneGrid(opening);
+  const cols =
+    grid.cols !== undefined && Number.isFinite(grid.cols)
+      ? clampPaneCount(grid.cols)
+      : current.cols;
+  const rows =
+    grid.rows !== undefined && Number.isFinite(grid.rows)
+      ? clampPaneCount(grid.rows)
+      : current.rows;
+  if (cols === current.cols && rows === current.rows) return floor;
+  return withOpenings(
+    floor,
+    floor.openings.map((o) => {
+      if (o.id !== id) return o;
+      const next = { ...o };
+      if (cols === DEFAULT_PANE_COLS) delete next.paneCols;
+      else next.paneCols = cols;
+      if (rows === DEFAULT_PANE_ROWS) delete next.paneRows;
+      else next.paneRows = rows;
+      return next;
     }),
   );
 }

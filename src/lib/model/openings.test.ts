@@ -7,11 +7,13 @@ import {
   flipFloorOpeningSide,
   MIN_OPENING_HEIGHT,
   moveFloorOpening,
+  openingPaneGrid,
   openingSill,
   openingVerticals,
   removeFloorOpening,
   resizeFloorOpening,
   resolveOpeningDrag,
+  setOpeningPaneGrid,
   setOpeningSillMaterial,
   setOpeningSillOverhang,
   setOpeningVerticals,
@@ -503,5 +505,63 @@ describe("window sills", () => {
     expect(setOpeningSillOverhang(floor, "nope", 0.2)).toBe(floor);
     expect(setOpeningSillOverhang(floor, "window-AB", Number.NaN)).toBe(floor);
     expect(setOpeningSillOverhang(floor, "window-AB", 0.03)).toBe(floor);
+  });
+});
+
+describe("window pane grid", () => {
+  it("resolves 2×2 defaults for an untouched window", () => {
+    const floor = makeFloor();
+    const window = floor.openings.find((o) => o.id === "window-AB");
+    if (!window) throw new Error("fixture window missing");
+    expect(openingPaneGrid(window)).toEqual({ cols: 2, rows: 2 });
+  });
+
+  it("stores a non-default grid, dropping fields back at the default", () => {
+    const floor = setOpeningPaneGrid(makeFloor(), "window-AB", {
+      cols: 4,
+      rows: 3,
+    });
+    const window = floor.openings.find((o) => o.id === "window-AB");
+    expect(window?.paneCols).toBe(4);
+    expect(window?.paneRows).toBe(3);
+    const back = setOpeningPaneGrid(floor, "window-AB", { cols: 2, rows: 2 });
+    const reverted = back.openings.find((o) => o.id === "window-AB");
+    expect(reverted?.paneCols).toBeUndefined();
+    expect(reverted?.paneRows).toBeUndefined();
+  });
+
+  it("rounds and clamps into 1..MAX_PANE_DIVISIONS", () => {
+    const wild = setOpeningPaneGrid(makeFloor(), "window-AB", {
+      cols: 0,
+      rows: 12,
+    });
+    const window = wild.openings.find((o) => o.id === "window-AB");
+    expect(openingPaneGrid(window as Opening)).toEqual({ cols: 1, rows: 8 });
+    const fraction = setOpeningPaneGrid(makeFloor(), "window-AB", {
+      cols: 3.6,
+    });
+    expect(fraction.openings.find((o) => o.id === "window-AB")?.paneCols).toBe(
+      4,
+    );
+  });
+
+  it("leaves the unspecified axis untouched", () => {
+    const floor = setOpeningPaneGrid(makeFloor(), "window-AB", { rows: 5 });
+    const window = floor.openings.find((o) => o.id === "window-AB");
+    expect(window?.paneCols).toBeUndefined();
+    expect(window?.paneRows).toBe(5);
+  });
+
+  it("no-ops on doors, unknown ids, non-finite and same values", () => {
+    const floor = makeFloor();
+    expect(setOpeningPaneGrid(floor, "door-BE", { cols: 4 })).toBe(floor);
+    expect(setOpeningPaneGrid(floor, "nope", { cols: 4 })).toBe(floor);
+    expect(setOpeningPaneGrid(floor, "window-AB", { cols: Number.NaN })).toBe(
+      floor,
+    );
+    expect(setOpeningPaneGrid(floor, "window-AB", {})).toBe(floor);
+    expect(setOpeningPaneGrid(floor, "window-AB", { cols: 2, rows: 2 })).toBe(
+      floor,
+    );
   });
 });
