@@ -10,6 +10,7 @@ import {
   floorArea,
   furnitureDisplayName,
   type Opening,
+  openingPaneGrid,
   type Point,
   type Room,
   type SillMaterial,
@@ -405,6 +406,8 @@ interface OpeningSectionProps {
   onSillOverhang: (meters: number) => void;
   /** A committed sill material (windows only). */
   onSillMaterial: (material: SillMaterial) => void;
+  /** A committed pane grid edit (windows only); omitted axes keep theirs. */
+  onPaneGrid: (grid: { cols?: number; rows?: number }) => void;
   onDelete: () => void;
 }
 
@@ -418,6 +421,7 @@ function OpeningSection({
   onFlipSide,
   onSillOverhang,
   onSillMaterial,
+  onPaneGrid,
   onDelete,
 }: OpeningSectionProps) {
   const { opening, bottom, top } = selection;
@@ -429,6 +433,15 @@ function OpeningSection({
       if (meters === null) return;
       if (Math.abs(meters - current) < SAME_EPSILON) return;
       apply(meters);
+    };
+
+  const paneGrid = openingPaneGrid(opening);
+  const commitCount =
+    (apply: (count: number) => void, current: number) => (text: string) => {
+      const count = Number.parseInt(text, 10);
+      if (!Number.isFinite(count)) return;
+      if (count === current) return;
+      apply(count);
     };
 
   const lengthField = (
@@ -507,6 +520,34 @@ function OpeningSection({
             )}
         </div>
       </div>
+
+      {!isDoor && (
+        <div className="flex flex-col gap-2.5">
+          <SectionLabel>PANES</SectionLabel>
+          <div className="grid grid-cols-2 gap-2">
+            <Field
+              label="COLS"
+              ariaLabel="Pane columns"
+              suffix=""
+              value={String(paneGrid.cols)}
+              onCommit={commitCount(
+                (cols) => onPaneGrid({ cols }),
+                paneGrid.cols,
+              )}
+            />
+            <Field
+              label="ROWS"
+              ariaLabel="Pane rows"
+              suffix=""
+              value={String(paneGrid.rows)}
+              onCommit={commitCount(
+                (rows) => onPaneGrid({ rows }),
+                paneGrid.rows,
+              )}
+            />
+          </div>
+        </div>
+      )}
 
       {!isDoor && (
         <div className="flex flex-col gap-2.5">
@@ -858,6 +899,8 @@ export interface InspectorProps {
   onOpeningSillOverhang?: (meters: number) => void;
   /** A committed sill material (windows only). */
   onOpeningSillMaterial?: (material: SillMaterial) => void;
+  /** A committed pane grid edit (windows only); omitted axes keep theirs. */
+  onOpeningPaneGrid?: (grid: { cols?: number; rows?: number }) => void;
   onOpeningDelete?: () => void;
   onWallThickness?: (meters: number) => void;
   /** A committed width from the stair's WIDTH field. */
@@ -898,6 +941,7 @@ export function Inspector({
   onOpeningFlipSide = () => {},
   onOpeningSillOverhang = () => {},
   onOpeningSillMaterial = () => {},
+  onOpeningPaneGrid = () => {},
   onOpeningDelete = () => {},
   onWallThickness = () => {},
   onStairResize = () => {},
@@ -1003,6 +1047,7 @@ export function Inspector({
             onFlipSide={onOpeningFlipSide}
             onSillOverhang={onOpeningSillOverhang}
             onSillMaterial={onOpeningSillMaterial}
+            onPaneGrid={onOpeningPaneGrid}
             onDelete={onOpeningDelete}
           />
         ) : showWall ? (

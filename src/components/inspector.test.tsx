@@ -356,3 +356,61 @@ describe("Inspector", () => {
     );
   });
 });
+
+describe("opening pane grid", () => {
+  const windowSelection = {
+    opening: {
+      id: "w1",
+      kind: "window" as const,
+      edgeId: "AB",
+      offset: 1,
+      width: 1.2,
+      side: 1 as const,
+    },
+    bottom: 0.36,
+    top: 1.94,
+    ceiling: 2.5,
+    connects: null,
+    twoFace: false,
+    sillOverhang: 0.03,
+    sillMaterial: "white" as const,
+  };
+
+  it("shows 2×2 defaults and commits a columns edit", () => {
+    const onOpeningPaneGrid = vi.fn();
+    renderInspector({ selectedOpening: windowSelection, onOpeningPaneGrid });
+    const cols = screen.getByLabelText("Pane columns") as HTMLInputElement;
+    expect(cols.value).toBe("2");
+    expect((screen.getByLabelText("Pane rows") as HTMLInputElement).value).toBe(
+      "2",
+    );
+    fireEvent.change(cols, { target: { value: "4" } });
+    fireEvent.blur(cols);
+    expect(onOpeningPaneGrid).toHaveBeenCalledWith({ cols: 4 });
+  });
+
+  it("drops invalid input without committing", () => {
+    const onOpeningPaneGrid = vi.fn();
+    renderInspector({ selectedOpening: windowSelection, onOpeningPaneGrid });
+    const rows = screen.getByLabelText("Pane rows") as HTMLInputElement;
+    fireEvent.change(rows, { target: { value: "lots" } });
+    fireEvent.blur(rows);
+    expect(onOpeningPaneGrid).not.toHaveBeenCalled();
+    expect(rows.value).toBe("2");
+  });
+
+  it("hides the PANES section for doors", () => {
+    renderInspector({
+      selectedOpening: {
+        ...windowSelection,
+        opening: {
+          ...windowSelection.opening,
+          kind: "door" as const,
+          hinge: "start" as const,
+        },
+      },
+    });
+    expect(screen.queryByText("PANES")).toBeNull();
+    expect(screen.queryByLabelText("Pane columns")).toBeNull();
+  });
+});

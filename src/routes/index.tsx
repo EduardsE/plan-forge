@@ -89,6 +89,7 @@ import {
   setFurnitureFootprint,
   setFurnitureRotation,
   setMountElevation,
+  setOpeningPaneGrid,
   setOpeningSillMaterial,
   setOpeningSillOverhang,
   setOpeningVerticals,
@@ -597,6 +598,17 @@ function Planner() {
       if (!owner) return;
       commitFloor(owner.id, (floor) =>
         setOpeningSillMaterial(floor, selectedOpeningId, material),
+      );
+    },
+    [selectedOpeningId, commitFloor],
+  );
+  const setSelectedOpeningPaneGrid = useCallback(
+    (grid: { cols?: number; rows?: number }) => {
+      if (!selectedOpeningId) return;
+      const owner = floorOfOpening(buildingRef.current, selectedOpeningId);
+      if (!owner) return;
+      commitFloor(owner.id, (floor) =>
+        setOpeningPaneGrid(floor, selectedOpeningId, grid),
       );
     },
     [selectedOpeningId, commitFloor],
@@ -1688,6 +1700,7 @@ function Planner() {
         onOpeningFlipSide={flipSelectedOpeningSide}
         onOpeningSillOverhang={setSelectedOpeningSillOverhang}
         onOpeningSillMaterial={setSelectedOpeningSillMaterial}
+        onOpeningPaneGrid={setSelectedOpeningPaneGrid}
         onOpeningDelete={deleteSelectedOpening}
         onWallThickness={setWallThickness}
         onStairResize={resizeSelectedStair}
