@@ -1,10 +1,13 @@
 import { Path, Shape } from "three";
 import type { DerivedRoom } from "#/lib/model";
 import {
+  DEFAULT_PANE_COLS,
+  DEFAULT_PANE_ROWS,
   DEFAULT_WALL_HEIGHT,
   DOOR_HEIGHT,
   type Floor,
   type Opening,
+  openingPaneGrid,
   openingSill,
   openingVerticals,
   type Point,
@@ -113,6 +116,10 @@ export interface WallHole {
   sillOverhang?: number;
   /** Windows only: resolved sill board material. */
   sillMaterial?: "white" | "wood";
+  /** Windows only: resolved pane columns of the frame grid. */
+  paneCols?: number;
+  /** Windows only: resolved pane rows of the frame grid. */
+  paneRows?: number;
 }
 
 /** One wall ready to extrude: an edge's centerline with holes cut into it. */
@@ -193,6 +200,7 @@ function cutHole(
   const top = Math.min(verticals.top, height);
   if (end - start < MIN_HOLE_SIZE || top - bottom < MIN_HOLE_SIZE) return;
   const sill = opening.kind === "window" ? openingSill(opening) : null;
+  const grid = opening.kind === "window" ? openingPaneGrid(opening) : null;
   holes.push({
     id: opening.id,
     kind: opening.kind,
@@ -205,6 +213,7 @@ function cutHole(
     ...(sill
       ? { sillOverhang: sill.overhang, sillMaterial: sill.material }
       : {}),
+    ...(grid ? { paneCols: grid.cols, paneRows: grid.rows } : {}),
   });
 }
 
@@ -338,6 +347,56 @@ export function windowUnitZ(
 ): number {
   const farFace = wallZCenter(solid) - hole.side * (solid.thickness / 2);
   return farFace + hole.side * (windowUnitDepth(solid) / 2);
+}
+
+/** Border frame bar size of a window unit, meters. */
+export const WINDOW_FRAME_SIZE = 0.09;
+/** Muntin (pane divider) bar thickness, meters. */
+const MUNTIN_SIZE = 0.06;
+
+/** The frame/muntin bar layout of one window hole (wall-local): [key, x, y,
+ * width, height, depth]. Shared by the visible dressing and the shadow
+ * proxy, so the muntin grid in the sun patch matches the drawn frame. The
+ * hole's resolved pane grid decides the muntins: cols−1 vertical and
+ * rows−1 horizontal bars, evenly spaced inside the border frame. */
+export function windowBars(
+  solid: WallSolid,
+  hole: WallHole,
+): Array<[string, number, number, number, number, number]> {
+  const f = WINDOW_FRAME_SIZE;
+  const cx = hole.start + hole.width / 2;
+  const cy = (hole.bottom + hole.top) / 2;
+  const height = hole.top - hole.bottom;
+  const unit = windowUnitDepth(solid);
+  const frameDepth = unit + 0.02;
+  // Frame bars sit inside the hole, border-box style; the muntins stay
+  // within the unit's depth.
+  const bars: Array<[string, number, number, number, number, number]> = [
+    ["sill", cx, hole.bottom + f / 2, hole.width, f, frameDepth],
+    ["head", cx, hole.top - f / 2, hole.width, f, frameDepth],
+    ["jamb-l", hole.start + f / 2, cy, f, height - 2 * f, frameDepth],
+    [
+      "jamb-r",
+      hole.start + hole.width - f / 2,
+      cy,
+      f,
+      height - 2 * f,
+      frameDepth,
+    ],
+  ];
+  const cols = hole.paneCols ?? DEFAULT_PANE_COLS;
+  const rows = hole.paneRows ?? DEFAULT_PANE_ROWS;
+  const innerWidth = hole.width - 2 * f;
+  const innerHeight = height - 2 * f;
+  for (let i = 1; i < cols; i++) {
+    const x = hole.start + f + (innerWidth * i) / cols;
+    bars.push([`muntin-v${i}`, x, cy, MUNTIN_SIZE, innerHeight, unit]);
+  }
+  for (let j = 1; j < rows; j++) {
+    const y = hole.bottom + f + (innerHeight * j) / rows;
+    bars.push([`muntin-h${j}`, cx, y, innerWidth, MUNTIN_SIZE, unit]);
+  }
+  return bars;
 }
 
 /** Sill board thickness (drops below the hole bottom), meters. */

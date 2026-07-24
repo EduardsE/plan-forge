@@ -68,10 +68,11 @@ import {
   sillBox,
   stubSpans,
   type WallSolid,
+  WINDOW_FRAME_SIZE,
   wallStandsFull,
   wallZCenter,
   wallZOffset,
-  windowUnitDepth,
+  windowBars,
   windowUnitZ,
 } from "#/lib/room-scene";
 import { stairPolygon, stairRun } from "#/lib/stairs";
@@ -103,7 +104,6 @@ const BASEBOARD_HEIGHT = 0.12;
 /** Wall edges, tops and opening jambs. */
 const WALL_EDGE_COLOR = "#ede2ce";
 const WINDOW_FRAME_COLOR = "#e6dbc6";
-const WINDOW_FRAME_SIZE = 0.09;
 const SILL_WOOD_COLOR = "#b98a5f";
 
 /** Mockup's selection stroke: rgba(58,91,240,.7) on the desk chair faces. */
@@ -497,38 +497,6 @@ function FloorContactShadow({ bounds }: { bounds: Bounds }) {
       />
     </group>
   );
-}
-
-/** The frame/muntin bar layout of one window hole (wall-local): [key, x, y,
- * width, height, depth]. Shared by the visible dressing and the shadow
- * proxy, so the muntin cross in the sun patch matches the drawn frame. */
-function windowBars(
-  solid: WallSolid,
-  hole: WallSolid["holes"][number],
-): Array<[string, number, number, number, number, number]> {
-  const f = WINDOW_FRAME_SIZE;
-  const cx = hole.start + hole.width / 2;
-  const cy = (hole.bottom + hole.top) / 2;
-  const height = hole.top - hole.bottom;
-  const unit = windowUnitDepth(solid);
-  const frameDepth = unit + 0.02;
-  // Frame bars sit inside the hole, border-box style; the muntin cross
-  // stays within the unit's depth.
-  return [
-    ["sill", cx, hole.bottom + f / 2, hole.width, f, frameDepth],
-    ["head", cx, hole.top - f / 2, hole.width, f, frameDepth],
-    ["jamb-l", hole.start + f / 2, cy, f, height - 2 * f, frameDepth],
-    [
-      "jamb-r",
-      hole.start + hole.width - f / 2,
-      cy,
-      f,
-      height - 2 * f,
-      frameDepth,
-    ],
-    ["muntin-v", cx, cy, 0.06, height - 2 * f, unit],
-    ["muntin-h", cx, cy, hole.width - 2 * f, 0.06, unit],
-  ];
 }
 
 /** Frame, muntin cross and sky-filled pane for one window hole (wall-local). */

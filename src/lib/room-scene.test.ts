@@ -4,6 +4,7 @@ import {
   type Floor,
   type Point,
   setEdgeThickness,
+  setOpeningPaneGrid,
   setOpeningSillMaterial,
   setOpeningSillOverhang,
   WALL_THICKNESS,
@@ -21,9 +22,11 @@ import {
   sunAnchorAzimuth,
   WALL_HEIGHT,
   type WallSolid,
+  WINDOW_FRAME_SIZE,
   WINDOW_HEAD,
   WINDOW_SILL,
   wallZOffset,
+  windowBars,
   windowUnitZ,
 } from "./room-scene";
 
@@ -77,6 +80,8 @@ describe("buildEdgeSolids", () => {
         side: 1,
         sillOverhang: expect.any(Number),
         sillMaterial: expect.any(String),
+        paneCols: expect.any(Number),
+        paneRows: expect.any(Number),
       },
     ]);
   });
@@ -485,5 +490,91 @@ describe("ceilingSlabShape", () => {
       ),
     ).toBeNull();
     expect(ceilingSlabShape([], [])).toBeNull();
+  });
+});
+
+describe("windowBars", () => {
+  const solid: WallSolid = {
+    index: 0,
+    edgeId: "e",
+    start: { x: 0, y: 0 },
+    dir: { x: 1, y: 0 },
+    outward: { x: 0, y: -1 },
+    length: 5.2,
+    height: WALL_HEIGHT,
+    thickness: WALL_THICKNESS,
+    outwardShift: 0,
+    outwardSign: 1,
+    holes: [],
+    faces: 1,
+    faceSides: [1],
+  };
+  const win = (
+    over: Partial<WallSolid["holes"][number]> = {},
+  ): WallSolid["holes"][number] => ({
+    id: "w",
+    kind: "window" as const,
+    start: 1,
+    width: 1.6,
+    bottom: WINDOW_SILL,
+    top: WINDOW_HEAD,
+    side: 1 as const,
+    ...over,
+  });
+  const keys = (hole: WallSolid["holes"][number]) =>
+    windowBars(solid, hole).map(([key]) => key);
+
+  it("defaults to the 2×2 cross: frame plus one muntin each way", () => {
+    expect(keys(win())).toEqual([
+      "sill",
+      "head",
+      "jamb-l",
+      "jamb-r",
+      "muntin-v1",
+      "muntin-h1",
+    ]);
+    const bars = windowBars(solid, win());
+    const v = bars.find(([key]) => key === "muntin-v1");
+    const h = bars.find(([key]) => key === "muntin-h1");
+    // The single muntins sit at the hole center, exactly the old cross.
+    expect(v?.[1]).toBeCloseTo(1 + 1.6 / 2);
+    expect(h?.[2]).toBeCloseTo((WINDOW_SILL + WINDOW_HEAD) / 2);
+  });
+
+  it("emits cols−1 vertical and rows−1 horizontal muntins, evenly spaced", () => {
+    const bars = windowBars(solid, win({ paneCols: 4, paneRows: 3 }));
+    const verticals = bars.filter(([key]) => key.startsWith("muntin-v"));
+    const horizontals = bars.filter(([key]) => key.startsWith("muntin-h"));
+    expect(verticals).toHaveLength(3);
+    expect(horizontals).toHaveLength(2);
+    const inner = 1.6 - 2 * WINDOW_FRAME_SIZE;
+    verticals.forEach((bar, i) => {
+      expect(bar[1]).toBeCloseTo(1 + WINDOW_FRAME_SIZE + (inner * (i + 1)) / 4);
+    });
+  });
+
+  it("renders 1×1 as a bare frame", () => {
+    expect(keys(win({ paneCols: 1, paneRows: 1 }))).toEqual([
+      "sill",
+      "head",
+      "jamb-l",
+      "jamb-r",
+    ]);
+  });
+});
+
+describe("pane grid flows into wall holes", () => {
+  it("cutHole resolves the grid for windows and skips doors", () => {
+    const floor = setOpeningPaneGrid(makeFloor(), "window-AB", {
+      cols: 4,
+      rows: 4,
+    });
+    const ab = solidsOf(floor).find((s) => s.edgeId === "AB");
+    const hole = ab?.holes.find((h) => h.id === "window-AB");
+    expect(hole?.paneCols).toBe(4);
+    expect(hole?.paneRows).toBe(4);
+    const be = solidsOf(floor).find((s) => s.edgeId === "BE");
+    const door = be?.holes.find((h) => h.id === "door-BE");
+    expect(door?.paneCols).toBeUndefined();
   });
 });
