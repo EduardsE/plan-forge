@@ -9,6 +9,7 @@ import type {
   WallNode,
 } from "#/lib/model";
 import {
+  MAX_PANE_DIVISIONS,
   MAX_SILL_OVERHANG,
   MAX_STAIR_WIDTH,
   MAX_WALL_HEIGHT,
@@ -165,6 +166,24 @@ function areOpenings(
       o.sillMaterial !== undefined &&
       (o.kind !== "window" ||
         (o.sillMaterial !== "white" && o.sillMaterial !== "wood"))
+    ) {
+      return false;
+    }
+    // Optional pane grid: integer columns/rows, windows only.
+    const isPaneCount = (v: unknown): boolean =>
+      typeof v === "number" &&
+      Number.isInteger(v) &&
+      v >= 1 &&
+      v <= MAX_PANE_DIVISIONS;
+    if (
+      o.paneCols !== undefined &&
+      (o.kind !== "window" || !isPaneCount(o.paneCols))
+    ) {
+      return false;
+    }
+    if (
+      o.paneRows !== undefined &&
+      (o.kind !== "window" || !isPaneCount(o.paneRows))
     ) {
       return false;
     }

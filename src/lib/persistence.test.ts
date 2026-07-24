@@ -8,6 +8,7 @@ import {
   reconcileFloor,
   type Stair,
   setEdgeThickness,
+  setOpeningPaneGrid,
   setOpeningSillMaterial,
   setOpeningSillOverhang,
 } from "#/lib/model";
@@ -402,6 +403,43 @@ describe("wall thickness + sill persistence", () => {
         }),
       ),
     ).toBeNull();
+  });
+
+  it("round-trips a window's pane grid", () => {
+    let floor = reconcileFloor(makeFloor());
+    floor = setOpeningPaneGrid(floor, "window-AB", { cols: 4, rows: 3 });
+    const restored = deserializeSavedState(save(floor));
+    const window = restored?.building.floors[0].openings.find(
+      (o) => o.id === "window-AB",
+    );
+    expect(window?.paneCols).toBe(4);
+    expect(window?.paneRows).toBe(3);
+  });
+
+  it("rejects pane fields on doors and out-of-range or fractional counts", () => {
+    const base = reconcileFloor(makeFloor());
+    const tamper = (
+      mutate: (parsed: Record<string, unknown>) => void,
+    ): string => {
+      const parsed = JSON.parse(save(base)) as Record<string, unknown>;
+      mutate(parsed);
+      return JSON.stringify(parsed);
+    };
+    const tamperOpening = (index: number, patch: Record<string, unknown>) =>
+      tamper((p) => {
+        const floor = floorAt(p);
+        const openings = floor.openings as Record<string, unknown>[];
+        openings[index] = { ...openings[index], ...patch };
+      });
+    expect(deserializeSavedState(tamperOpening(0, { paneCols: 3 }))).toBeNull();
+    expect(deserializeSavedState(tamperOpening(1, { paneCols: 9 }))).toBeNull();
+    expect(deserializeSavedState(tamperOpening(1, { paneRows: 0 }))).toBeNull();
+    expect(
+      deserializeSavedState(tamperOpening(1, { paneRows: 2.5 })),
+    ).toBeNull();
+    expect(
+      deserializeSavedState(tamperOpening(1, { paneCols: 4, paneRows: 4 })),
+    ).not.toBeNull();
   });
 });
 
