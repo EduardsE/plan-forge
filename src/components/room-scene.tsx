@@ -499,7 +499,7 @@ function FloorContactShadow({ bounds }: { bounds: Bounds }) {
   );
 }
 
-/** Frame, muntin cross and sky-filled pane for one window hole (wall-local). */
+/** Frame, muntin grid and sky-filled pane for one window hole (wall-local). */
 function WindowDressing({
   solid,
   hole,
