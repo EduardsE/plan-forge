@@ -87,9 +87,9 @@ clamp to 1..8. Doors show no PANES section.
 ## Persistence
 
 `areOpenings()` in `src/lib/persistence.ts` accepts optional `paneCols` /
-`paneRows` on any opening: integers in 1..8. Like the existing sill fields,
-they are simply type-checked per field — no cross-check against `kind`.
-No `STORAGE_VERSION` bump — absent fields mean 2×2, so all
+`paneRows`: integers in 1..8, valid only when `kind === "window"` — the
+same kind cross-check the existing `sillOverhang`/`sillMaterial`
+validation performs. No `STORAGE_VERSION` bump — absent fields mean 2×2, so all
 existing saves in versions {6, 7} load unchanged.
 
 ## Testing and verification
