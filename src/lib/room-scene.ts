@@ -142,7 +142,7 @@ export interface WallSolid {
   length: number;
   /** Wall/ceiling height: max of the adjacent rooms, DEFAULT for none. */
   height: number;
-  /** Effective wall thickness (per-edge override; shared walls stay default). */
+  /** Effective wall thickness (per-edge override, any adjacency). */
   thickness: number;
   /**
    * Signed offset of the body's mid-plane from the edge centerline along
@@ -275,12 +275,13 @@ export function buildEdgeSolids(
     }
     holes.sort((x, y) => x.start - y.start);
 
-    // Effective thickness: the override counts only while the edge borders
-    // at most one room face (dormant on shared walls). A 1-face wall grows
-    // outward — interior face pinned at WALL_THICKNESS / 2 — while a
-    // dangling edge grows symmetrically (no defined interior side).
-    const thickness =
-      adj.length <= 1 ? (edge.thickness ?? WALL_THICKNESS) : WALL_THICKNESS;
+    // Effective thickness: the per-edge override, everywhere. A 1-face wall
+    // grows outward — interior face pinned at WALL_THICKNESS / 2, so the room
+    // interior doesn't move — while a shared (2-face) or dangling edge grows
+    // symmetrically about the centerline (each room yields half). Mirrors
+    // `edgeSideHalves` (model/faces.ts), which room insets/collision/mounts
+    // read.
+    const thickness = edge.thickness ?? WALL_THICKNESS;
     const outwardShift =
       adj.length === 1 ? (thickness - WALL_THICKNESS) / 2 : 0;
     const outwardSign: 1 | -1 = adj.length === 1 && faceSides[0] === 1 ? -1 : 1;

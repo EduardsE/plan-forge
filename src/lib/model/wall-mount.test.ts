@@ -109,3 +109,26 @@ describe("isWallItem", () => {
     expect(isWallItem("nope")).toBe(false);
   });
 });
+
+describe("deriveMountTransform with per-edge side halves", () => {
+  const graph = {
+    nodes: [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 5, y: 0 },
+    ],
+    edges: [{ id: "ab", a: "a", b: "b" }],
+  };
+  const mount = { edgeId: "ab", offset: 2, side: 1 as const, elevation: 1.5 };
+  const footprint = { width: 1, depth: 0.04 };
+
+  it("defaults to the standard half-thickness push", () => {
+    const transform = deriveMountTransform(mount, graph, footprint);
+    expect(transform?.position.y).toBeCloseTo(0.07, 9);
+  });
+
+  it("pushes off the resolved face of a thickened wall", () => {
+    const halves = new Map([["ab", { pos: 0.15, neg: 0.05 }]]);
+    const transform = deriveMountTransform(mount, graph, footprint, halves);
+    expect(transform?.position.y).toBeCloseTo(0.17, 9);
+  });
+});

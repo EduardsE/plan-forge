@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Floor, FurnitureItem, Opening } from "./model";
+import { setEdgeThickness } from "./model";
+import { makeFloor } from "./model/test-fixtures";
 import {
   edgeWallObstacles,
   furnitureObstacle,
@@ -409,5 +411,30 @@ describe("rotatedFootprintSize", () => {
     const diagonal = rotatedFootprintSize({ width: 1, depth: 1 }, 45);
     expect(diagonal.width).toBeCloseTo(Math.SQRT2, 10);
     expect(diagonal.depth).toBeCloseTo(Math.SQRT2, 10);
+  });
+});
+
+describe("edgeWallObstacles per-edge thickness", () => {
+  it("widens a thick shared wall's slab symmetrically about its line", () => {
+    const floor = setEdgeThickness(makeFloor(), "BE", 0.3);
+    const slabs = edgeWallObstacles(floor).filter(
+      (o) => Math.abs((o.min.x + o.max.x) / 2 - 6.4) < 1e-9,
+    );
+    expect(slabs.length).toBeGreaterThan(0);
+    for (const slab of slabs) {
+      expect(slab.min.x).toBeCloseTo(6.25, 9);
+      expect(slab.max.x).toBeCloseTo(6.55, 9);
+    }
+  });
+
+  it("grows a thick exterior wall's slab outward only", () => {
+    const floor = setEdgeThickness(makeFloor(), "AB", 0.3);
+    // AB runs along y = −0.05 with the living room below: the interior face
+    // stays at y = 0 while the body bulks upward (outward).
+    const slab = edgeWallObstacles(floor).find(
+      (o) => o.max.y < 0.5 && o.min.x < 0 && o.max.x > 6,
+    );
+    expect(slab?.max.y).toBeCloseTo(0, 9);
+    expect(slab?.min.y).toBeCloseTo(-0.3, 9);
   });
 });

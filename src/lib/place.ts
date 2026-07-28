@@ -1,4 +1,5 @@
 import {
+  edgeSideHalves,
   type Floor,
   type FurnitureItem,
   type Point,
@@ -135,17 +136,19 @@ function slabBounds(p0: Point, p1: Point, n: Point, half: number): Obstacle {
 
 /**
  * Every wall of the graph floor as a solid obstacle slab: the edge centerline
- * extruded ± `WALL_THICKNESS / 2`, split at door openings (a door span carries
- * **no** slab at floor level, so furniture passes through the gap) but not at
- * windows (their sill sits above the floor, so the slab stays whole). Axis
- * edges yield a plain axis-aligned box; a non-axis edge yields its bounding box
- * plus an `oriented` slab so it still blocks/flush-snaps along its own normal.
- * This replaces `outlineWallObstacles` in every placement/drag/nudge path:
- * furniture is floor-level now, so the room outline no longer clamps it — the
- * wall slabs do.
+ * extruded to its wall body's per-side extents (`edgeSideHalves` — thickness
+ * overrides included, a thick exterior wall bulking outward only), split at
+ * door openings (a door span carries **no** slab at floor level, so furniture
+ * passes through the gap) but not at windows (their sill sits above the
+ * floor, so the slab stays whole). Axis edges yield a plain axis-aligned box;
+ * a non-axis edge yields its bounding box plus an `oriented` slab so it still
+ * blocks/flush-snaps along its own normal. This replaces
+ * `outlineWallObstacles` in every placement/drag/nudge path: furniture is
+ * floor-level now, so the room outline no longer clamps it — the wall slabs
+ * do.
  */
 export function edgeWallObstacles(floor: Floor): Obstacle[] {
-  const half = WALL_THICKNESS / 2;
+  const sideHalves = edgeSideHalves(floor);
   const nodeById = new Map(floor.nodes.map((n) => [n.id, n]));
   const doorSpansByEdge = new Map<string, Array<[number, number]>>();
   for (const opening of floor.openings) {
@@ -173,6 +176,12 @@ export function edgeWallObstacles(floor: Floor): Obstacle[] {
     const axis = vertical || horizontal;
     const dir = { x: dx / length, y: dy / length };
     const nrm = { x: dir.y, y: -dir.x }; // unit right normal
+    // The right normal points toward side −1 (`sideOfPoint`), so the slab
+    // reaches `neg` along +nrm and `pos` along −nrm.
+    const halves = sideHalves.get(edge.id) ?? {
+      pos: WALL_THICKNESS / 2,
+      neg: WALL_THICKNESS / 2,
+    };
 
     // Solid stretches = the full edge minus the door gaps on it.
     const doors = (doorSpansByEdge.get(edge.id) ?? [])
@@ -193,9 +202,19 @@ export function edgeWallObstacles(floor: Floor): Obstacle[] {
     }
     if (length - cursor > AXIS_EPSILON) spans.push([cursor, length]);
 
+    // Recenter on the wall body's mid-plane so an asymmetric band (a thick
+    // exterior wall growing outward only) still reads as a symmetric slab.
+    const shift = (halves.neg - halves.pos) / 2;
+    const half = (halves.neg + halves.pos) / 2;
     spans.forEach(([s, e], spanIndex) => {
-      const p0 = { x: a.x + dir.x * s, y: a.y + dir.y * s };
-      const p1 = { x: a.x + dir.x * e, y: a.y + dir.y * e };
+      const p0 = {
+        x: a.x + dir.x * s + nrm.x * shift,
+        y: a.y + dir.y * s + nrm.y * shift,
+      };
+      const p1 = {
+        x: a.x + dir.x * e + nrm.x * shift,
+        y: a.y + dir.y * e + nrm.y * shift,
+      };
       if (axis) {
         const minX = Math.min(p0.x, p1.x);
         const maxX = Math.max(p0.x, p1.x);

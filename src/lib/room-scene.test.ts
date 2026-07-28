@@ -340,11 +340,15 @@ describe("per-edge wall thickness", () => {
     expect(wallZOffset(ab)).toBeCloseTo(-0.25, 9);
   });
 
-  it("keeps a shared (2-face) wall at the default — override dormant", () => {
+  it("grows a shared (2-face) wall symmetrically about the centerline", () => {
     const floor = setEdgeThickness(makeFloor(), "BE", 0.3);
     const be = solidsOf(floor).find((s) => s.edgeId === "BE");
-    expect(be?.thickness).toBe(WALL_THICKNESS);
+    expect(be?.thickness).toBe(0.3);
     expect(be?.outwardShift).toBe(0);
+    if (!be) throw new Error("BE solid missing");
+    // Both faces sit 15 cm off the centerline — each room yields half.
+    expect(faceOutwardOffset(be, 1)).toBeCloseTo(0.15, 9);
+    expect(faceOutwardOffset(be, -1)).toBeCloseTo(-0.15, 9);
   });
 
   it("grows a dangling (0-face) edge symmetrically", () => {

@@ -1,4 +1,5 @@
 import { catalogItemById } from "./catalog";
+import type { EdgeSideHalves } from "./faces";
 import { WALL_THICKNESS, wallsOf } from "./geometry";
 import type { WallEdge, WallNode } from "./graph";
 import type { Point, WallMount } from "./types";
@@ -95,15 +96,18 @@ export interface EdgeGraph {
 
 /**
  * The plan `position` and `rotation` a mount resolves to against the graph:
- * the item centered `offset + width/2` along its edge (a→b), pushed
- * `WALL_THICKNESS / 2 + depth / 2` toward `side` so its back sits on the
- * interior face, with its width axis turned to the edge direction. Null when
- * the edge (or its nodes) is gone, or degenerate.
+ * the item centered `offset + width/2` along its edge (a→b), pushed half the
+ * wall plus `depth / 2` toward `side` so its back sits on the wall face it
+ * hangs on, with its width axis turned to the edge direction. `sideHalves`
+ * (from `edgeSideHalves`) resolves per-edge thickness overrides — without it
+ * the push assumes the default `WALL_THICKNESS / 2` face. Null when the edge
+ * (or its nodes) is gone, or degenerate.
  */
 export function deriveMountTransform(
   mount: WallMount,
   graph: EdgeGraph,
   footprint: { width: number; depth: number },
+  sideHalves?: Map<string, EdgeSideHalves>,
 ): { position: Point; rotation: number } | null {
   const edge = graph.edges.find((e) => e.id === mount.edgeId);
   if (!edge) return null;
@@ -125,7 +129,13 @@ export function deriveMountTransform(
     Math.max(0, length - footprint.width),
   );
   const centerAlong = offset + footprint.width / 2;
-  const push = WALL_THICKNESS / 2 + footprint.depth / 2;
+  const halves = sideHalves?.get(mount.edgeId);
+  const faceHalf = halves
+    ? mount.side === 1
+      ? halves.pos
+      : halves.neg
+    : WALL_THICKNESS / 2;
+  const push = faceHalf + footprint.depth / 2;
   const position = {
     x: a.x + dir.x * centerAlong + normal.x * push,
     y: a.y + dir.y * centerAlong + normal.y * push,

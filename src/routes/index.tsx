@@ -375,7 +375,7 @@ function Planner() {
     return {
       edgeId: edge.id,
       length: Math.hypot(b.x - a.x, b.y - a.y),
-      thickness: twoFace ? WALL_THICKNESS : (edge.thickness ?? WALL_THICKNESS),
+      thickness: edge.thickness ?? WALL_THICKNESS,
       twoFace,
     };
   }, [selectedEdgeId, viewMode, building, floor, derived, derivedByFloor]);

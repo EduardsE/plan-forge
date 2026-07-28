@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  edgeSideHalves,
   extractFaces,
   faceLabelPoint,
   insetPolygon,
@@ -181,5 +182,85 @@ describe("faceLabelPoint / sideOfPoint", () => {
     expect(sideOfPoint(a, b, { x: 2, y: 1 })).toBe(
       -sideOfPoint(a, b, { x: 2, y: -1 }) as 1 | -1,
     );
+  });
+});
+
+describe("insetPolygon per-edge distances", () => {
+  const poly = [
+    { x: 0, y: 0 },
+    { x: 5, y: 0 },
+    { x: 5, y: 4 },
+    { x: 0, y: 4 },
+  ];
+
+  it("insets each edge by its own distance", () => {
+    const result = insetPolygon(poly, [0.5, 1, 0.2, 0.3]);
+    expect(result).toEqual([
+      { x: 0.3, y: 0.5 },
+      { x: 4, y: 0.5 },
+      { x: 4, y: 3.8 },
+      { x: 0.3, y: 3.8 },
+    ]);
+  });
+
+  it("matches the uniform inset when every distance is equal", () => {
+    expect(insetPolygon(poly, [0.1, 0.1, 0.1, 0.1])).toEqual(
+      insetPolygon(poly, 0.1),
+    );
+  });
+
+  it("rejects a distances array of the wrong length", () => {
+    expect(insetPolygon(poly, [0.1, 0.1])).toBeNull();
+  });
+});
+
+describe("edgeSideHalves", () => {
+  it("defaults every edge to a symmetric 5 cm band", () => {
+    const halves = edgeSideHalves(square);
+    for (const e of square.edges) {
+      expect(halves.get(e.id)).toEqual({ pos: 0.05, neg: 0.05 });
+    }
+  });
+
+  it("pins a 1-face wall's interior face and grows it outward", () => {
+    const thick = {
+      nodes: square.nodes,
+      edges: square.edges.map((e) =>
+        e.id === "ab" ? { ...e, thickness: 0.3 } : e,
+      ),
+    };
+    // Interior of the square lies on ab's side +1 (y-down, below the edge).
+    expect(edgeSideHalves(thick).get("ab")).toEqual({ pos: 0.05, neg: 0.25 });
+  });
+
+  it("grows a shared (2-face) wall symmetrically", () => {
+    const shared = {
+      nodes: [
+        node("a", 0, 0),
+        node("b", 5, 0),
+        node("c", 5, 4),
+        node("d", 0, 4),
+        node("e", 9, 0),
+        node("f", 9, 4),
+      ],
+      edges: [
+        edge("ab", "a", "b"),
+        edge("bc", "b", "c"),
+        edge("cd", "c", "d"),
+        edge("da", "d", "a"),
+        edge("be", "b", "e"),
+        edge("ef", "e", "f"),
+        edge("fc", "f", "c"),
+      ].map((e) => (e.id === "bc" ? { ...e, thickness: 0.4 } : e)),
+    };
+    expect(edgeSideHalves(shared).get("bc")).toEqual({ pos: 0.2, neg: 0.2 });
+  });
+
+  it("grows a dangling (0-face) edge symmetrically", () => {
+    const dangling = {
+      nodes: [node("x", 10, 0), node("y", 14, 0)],
+      edges: [{ ...edge("xy", "x", "y"), thickness: 0.2 }],
+    };
+    expect(edgeSideHalves(dangling).get("xy")).toEqual({ pos: 0.1, neg: 0.1 });
   });
 });

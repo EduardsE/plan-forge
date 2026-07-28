@@ -10,6 +10,7 @@ import { updateFurniture } from "./furniture";
 import { setRoomName, setRoomWallHeight } from "./room";
 import { makeFloor, makeLRoom } from "./test-fixtures";
 import type { Floor, Point } from "./types";
+import { setEdgeThickness } from "./walls";
 
 /** Points as a sorted "x,y" set so vertex order/rotation doesn't matter. */
 function pointSet(points: Point[]): string[] {
@@ -182,5 +183,38 @@ describe("deriveFloorsCached", () => {
     const f1 = createFloor("f1");
     const { byId } = deriveFloorsCached([f1], new Map());
     expect(byId.get("f1")).toEqual(deriveFloor(f1));
+  });
+});
+
+describe("per-edge thickness in derived outlines", () => {
+  it("a thick shared wall insets both rooms by half its thickness", () => {
+    const floor = setEdgeThickness(makeFloor(), "BE", 0.3);
+    const { rooms } = deriveFloor(floor);
+    const living = rooms.find((r) => r.id === "living");
+    const kitchen = rooms.find((r) => r.id === "kitchen");
+    expect(living && pointSet(living.outline)).toEqual(
+      pointSet([
+        { x: 0, y: 0 },
+        { x: 6.25, y: 0 },
+        { x: 6.25, y: 5.2 },
+        { x: 0, y: 5.2 },
+      ]),
+    );
+    expect(kitchen && pointSet(kitchen.outline)).toEqual(
+      pointSet([
+        { x: 6.55, y: 0 },
+        { x: 9.4, y: 0 },
+        { x: 9.4, y: 5.2 },
+        { x: 6.55, y: 5.2 },
+      ]),
+    );
+  });
+
+  it("a thick exterior wall leaves the interior outline unchanged", () => {
+    const floor = setEdgeThickness(makeFloor(), "AB", 0.4);
+    const living = deriveFloor(floor).rooms.find((r) => r.id === "living");
+    expect(living && pointSet(living.outline)).toEqual(
+      pointSet(deriveFloor(makeFloor()).rooms[0].outline),
+    );
   });
 });

@@ -4,9 +4,11 @@ import type { Floor } from "./types";
 
 /**
  * Pure wall-edge mutations. Thickness is a sparse per-edge override
- * (`WallEdge.thickness`): absent means the default `WALL_THICKNESS`, and the
- * override only takes effect while the edge borders at most one room face —
- * `buildEdgeSolids` (lib/room-scene.ts) resolves the effective value.
+ * (`WallEdge.thickness`): absent means the default `WALL_THICKNESS`. It
+ * applies to every wall — an exterior (1-face) wall grows outward with its
+ * interior face pinned, a shared (2-face) or dangling wall grows
+ * symmetrically about its centerline (`edgeSideHalves` in model/faces.ts;
+ * `buildEdgeSolids` in lib/room-scene.ts mirrors the rule).
  */
 
 export const MIN_WALL_THICKNESS = 0.05;

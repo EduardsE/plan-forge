@@ -1,4 +1,4 @@
-import { pointInOutline } from "./geometry";
+import { pointInOutline, WALL_THICKNESS } from "./geometry";
 import type { WallEdge, WallNode } from "./graph";
 import type { Point } from "./types";
 
@@ -286,13 +286,19 @@ export function faceLabelPoint(polygon: Point[]): Point {
  * Shrink a (positively or negatively wound) polygon inward by `inset`
  * meters: offset each edge's line along its inward normal, then re-vertex at
  * the intersection of consecutive offset lines. Near-parallel consecutive
- * edges use the offset point directly. Returns null when the inset
- * degenerates — a non-finite vertex, a winding flip, or non-positive area —
- * meaning the polygon has no interior left at that inset.
+ * edges use the offset point directly. An array `inset` gives each edge its
+ * own distance — `inset[i]` applies to the edge `polygon[i]` →
+ * `polygon[(i + 1) % n]`. Returns null when the inset degenerates — a
+ * non-finite vertex, a winding flip, or non-positive area — meaning the
+ * polygon has no interior left at that inset.
  */
-export function insetPolygon(polygon: Point[], inset: number): Point[] | null {
+export function insetPolygon(
+  polygon: Point[],
+  inset: number | number[],
+): Point[] | null {
   const n = polygon.length;
   if (n < 3) return null;
+  if (Array.isArray(inset) && inset.length !== n) return null;
   const sign = Math.sign(signedDoubleArea(polygon)) || 1;
 
   const offsetLines: { point: Point; dir: Point }[] = [];
@@ -308,8 +314,9 @@ export function insetPolygon(polygon: Point[], inset: number): Point[] | null {
     // normal for the sample's positive winding; inward is its negation.
     const outward = { x: dir.y * sign, y: -dir.x * sign };
     const inward = { x: -outward.x, y: -outward.y };
+    const d = Array.isArray(inset) ? inset[i] : inset;
     offsetLines.push({
-      point: { x: p0.x + inward.x * inset, y: p0.y + inward.y * inset },
+      point: { x: p0.x + inward.x * d, y: p0.y + inward.y * d },
       dir,
     });
   }
@@ -349,4 +356,56 @@ export function insetPolygon(polygon: Point[], inset: number): Point[] | null {
 export function sideOfPoint(a: Point, b: Point, p: Point): 1 | -1 {
   const cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
   return cross > 0 ? 1 : -1;
+}
+
+/** Half-widths of one wall body either side of its edge centerline: `pos`
+ * is the extent toward side `+1` (`sideOfPoint`-positive), `neg` toward
+ * side `-1`. */
+export interface EdgeSideHalves {
+  pos: number;
+  neg: number;
+}
+
+/**
+ * Resolve every edge's wall-body extents about its centerline from the
+ * per-edge thickness override (`WallEdge.thickness`, default
+ * `WALL_THICKNESS`) and the graph's face adjacency: a wall bordering exactly
+ * one room keeps its interior face pinned at the default half-thickness (the
+ * override grows it outward only, so room interiors don't move), while a
+ * shared (two-face) or dangling wall grows symmetrically about the
+ * centerline. The single source of the growth-direction rule —
+ * `buildEdgeSolids` (lib/room-scene.ts) mirrors it via its own room
+ * adjacency; room insets, collision slabs and mounts read this map.
+ */
+export function edgeSideHalves(state: {
+  nodes: WallNode[];
+  edges: WallEdge[];
+}): Map<string, EdgeSideHalves> {
+  const edgeById = new Map(state.edges.map((e) => [e.id, e]));
+  const faceSides = new Map<string, Array<1 | -1>>();
+  for (const face of extractFaces(state)) {
+    face.edgeIds.forEach((edgeId, i) => {
+      const edge = edgeById.get(edgeId);
+      const side: 1 | -1 = edge && edge.a === face.nodeIds[i] ? 1 : -1;
+      const list = faceSides.get(edgeId);
+      if (list) list.push(side);
+      else faceSides.set(edgeId, [side]);
+    });
+  }
+  const def = WALL_THICKNESS / 2;
+  const halves = new Map<string, EdgeSideHalves>();
+  for (const edge of state.edges) {
+    const t = edge.thickness ?? WALL_THICKNESS;
+    const sides = faceSides.get(edge.id) ?? [];
+    if (sides.length === 1) {
+      const outer = t - def;
+      halves.set(
+        edge.id,
+        sides[0] === 1 ? { pos: def, neg: outer } : { pos: outer, neg: def },
+      );
+    } else {
+      halves.set(edge.id, { pos: t / 2, neg: t / 2 });
+    }
+  }
+  return halves;
 }

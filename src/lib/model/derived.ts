@@ -1,5 +1,5 @@
 import type { Face } from "./faces";
-import { extractFaces, insetPolygon } from "./faces";
+import { edgeSideHalves, extractFaces, insetPolygon } from "./faces";
 import { pointInOutline, WALL_THICKNESS } from "./geometry";
 import type { WallEdge } from "./graph";
 import { normalizeGraph } from "./graph";
@@ -62,11 +62,17 @@ export function deriveFloor(floor: Floor): DerivedFloor {
   for (const m of match.matched) recordByFace.set(m.face, m.record);
 
   const edges = edgesMap(floor);
+  const sideHalves = edgeSideHalves(floor);
 
   // Derive mounted furniture transforms once, floor-wide.
   const furniture = floor.furniture.map((item) => {
     if (!item.mount) return item;
-    const transform = deriveMountTransform(item.mount, floor, item.footprint);
+    const transform = deriveMountTransform(
+      item.mount,
+      floor,
+      item.footprint,
+      sideHalves,
+    );
     if (!transform) return item;
     return {
       ...item,
@@ -78,8 +84,6 @@ export function deriveFloor(floor: Floor): DerivedFloor {
   const rooms: DerivedRoom[] = [];
   const assigned = new Set<string>();
   for (const face of faces) {
-    const outline = insetPolygon(face.polygon, WALL_THICKNESS / 2);
-    if (!outline) continue;
     const record = recordByFace.get(face);
     const id = record ? record.id : `face:${face.nodeIds.join("|")}`;
 
@@ -96,6 +100,17 @@ export function deriveFloor(floor: Floor): DerivedFloor {
       const side: 1 | -1 = edge && edge.a === face.nodeIds[i] ? 1 : -1;
       return { edgeId, side };
     });
+
+    // Interior outline: each boundary edge insets by its wall body's extent
+    // on the face's side (`edgeSideHalves`) — half the edge's effective
+    // thickness on a shared wall, the pinned default half on an exterior one.
+    const insets = wallRefs.map((ref) => {
+      const halves = sideHalves.get(ref.edgeId);
+      if (!halves) return WALL_THICKNESS / 2;
+      return ref.side === 1 ? halves.pos : halves.neg;
+    });
+    const outline = insetPolygon(face.polygon, insets);
+    if (!outline) continue;
 
     // Openings live on the graph edges (rendered from `floor.openings`); a
     // room only needs to know how many sit on its walls, for the inspector.

@@ -627,9 +627,9 @@ export interface WallSelection {
   edgeId: string;
   /** Centerline length, meters (read-only here — draw mode edits lengths). */
   length: number;
-  /** Effective thickness (a shared wall reads the dormant default). */
+  /** Effective thickness (per-edge override or the default). */
   thickness: number;
-  /** The wall borders two rooms — thickness is locked to the default. */
+  /** The wall borders two rooms — it thickens about its centerline. */
   twoFace: boolean;
 }
 
@@ -677,34 +677,17 @@ function WallSection({
               </span>
             </span>
           </div>
-          {selection.twoFace ? (
-            <div className="flex min-w-0 flex-col gap-[3px] rounded-[8px] border border-[var(--control-border)] bg-[var(--well)] px-[11px] py-2 opacity-70">
-              <span className="text-[10px] text-[var(--ink-400)] tracking-[0.05em]">
-                THICKNESS
-              </span>
-              <span className="flex items-baseline">
-                <span className="w-full min-w-0 font-mono text-[14px] text-[var(--ink-500)]">
-                  {formatLengthValue(selection.thickness, unit)}
-                </span>
-                <span className="font-mono text-[11px] text-[var(--ink-300)]">
-                  {unit}
-                </span>
-              </span>
-            </div>
-          ) : (
-            <Field
-              label="THICKNESS"
-              ariaLabel="Wall thickness"
-              suffix={unit}
-              value={formatLengthValue(selection.thickness, unit)}
-              onCommit={commitThickness}
-            />
-          )}
+          <Field
+            label="THICKNESS"
+            ariaLabel="Wall thickness"
+            suffix={unit}
+            value={formatLengthValue(selection.thickness, unit)}
+            onCommit={commitThickness}
+          />
         </div>
         {selection.twoFace && (
           <div className="text-[12.5px] text-[var(--ink-400)] leading-relaxed">
-            Shared walls use the standard {formatLengthValue(0.1, unit)} {unit}{" "}
-            thickness.
+            A shared wall thickens about its centerline — both rooms yield half.
           </div>
         )}
       </div>

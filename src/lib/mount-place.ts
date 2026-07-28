@@ -1,5 +1,7 @@
 import {
   deriveMountTransform,
+  type EdgeSideHalves,
+  edgeSideHalves,
   type Floor,
   type Point,
   sideOfPoint,
@@ -124,6 +126,7 @@ function resolveCandidate(
   footprint: { width: number; depth: number },
   elevation: number,
   snap: boolean,
+  sideHalves: Map<string, EdgeSideHalves>,
 ): WallMountResult | null {
   const raw = candidate.along - footprint.width / 2;
   const offset = snap
@@ -136,7 +139,7 @@ function resolveCandidate(
     side,
     elevation,
   };
-  const transform = deriveMountTransform(mount, floor, footprint);
+  const transform = deriveMountTransform(mount, floor, footprint, sideHalves);
   if (!transform) return null;
   const guides = snap
     ? cornerGuides(candidate, side, offset, footprint.width)
@@ -182,6 +185,7 @@ export function mountAt(
   }
   candidates.sort((x, y) => x.distance - y.distance);
 
+  const sideHalves = edgeSideHalves(floor);
   for (const candidate of candidates) {
     const side = sideOfPoint(candidate.a, candidate.b, cursor);
     const result = resolveCandidate(
@@ -191,6 +195,7 @@ export function mountAt(
       footprint,
       elevation,
       snap,
+      sideHalves,
     );
     if (result) return result;
   }
@@ -272,6 +277,7 @@ export function mountAtRay(
   }
   hits.sort((x, y) => x.t - y.t);
 
+  const sideHalves = edgeSideHalves(floor);
   const originPlan = { x: ray.origin.x, y: ray.origin.z };
   for (const hit of hits) {
     const { solid } = hit;
@@ -298,6 +304,7 @@ export function mountAtRay(
       footprint,
       elevation,
       snap,
+      sideHalves,
     );
     if (result) return result;
   }

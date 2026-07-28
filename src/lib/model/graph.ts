@@ -25,9 +25,9 @@ export interface WallEdge {
   b: string;
   /**
    * Optional per-wall thickness override, meters (clamped by
-   * `setEdgeThickness`). Effective only while the edge borders at most one
-   * room face — on a shared wall it goes dormant (the wall renders at
-   * WALL_THICKNESS) and revives if the wall becomes exterior again.
+   * `setEdgeThickness`). An exterior (1-face) wall grows outward with its
+   * interior face pinned; a shared (2-face) or dangling wall grows
+   * symmetrically about its centerline (`edgeSideHalves`, model/faces.ts).
    */
   thickness?: number;
 }
