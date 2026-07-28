@@ -10,6 +10,7 @@ import {
   floorArea,
   furnitureDisplayName,
   type Opening,
+  openingKindLabel,
   openingPaneGrid,
   type Point,
   type Room,
@@ -426,6 +427,9 @@ function OpeningSection({
 }: OpeningSectionProps) {
   const { opening, bottom, top } = selection;
   const isDoor = opening.kind === "door";
+  // Doors and passages are floor-pinned: no ELEVATION field, no window
+  // sections (panes/sill).
+  const isWindow = opening.kind === "window";
 
   const commitLength =
     (apply: (meters: number) => void, current: number) => (text: string) => {
@@ -483,7 +487,7 @@ function OpeningSection({
             className="truncate font-semibold text-[15px] text-[var(--ink-900)]"
             data-testid="inspector-item-name"
           >
-            {isDoor ? "Door" : "Window"}
+            {openingKindLabel(opening.kind)}
           </div>
           <div className="mt-[2px] truncate text-[12.5px] text-[var(--ink-400)]">
             {selection.connects ?? CATALOG_CATEGORY_LABELS.openings}
@@ -509,7 +513,7 @@ function OpeningSection({
               top - bottom,
             ),
           )}
-          {!isDoor &&
+          {isWindow &&
             lengthField(
               "ELEVATION",
               "Sill elevation",
@@ -521,7 +525,7 @@ function OpeningSection({
         </div>
       </div>
 
-      {!isDoor && (
+      {isWindow && (
         <div className="flex flex-col gap-2.5">
           <SectionLabel>PANES</SectionLabel>
           <div className="grid grid-cols-2 gap-2">
@@ -549,7 +553,7 @@ function OpeningSection({
         </div>
       )}
 
-      {!isDoor && (
+      {isWindow && (
         <div className="flex flex-col gap-2.5">
           <SectionLabel>SILL</SectionLabel>
           <div className="grid grid-cols-2 gap-2">

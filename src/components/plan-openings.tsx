@@ -11,7 +11,7 @@ import {
 import { ACTION_BUTTON_CLASS } from "#/components/selection-chip";
 import { SnapGuides } from "#/components/snap-guides";
 import { Tooltip } from "#/components/tooltip";
-import { type Point, verticalsOverlap } from "#/lib/model";
+import { openingKindLabel, type Point, verticalsOverlap } from "#/lib/model";
 import {
   offsetAlongWall,
   openingCornerGuides,
@@ -301,7 +301,7 @@ function OpeningChip({
             aria-hidden="true"
             className="h-[7px] w-[7px] rounded-[2px] bg-[var(--blue)]"
           />
-          {hole.kind === "door" ? "Door" : "Window"}
+          {openingKindLabel(hole.kind)}
           {connects && (
             <span className="font-normal text-[11.5px] text-[var(--ink-400)]">
               {connects}

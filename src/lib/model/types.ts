@@ -29,13 +29,16 @@ export interface Wall {
   end: Point;
 }
 
-export type OpeningKind = "door" | "window";
+/** `"passage"` is a doorless entry: a door-shaped gap with no leaf, hinge
+ * or swing — it otherwise behaves like a door (floor-pinned, walkable). */
+export type OpeningKind = "door" | "window" | "passage";
 
 /**
- * A door or window cut into a graph **edge**, located along that edge's a→b
- * direction. The stored, floor-level opening shape — rendering and editing
- * read it directly in edge coordinates (`buildEdgeSolids`, the floor-level
- * setters in `model/openings.ts`); nothing converts it to a per-room shape.
+ * A door, window or passage cut into a graph **edge**, located along that
+ * edge's a→b direction. The stored, floor-level opening shape — rendering and
+ * editing read it directly in edge coordinates (`buildEdgeSolids`, the
+ * floor-level setters in `model/openings.ts`); nothing converts it to a
+ * per-room shape.
  */
 export interface Opening {
   id: string;

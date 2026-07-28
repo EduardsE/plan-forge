@@ -152,7 +152,8 @@ export function edgeWallObstacles(floor: Floor): Obstacle[] {
   const nodeById = new Map(floor.nodes.map((n) => [n.id, n]));
   const doorSpansByEdge = new Map<string, Array<[number, number]>>();
   for (const opening of floor.openings) {
-    if (opening.kind !== "door") continue;
+    // Doors and passages reach the floor — furniture passes through them.
+    if (opening.kind === "window") continue;
     const span: [number, number] = [
       opening.offset,
       opening.offset + opening.width,

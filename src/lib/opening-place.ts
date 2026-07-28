@@ -20,9 +20,11 @@ import type { WallSolid } from "#/lib/room-scene";
 /** Default leaf/frame widths for a freshly inserted opening, meters. */
 export const DOOR_WIDTH = 0.9;
 export const WINDOW_WIDTH = 1.2;
+export const PASSAGE_WIDTH = 1.2;
 
 export function defaultOpeningWidth(kind: OpeningKind): number {
-  return kind === "door" ? DOOR_WIDTH : WINDOW_WIDTH;
+  if (kind === "door") return DOOR_WIDTH;
+  return kind === "passage" ? PASSAGE_WIDTH : WINDOW_WIDTH;
 }
 
 /** Offsets quantize to the same grid furniture placement uses. */

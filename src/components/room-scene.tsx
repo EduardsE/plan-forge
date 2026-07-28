@@ -660,7 +660,9 @@ function WallMesh({
   // strip between the two rooms' inset slabs, but the door hole cuts it, so
   // bridge that stretch at floor level. Only two-face edges have the strip.
   const thresholds =
-    solid.faces === 2 ? solid.holes.filter((hole) => hole.kind === "door") : [];
+    solid.faces === 2
+      ? solid.holes.filter((hole) => hole.kind !== "window")
+      : [];
 
   return (
     <group position={[solid.start.x, 0, solid.start.y]} rotation-y={rotationY}>

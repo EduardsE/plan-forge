@@ -150,6 +150,13 @@ const GLYPHS: Record<string, GlyphLayer[]> = {
     layer("-50%", 31, 2, 32, "#faf8f4"),
     layer("-50%", 45, 46, 2, "#faf8f4"),
   ],
+  // The door glyph minus the leaf: an open, cased gap through the wall.
+  passage: [
+    layer("-50%", 12, 76, 68, WALL_PLASTER, "3px"),
+    layer("-50%", 12, 40, 60, "#faf8f4", "2px 2px 0 0"),
+    layer("-23px", 12, 3, 58, WOOD, "1px 0 0 0"),
+    layer("20px", 12, 3, 58, WOOD, "0 1px 0 0"),
+  ],
 };
 const FALLBACK_GLYPH: GlyphLayer[] = [layer("-50%", 24, 52, 34, WOOD, "6px")];
 

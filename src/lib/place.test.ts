@@ -438,3 +438,26 @@ describe("edgeWallObstacles per-edge thickness", () => {
     expect(slab?.min.y).toBeCloseTo(-0.3, 9);
   });
 });
+
+describe("edgeWallObstacles passage gaps", () => {
+  it("a passage span carries no slab, like a door", () => {
+    const floor = rectFloor([
+      {
+        id: "p1",
+        kind: "passage",
+        edgeId: "e-top",
+        offset: 2,
+        width: 1.2,
+        side: 1,
+      },
+    ]);
+    const top = edgeWallObstacles(floor).filter((o) => o.max.y < 0.1);
+    // The top wall splits into two slabs around the gap.
+    const spans = top
+      .map((o) => [o.min.x, o.max.x] as const)
+      .sort((a, b) => a[0] - b[0]);
+    expect(spans).toHaveLength(2);
+    expect(spans[0][1]).toBeCloseTo(2, 9);
+    expect(spans[1][0]).toBeCloseTo(3.2, 9);
+  });
+});

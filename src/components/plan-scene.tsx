@@ -371,6 +371,49 @@ function WindowSymbol({ solid, hole }: { solid: WallSolid; hole: WallHole }) {
   );
 }
 
+/** Passage (doorless entry) symbol: a jamb tick across the band at each end
+ * of the gap, joined by a dashed line on the wall's mid-plane — the cased-
+ * opening convention, so the gap stays legible even on a shared wall whose
+ * band draws no white break. */
+function PassageSymbol({ solid, hole }: { solid: WallSolid; hole: WallHole }) {
+  const { inner, outer } = wallBandRange(solid);
+  const dashes = useMemo(
+    () =>
+      dashedPolyline(
+        [
+          wallPoint(solid, hole.start, solid.outwardShift),
+          wallPoint(solid, hole.start + hole.width, solid.outwardShift),
+        ],
+        0.09,
+        0.06,
+      ),
+    [solid, hole],
+  );
+  return (
+    <group>
+      {[hole.start, hole.start + hole.width].map((along) => (
+        <Line
+          key={along}
+          points={[
+            v3(wallPoint(solid, along, inner), LINE_Y),
+            v3(wallPoint(solid, along, outer), LINE_Y),
+          ]}
+          color={SYMBOL_COLOR}
+          lineWidth={3}
+          alphaToCoverage={false}
+        />
+      ))}
+      <Line
+        segments
+        points={dashes.map((p) => v3(p, LINE_Y))}
+        color={DOOR_ARC_COLOR}
+        lineWidth={2.5}
+        alphaToCoverage={false}
+      />
+    </group>
+  );
+}
+
 /** Door symbol: open leaf plus the dashed quarter-circle swing arc. */
 function DoorSymbol({ solid, hole }: { solid: WallSolid; hole: WallHole }) {
   const swing = useMemo(() => doorSwing(solid, hole), [solid, hole]);
@@ -424,10 +467,12 @@ function WallOpenings({ solid }: { solid: WallSolid }) {
         <FlatShape shapes={breakShapes} y={OPENING_Y} color={FLOOR_COLOR} />
       )}
       {solid.holes.map((hole) =>
-        hole.kind !== "window" ? (
-          <DoorSymbol key={hole.id} solid={solid} hole={hole} />
-        ) : (
+        hole.kind === "window" ? (
           <WindowSymbol key={hole.id} solid={solid} hole={hole} />
+        ) : hole.kind === "passage" ? (
+          <PassageSymbol key={hole.id} solid={solid} hole={hole} />
+        ) : (
+          <DoorSymbol key={hole.id} solid={solid} hole={hole} />
         ),
       )}
       {solid.holes.map((hole) => {

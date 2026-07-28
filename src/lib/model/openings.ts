@@ -37,12 +37,19 @@ export const DEFAULT_PANE_ROWS = 2;
 /** Most pane columns or rows the setter allows. */
 export const MAX_PANE_DIVISIONS = 8;
 
-/** Effective vertical extent of an opening's hole, floor-relative meters. */
+/** Display label for an opening kind (chip, inspector, status bar). */
+export function openingKindLabel(kind: OpeningKind): string {
+  if (kind === "door") return "Door";
+  return kind === "passage" ? "Doorless entry" : "Window";
+}
+
+/** Effective vertical extent of an opening's hole, floor-relative meters.
+ * Doors and passages are floor-pinned; only windows carry a sill. */
 export function openingVerticals(opening: Opening): {
   bottom: number;
   top: number;
 } {
-  if (opening.kind === "door") {
+  if (opening.kind !== "window") {
     return { bottom: 0, top: opening.head ?? DOOR_HEIGHT };
   }
   return {
@@ -78,7 +85,7 @@ export function defaultVerticals(kind: OpeningKind): {
   bottom: number;
   top: number;
 } {
-  return kind === "door"
+  return kind !== "window"
     ? { bottom: 0, top: DOOR_HEIGHT }
     : { bottom: WINDOW_SILL, top: WINDOW_HEAD };
 }
@@ -109,9 +116,10 @@ export function verticalsOverlap(
  * fields (so an untouched opening keeps its pre-verticals shape). */
 function withVerticals(opening: Opening, bottom: number, top: number): Opening {
   const next = { ...opening };
-  const defaultSill = opening.kind === "door" ? 0 : WINDOW_SILL;
-  const defaultHead = opening.kind === "door" ? DOOR_HEIGHT : WINDOW_HEAD;
-  if (opening.kind === "door" || Math.abs(bottom - defaultSill) < EPS) {
+  const isWindow = opening.kind === "window";
+  const defaultSill = isWindow ? WINDOW_SILL : 0;
+  const defaultHead = isWindow ? WINDOW_HEAD : DOOR_HEIGHT;
+  if (!isWindow || Math.abs(bottom - defaultSill) < EPS) {
     delete next.sill;
   } else {
     next.sill = bottom;

@@ -68,6 +68,7 @@ import {
   floorOfOpening,
   floorOfStair,
   furnitureDisplayName,
+  openingKindLabel,
   openingSill,
   openingVerticals,
   type Point,
@@ -523,7 +524,7 @@ function Planner() {
   }, [selectedOpeningId, viewMode, building, floor, derived, derivedByFloor]);
   const portalStatus = useMemo(() => {
     if (!selectedOpening?.connects) return null;
-    const kind = selectedOpening.opening.kind === "door" ? "Door" : "Window";
+    const kind = openingKindLabel(selectedOpening.opening.kind);
     return `${kind} connects ${selectedOpening.connects}`;
   }, [selectedOpening]);
   // Inspector opening commits: one history step each, clamping in the model

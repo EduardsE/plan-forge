@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   addFloorOpening,
   DOOR_HEIGHT,
+  defaultVerticals,
   dragOpeningTo,
   flipFloorOpeningHinge,
   flipFloorOpeningSide,
   MIN_OPENING_HEIGHT,
   moveFloorOpening,
+  openingKindLabel,
   openingPaneGrid,
   openingSill,
   openingVerticals,
@@ -563,5 +565,55 @@ describe("window pane grid", () => {
     expect(setOpeningPaneGrid(floor, "window-AB", { cols: 2, rows: 2 })).toBe(
       floor,
     );
+  });
+});
+
+describe("passage (doorless entry) openings", () => {
+  const passage: Opening = {
+    id: "passage-1",
+    kind: "passage",
+    edgeId: "BE",
+    offset: 0.5,
+    width: 1.2,
+    side: 1,
+  };
+
+  it("is floor-pinned with the door default head", () => {
+    expect(openingVerticals(passage)).toEqual({ bottom: 0, top: DOOR_HEIGHT });
+    expect(defaultVerticals("passage")).toEqual({
+      bottom: 0,
+      top: DOOR_HEIGHT,
+    });
+  });
+
+  it("takes a HEIGHT edit but keeps its bottom on the floor", () => {
+    const floor = addFloorOpening(makeFloor(), passage);
+    const withTop = setOpeningVerticals(
+      floor,
+      "passage-1",
+      { top: 2.3, bottom: 0.4 },
+      2.5,
+    );
+    const stored = withTop.openings.find((o) => o.id === "passage-1");
+    expect(stored && openingVerticals(stored)).toEqual({
+      bottom: 0,
+      top: 2.3,
+    });
+  });
+
+  it("never slides vertically", () => {
+    const floor = addFloorOpening(makeFloor(), passage);
+    expect(shiftOpeningVertical(floor, "passage-1", 0.5, 2.5)).toBe(floor);
+  });
+
+  it("never takes a hinge flip", () => {
+    const floor = addFloorOpening(makeFloor(), passage);
+    expect(flipFloorOpeningHinge(floor, "passage-1")).toBe(floor);
+  });
+
+  it("labels every kind", () => {
+    expect(openingKindLabel("door")).toBe("Door");
+    expect(openingKindLabel("window")).toBe("Window");
+    expect(openingKindLabel("passage")).toBe("Doorless entry");
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  addFloorOpening,
   type Building,
   createFloor,
   createSampleFloor,
@@ -615,5 +616,40 @@ describe("v7 building validation", () => {
     const back = deserializeSavedState(json);
     expect(back?.building.floors).toHaveLength(2);
     expect(back?.building.floors[0].stairs).toHaveLength(1);
+  });
+});
+
+describe("passage persistence", () => {
+  const save = (floor: Floor): string =>
+    serializeSavedState({
+      building: { floors: [floor] },
+      unit: "m",
+      savedAt: 1,
+    });
+
+  it("round-trips a passage opening", () => {
+    const floor = reconcileFloor(
+      addFloorOpening(makeFloor(), {
+        id: "passage-1",
+        kind: "passage",
+        edgeId: "BE",
+        offset: 0.5,
+        width: 1.2,
+        side: 1,
+      }),
+    );
+    const restored = deserializeSavedState(save(floor));
+    const passage = restored?.building.floors[0].openings.find(
+      (o) => o.id === "passage-1",
+    );
+    expect(passage?.kind).toBe("passage");
+    expect(passage?.width).toBe(1.2);
+  });
+
+  it("still rejects an unknown opening kind", () => {
+    const floor = reconcileFloor(makeFloor());
+    const parsed = JSON.parse(save(floor));
+    parsed.building.floors[0].openings[0].kind = "archway";
+    expect(deserializeSavedState(JSON.stringify(parsed))).toBeNull();
   });
 });

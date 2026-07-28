@@ -98,6 +98,7 @@ export const CATALOG: CatalogItem[] = [
   // because the model layer stays import-free of the scene helpers.
   item("door", "Door", "openings", 0.9, 0.1, 2.05),
   item("window", "Window", "openings", 1.2, 0.1, 1.58),
+  item("passage", "Doorless entry", "openings", 1.2, 0.1, 2.05),
   // Stairs: a card that inserts a `Stair` (model/stairs.ts) rather than
   // furniture — width/depth/height here are nominal card dims only, never
   // the real run (derived per-floor from `stairRun(storeyHeightOf(floor))`,
@@ -107,7 +108,7 @@ export const CATALOG: CatalogItem[] = [
 
 /** Catalog entries that insert an `Opening` rather than a furniture item. */
 export function isOpeningItem(id: string): boolean {
-  return id === "door" || id === "window";
+  return id === "door" || id === "window" || id === "passage";
 }
 
 /** The catalog entry that inserts a `Stair` rather than furniture. */

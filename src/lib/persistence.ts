@@ -132,7 +132,9 @@ function areOpenings(
     if (typeof raw !== "object" || raw === null) return false;
     const o = raw as Record<string, unknown>;
     if (typeof o.id !== "string" || o.id.length === 0) return false;
-    if (o.kind !== "door" && o.kind !== "window") return false;
+    if (o.kind !== "door" && o.kind !== "window" && o.kind !== "passage") {
+      return false;
+    }
     if (typeof o.edgeId !== "string" || !edgeLength.has(o.edgeId)) return false;
     if (o.side !== 1 && o.side !== -1) return false;
     if (!isFiniteNumber(o.offset) || o.offset < 0) return false;
