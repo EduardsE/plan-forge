@@ -208,4 +208,131 @@ export const RECIPES = [
       metal: "neutral",
     },
   },
+  // --- Bathroom suite (Kenney furniture kit, CC0). Porcelain, chrome and
+  // glass keep their authored palette — every slot is "neutral", and the
+  // bathroom category deliberately offers no colorways (no dead swatches).
+  {
+    catalogId: "toilet",
+    input: "assets/raw-models/furniture-kit/Models/GLTF format/toilet.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.38,
+    rotateYDeg: 0,
+    slots: {
+      carpetWhite: "neutral",
+      metalLight: "neutral",
+      metalDark: "neutral",
+      _defaultMat: "neutral",
+    },
+  },
+  {
+    catalogId: "bathtub",
+    input: "assets/raw-models/furniture-kit/Models/GLTF format/bathtub.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 1.7,
+    rotateYDeg: 0,
+    slots: {
+      carpetWhite: "neutral",
+      metalLight: "neutral",
+      metalDark: "neutral",
+    },
+  },
+  {
+    catalogId: "shower",
+    input: "assets/raw-models/furniture-kit/Models/GLTF format/shower.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.9,
+    rotateYDeg: 0,
+    slots: {
+      carpetWhite: "neutral",
+      metalDark: "neutral",
+      glass: "neutral",
+      metal: "neutral",
+    },
+  },
+  {
+    // The kit's rounded pedestal washbasin.
+    catalogId: "washbasin",
+    input:
+      "assets/raw-models/furniture-kit/Models/GLTF format/bathroomSink.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.5,
+    rotateYDeg: 0,
+    slots: {
+      _defaultMat: "neutral",
+      metalLight: "neutral",
+      carpetWhite: "neutral",
+    },
+  },
+  {
+    // Square basin on a stand — the vanity-style sink.
+    catalogId: "vanity-sink",
+    input:
+      "assets/raw-models/furniture-kit/Models/GLTF format/bathroomSinkSquare.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.6,
+    rotateYDeg: 0,
+    slots: {
+      carpetWhite: "neutral",
+      metalDark: "neutral",
+      metalLight: "neutral",
+    },
+  },
+  {
+    // Low drawer cabinet — bathroom floor storage.
+    catalogId: "bath-cabinet",
+    input:
+      "assets/raw-models/furniture-kit/Models/GLTF format/bathroomCabinetDrawer.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.6,
+    rotateYDeg: 0,
+    slots: {
+      wood: "neutral",
+      carpetWhite: "neutral",
+      metalDark: "neutral",
+      metalLight: "neutral",
+    },
+  },
+  {
+    // Wall-hung mirror with a shelf (mounted via `wallMounted` in the catalog).
+    catalogId: "bath-mirror",
+    input:
+      "assets/raw-models/furniture-kit/Models/GLTF format/bathroomMirror.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.55,
+    rotateYDeg: 0,
+    slots: {
+      wood: "neutral",
+      metal: "neutral",
+      glass: "neutral",
+    },
+  },
+  {
+    // Small wall-hung cabinet (medicine cabinet).
+    catalogId: "bath-wall-cabinet",
+    input:
+      "assets/raw-models/furniture-kit/Models/GLTF format/bathroomCabinet.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.5,
+    rotateYDeg: 0,
+    slots: {
+      wood: "neutral",
+      woodDark: "neutral",
+      metal: "neutral",
+    },
+  },
+  {
+    catalogId: "washer",
+    input: "assets/raw-models/furniture-kit/Models/GLTF format/washer.glb",
+    source: "https://kenney.nl/assets/furniture-kit (CC0)",
+    realWidth: 0.6,
+    rotateYDeg: 0,
+    slots: {
+      metalLight: "neutral",
+      metalMedium: "neutral",
+      metalDark: "neutral",
+      metal: "neutral",
+      glass: "neutral",
+      _defaultMat: "neutral",
+    },
+  },
 ];

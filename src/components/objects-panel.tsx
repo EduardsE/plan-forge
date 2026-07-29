@@ -34,8 +34,8 @@ export interface ObjectsPanelProps {
   onClose: () => void;
 }
 
-/** Chip order, straight from the mockup's chip rows (stairs appended last —
- * it postdates the mockup). */
+/** Chip order, straight from the mockup's chip rows (bathroom and stairs
+ * appended last — they postdate the mockup). */
 const CHIP_ORDER: CatalogCategory[] = [
   "seating",
   "tables",
@@ -45,6 +45,7 @@ const CHIP_ORDER: CatalogCategory[] = [
   "decor",
   "wall-items",
   "plants",
+  "bathroom",
   "openings",
   "stairs",
 ];

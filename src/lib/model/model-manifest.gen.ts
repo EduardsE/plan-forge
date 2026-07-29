@@ -78,4 +78,83 @@ export const MODEL_MANIFEST = {
     natural: { width: 2.4, depth: 1.1, height: 0.75 },
     slots: { wood: "neutral", metal: "neutral" },
   },
+  toilet: {
+    file: "/models/toilet.glb",
+    natural: { width: 0.38, depth: 0.58, height: 0.548 },
+    slots: {
+      carpetWhite: "neutral",
+      metalLight: "neutral",
+      metalDark: "neutral",
+      _defaultMat: "neutral",
+    },
+  },
+  bathtub: {
+    file: "/models/bathtub.glb",
+    natural: { width: 1.7, depth: 0.8, height: 0.6 },
+    slots: {
+      carpetWhite: "neutral",
+      metalLight: "neutral",
+      metalDark: "neutral",
+    },
+  },
+  shower: {
+    file: "/models/shower.glb",
+    natural: { width: 0.9, depth: 0.932, height: 1.753 },
+    slots: {
+      carpetWhite: "neutral",
+      metalDark: "neutral",
+      glass: "neutral",
+      metal: "neutral",
+    },
+  },
+  washbasin: {
+    file: "/models/washbasin.glb",
+    natural: { width: 0.5, depth: 0.426, height: 0.824 },
+    slots: {
+      _defaultMat: "neutral",
+      metalLight: "neutral",
+      carpetWhite: "neutral",
+    },
+  },
+  "vanity-sink": {
+    file: "/models/vanity-sink.glb",
+    natural: { width: 0.6, depth: 0.419, height: 0.809 },
+    slots: {
+      carpetWhite: "neutral",
+      metalDark: "neutral",
+      metalLight: "neutral",
+    },
+  },
+  "bath-cabinet": {
+    file: "/models/bath-cabinet.glb",
+    natural: { width: 0.6, depth: 0.447, height: 0.658 },
+    slots: {
+      wood: "neutral",
+      carpetWhite: "neutral",
+      metalDark: "neutral",
+      metalLight: "neutral",
+    },
+  },
+  "bath-mirror": {
+    file: "/models/bath-mirror.glb",
+    natural: { width: 0.55, depth: 0.264, height: 0.793 },
+    slots: { wood: "neutral", metal: "neutral", glass: "neutral" },
+  },
+  "bath-wall-cabinet": {
+    file: "/models/bath-wall-cabinet.glb",
+    natural: { width: 0.5, depth: 0.283, height: 0.848 },
+    slots: { wood: "neutral", woodDark: "neutral", metal: "neutral" },
+  },
+  washer: {
+    file: "/models/washer.glb",
+    natural: { width: 0.6, depth: 0.6, height: 0.723 },
+    slots: {
+      metalLight: "neutral",
+      metalMedium: "neutral",
+      metalDark: "neutral",
+      metal: "neutral",
+      glass: "neutral",
+      _defaultMat: "neutral",
+    },
+  },
 } as const;

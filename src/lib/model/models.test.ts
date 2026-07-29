@@ -9,6 +9,10 @@ describe("model manifest", () => {
   it("covers exactly the mapped items", () => {
     expect(Object.keys(MODEL_MANIFEST).sort()).toEqual([
       "armchair",
+      "bath-cabinet",
+      "bath-mirror",
+      "bath-wall-cabinet",
+      "bathtub",
       "bed-double",
       "credenza",
       "dining-table",
@@ -16,11 +20,16 @@ describe("model manifest", () => {
       "monstera",
       "plant",
       "plant-large",
+      "shower",
       "sofa-2",
       "spider-table",
       "succulent",
+      "toilet",
       "tv",
+      "vanity-sink",
       "wardrobe",
+      "washbasin",
+      "washer",
     ]);
   });
 

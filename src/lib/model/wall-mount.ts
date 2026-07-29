@@ -75,6 +75,10 @@ const MOUNT_ELEVATIONS: Record<string, number> = {
   "wall-clock": 1.9,
   // A wall-mounted TV hangs with its center around seated eye level.
   tv: 1.2,
+  // Bathroom mirror centers at standing eye level; the medicine cabinet
+  // hangs a touch higher, clearing a washbasin's backsplash.
+  "bath-mirror": 1.5,
+  "bath-wall-cabinet": 1.6,
 };
 export const DEFAULT_MOUNT_ELEVATION = 1.5;
 
@@ -83,9 +87,11 @@ export function defaultMountElevation(catalogId: string): number {
   return MOUNT_ELEVATIONS[catalogId] ?? DEFAULT_MOUNT_ELEVATION;
 }
 
-/** Whether a catalog item mounts to a wall (the "wall-items" category). */
+/** Whether a catalog item mounts to a wall: the "wall-items" category, plus
+ * individually flagged items in other categories (bathroom mirror/cabinet). */
 export function isWallItem(catalogId: string): boolean {
-  return catalogItemById(catalogId)?.category === "wall-items";
+  const entry = catalogItemById(catalogId);
+  return entry?.category === "wall-items" || entry?.wallMounted === true;
 }
 
 /** The graph geometry `deriveMountTransform` reads. */

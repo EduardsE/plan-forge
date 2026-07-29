@@ -23,6 +23,7 @@ export type CatalogCategory =
   | "decor"
   | "wall-items"
   | "plants"
+  | "bathroom"
   | "openings"
   | "stairs";
 
@@ -35,6 +36,7 @@ export const CATALOG_CATEGORY_LABELS: Record<CatalogCategory, string> = {
   decor: "Decor",
   "wall-items": "Wall items",
   plants: "Plants",
+  bathroom: "Bathroom",
   openings: "Doors & windows",
   stairs: "Stairs",
 };
@@ -45,6 +47,9 @@ export interface CatalogItem {
   name: string;
   category: CatalogCategory;
   footprint: Footprint;
+  /** Hangs on a wall despite living outside the "wall-items" category
+   * (e.g. the bathroom mirror) — `isWallItem` honors either signal. */
+  wallMounted?: true;
 }
 
 const item = (
@@ -54,7 +59,14 @@ const item = (
   width: number,
   depth: number,
   height: number,
-): CatalogItem => ({ id, name, category, footprint: { width, depth, height } });
+  extra?: Pick<CatalogItem, "wallMounted">,
+): CatalogItem => ({
+  id,
+  name,
+  category,
+  footprint: { width, depth, height },
+  ...extra,
+});
 
 export const CATALOG: CatalogItem[] = [
   // Seating, in the mockup's card order.
@@ -91,6 +103,22 @@ export const CATALOG: CatalogItem[] = [
   item("succulent", "Succulent", "plants", 0.17, 0.187, 0.271),
   item("plant-large", "Tall Plant", "plants", 0.6, 0.647, 1.379),
   item("monstera", "Monstera", "plants", 0.8, 0.728, 1.252),
+  // Bathroom suite: real Kenney furniture-kit meshes (CC0) — footprints
+  // mirror each prepared model's natural size (model-manifest.gen.ts),
+  // locked by models.test.ts. The mirror and wall cabinet hang on walls.
+  item("toilet", "Toilet", "bathroom", 0.38, 0.58, 0.548),
+  item("bathtub", "Bathtub", "bathroom", 1.7, 0.8, 0.6),
+  item("shower", "Shower", "bathroom", 0.9, 0.932, 1.753),
+  item("washbasin", "Washbasin", "bathroom", 0.5, 0.426, 0.824),
+  item("vanity-sink", "Vanity Sink", "bathroom", 0.6, 0.419, 0.809),
+  item("bath-cabinet", "Bath Cabinet", "bathroom", 0.6, 0.447, 0.658),
+  item("bath-mirror", "Bath Mirror", "bathroom", 0.55, 0.264, 0.793, {
+    wallMounted: true,
+  }),
+  item("bath-wall-cabinet", "Wall Cabinet", "bathroom", 0.5, 0.283, 0.848, {
+    wallMounted: true,
+  }),
+  item("washer", "Washing Machine", "bathroom", 0.6, 0.6, 0.723),
   // Openings: cards that insert a door/window into the wall they're dropped
   // on instead of adding furniture. Width/depth/height mirror the opening
   // constants (DOOR_WIDTH/WINDOW_WIDTH in opening-place.ts, WALL_THICKNESS

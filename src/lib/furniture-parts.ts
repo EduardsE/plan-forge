@@ -105,6 +105,7 @@ const PLANT_FOLIAGE_COLOR = "#669758";
 const FABRIC_LIGHT = "#f6ead8";
 const WOOD_DARK = "#3a2a18";
 const LINEN_COLOR = "#f4ead9";
+const PORCELAIN = "#f4f4f0";
 const SCREEN_COLOR = "#233047";
 const GLASS_COLOR = "#dfe9f2";
 
@@ -547,6 +548,20 @@ function plantParts({ width: w, height: h }: Footprint) {
   ];
 }
 
+/** Bathroom fixtures load real meshes (model-manifest); this loading/failure
+ * stand-in is a generic porcelain silhouette — plinth + body slab. */
+function bathroomParts({ width: w, depth: d, height: h }: Footprint) {
+  const plinthH = Math.min(h * 0.22, 0.12);
+  return [
+    box(
+      darker(PORCELAIN, 0.12),
+      [w * 0.86, plinthH, d * 0.86],
+      [0, plinthH / 2, 0],
+    ),
+    box(PORCELAIN, [w, h - plinthH, d], [0, plinthH + (h - plinthH) / 2, 0]),
+  ];
+}
+
 /**
  * The composed body for a catalog item. Specific ids get tailored builds;
  * unknown ids fall back to their category's representative silhouette, then
@@ -607,6 +622,8 @@ export function furnitureParts(
       return lampParts(footprint, color, 0.3);
     case "plants":
       return plantParts(footprint);
+    case "bathroom":
+      return bathroomParts(footprint);
     default:
       return fallbackBox(footprint, color);
   }

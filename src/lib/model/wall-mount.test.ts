@@ -107,6 +107,10 @@ describe("isWallItem", () => {
     expect(isWallItem("wall-clock")).toBe(true);
     expect(isWallItem("desk")).toBe(false);
     expect(isWallItem("nope")).toBe(false);
+    // Flagged wall items outside the "wall-items" category.
+    expect(isWallItem("bath-mirror")).toBe(true);
+    expect(isWallItem("bath-wall-cabinet")).toBe(true);
+    expect(isWallItem("toilet")).toBe(false);
   });
 });
 
