@@ -180,13 +180,23 @@ const mainFloor: Floor = {
       ...f("en-clock", "wall-clock", 6.13, 6.9, 270),
       mount: { edgeId: "e4", offset: 2.0, side: 1, elevation: 1.6 },
     },
-    // Bath: no fixtures in the catalog, so storage and a stool.
-    f("ba-shelf", "shelf", 5.94, 9.8, 270),
-    f("ba-stool", "stool", 4.8, 10.5),
+    // Bath (interior x 4.67..6.36, y 8.25..11.16): toilet left of the door,
+    // vanity + mirror on the west wall, shower and washer down the east wall
+    // (clear of the door swing at y ≤ 8.9), cabinet under the high-sill
+    // window, wall cabinet over the washer.
+    f("ba-toilet", "toilet", 4.9, 8.54),
+    f("ba-vanity", "vanity-sink", 4.88, 9.5, 90),
     {
-      ...f("ba-succulent", "succulent", 5.94, 9.8),
-      stack: { hostId: "ba-shelf", dx: 0.3, dy: 0 },
+      ...f("ba-mirror", "bath-mirror", 4.8, 9.5, 90),
+      mount: { edgeId: "e13", offset: 1.025, side: -1, elevation: 1.5 },
     },
+    f("ba-shower", "shower", 5.89, 9.4, 270),
+    f("ba-washer", "washer", 6.06, 10.2, 270),
+    {
+      ...f("ba-wall-cabinet", "bath-wall-cabinet", 6.2, 10.2, 270),
+      mount: { edgeId: "e5", offset: 1.75, side: 1, elevation: 1.6 },
+    },
+    f("ba-cabinet", "bath-cabinet", 5.5, 10.94, 180),
   ],
   // The real ceilings: a 4.3 m living room, 3.7 m entry/bath, 2.3 m bedroom.
   rooms: [
