@@ -37,6 +37,13 @@ export function floorIndexOf(building: Building, floorId: string): number {
   return building.floors.findIndex((f) => f.id === floorId);
 }
 
+/** The topmost storey — the one a freshly loaded building starts on, so the
+ * 3D stack (which renders ground-up *through* the active floor) shows the
+ * whole building rather than just its ground slice. */
+export function topFloorOf(building: Building): Floor {
+  return building.floors[building.floors.length - 1];
+}
+
 /** "Ground floor" for index 0, else the 1-based "Floor N" — or the floor's
  * own name when it has one. */
 export function floorDisplayName(building: Building, index: number): string {

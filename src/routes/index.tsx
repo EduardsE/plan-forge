@@ -98,6 +98,7 @@ import {
   setRoomWallHeight,
   shiftOpeningVertical,
   storeyHeightOf,
+  topFloorOf,
   totalFloorArea,
   unionBounds,
   updateDerivedRoom,
@@ -169,8 +170,11 @@ function Planner() {
   // result synchronously, mirroring `floorRef` below.
   const buildingRef = useRef(building);
   buildingRef.current = building;
+  // Start on the topmost storey: the 3D stack renders ground-up through the
+  // active floor, so the top floor is the only selection that shows the whole
+  // building on load.
   const [activeFloorId, setActiveFloorId] = useState(
-    () => buildingHistory.current.floors[0].id,
+    () => topFloorOf(buildingHistory.current).id,
   );
   // Read inside history updaters instead of closing over `activeFloorId`
   // directly — closures captured by a `useCallback(fn, [])` (stable-identity)
@@ -925,7 +929,7 @@ function Planner() {
       // Hydration replaces the pre-mount sample building outright —
       // resetting history keeps it out of the undo stack.
       setBuildingHistory(createHistory(saved.building));
-      setActiveFloorId(saved.building.floors[0].id);
+      setActiveFloorId(topFloorOf(saved.building).id);
       setUnit(saved.unit);
       setSunAzimuthDeg(saved.sunAzimuthDeg ?? null);
       setSavedAt(saved.savedAt);

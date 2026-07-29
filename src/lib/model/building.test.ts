@@ -9,6 +9,7 @@ import {
   SLAB_THICKNESS,
   storeyElevation,
   storeyHeightOf,
+  topFloorOf,
   updateFloorIn,
 } from "./building";
 import { DEFAULT_WALL_HEIGHT } from "./room";
@@ -37,6 +38,15 @@ describe("storey math", () => {
     const b = building();
     expect(storeyElevation(b, 0)).toBe(0);
     expect(storeyElevation(b, 1)).toBeCloseTo(storeyHeightOf(ground));
+  });
+});
+
+describe("topFloorOf", () => {
+  it("is the last floor in the stack", () => {
+    expect(topFloorOf(building()).id).toBe("f2");
+  });
+  it("is the only floor of a one-storey building", () => {
+    expect(topFloorOf({ floors: [ground] }).id).toBe("g");
   });
 });
 
