@@ -1,3 +1,4 @@
+import { assetUrl } from "#/lib/asset-url";
 import { modelForCatalogId } from "#/lib/model/models";
 import { cn } from "#/lib/utils";
 
@@ -185,7 +186,7 @@ export function CatalogThumbnail({
     >
       {photo ? (
         <img
-          src={`/thumbnails/${catalogId}.png`}
+          src={assetUrl(`/thumbnails/${catalogId}.png`)}
           alt=""
           className="h-full w-full object-contain py-1.5"
           draggable={false}

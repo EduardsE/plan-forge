@@ -1,6 +1,7 @@
 import { useGLTF } from "@react-three/drei";
 import { Component, type ReactNode, Suspense, useMemo } from "react";
 import { BackSide, MeshBasicMaterial } from "three";
+import { assetUrl } from "#/lib/asset-url";
 import type { Footprint } from "#/lib/model";
 import { MODEL_MANIFEST, type ModelManifestEntry } from "#/lib/model/models";
 import {
@@ -45,7 +46,8 @@ if (typeof window !== "undefined") {
     );
     event.preventDefault();
   });
-  for (const entry of Object.values(MODEL_MANIFEST)) preloadModel(entry.file);
+  for (const entry of Object.values(MODEL_MANIFEST))
+    preloadModel(assetUrl(entry.file));
 }
 
 interface ModelBodyProps {
@@ -79,7 +81,7 @@ function LoadedModel({
   hullColor,
   hullOpacity,
 }: Omit<ModelBodyProps, "fallback">) {
-  const { scene } = useGLTF(entry.file);
+  const { scene } = useGLTF(assetUrl(entry.file));
   const tinted = useMemo(
     () => tintedModelClone(scene, entry.slots, color),
     [scene, entry, color],
