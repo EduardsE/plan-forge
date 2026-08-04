@@ -8,9 +8,9 @@ Furniture is dragged out of a docked catalog onto the floor or the plan, with a 
 
 ## Video showcase
 
-<video src="https://github.com/EduardsE/plan-forge/raw/main/planforge.mp4" poster="https://github.com/EduardsE/plan-forge/raw/main/planforge.webp" controls muted loop playsinline width="960"></video>
+![PlanForge — drawing, furnishing and orbiting a two-storey plan](planforge.gif)
 
-<sup>If the player doesn't load, [watch the clip directly](https://github.com/EduardsE/plan-forge/raw/main/planforge.mp4).</sup>
+<sup>Same clip as [an MP4](planforge.mp4), if you'd rather scrub through it.</sup>
 
 ## Development
 
