@@ -8,7 +8,7 @@ Furniture is dragged out of a docked catalog onto the floor or the plan, with a 
 
 ## Video showcase
 
-![PlanForge — drawing, furnishing and orbiting a two-storey plan](planforge.gif)
+![PlanForge — drawing, furnishing and orbiting a two-storey plan](docs/media/planforge.gif)
 
 ## Development
 
