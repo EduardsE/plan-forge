@@ -10,8 +10,6 @@ Furniture is dragged out of a docked catalog onto the floor or the plan, with a 
 
 ![PlanForge — drawing, furnishing and orbiting a two-storey plan](planforge.gif)
 
-<sup>Same clip as [an MP4](planforge.mp4), if you'd rather scrub through it.</sup>
-
 ## Development
 
 ```bash
